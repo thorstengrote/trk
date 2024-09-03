@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <style>
         #map {
             height: 600px;
@@ -19,41 +19,45 @@
     <div id="map"></div>
 
     <script>
-        var map = L.map('map').setView([51.1657, 10.4515], 6);  // Zentrum auf Deutschland
+        function drawMap() {
+            var map = L.map('map').setView([51.1657, 10.4515], 6);  // Zentrum auf Deutschland
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
 
-        var routeCoordinates = [];
+            var routeCoordinates = [];
 
-        // URL zum Google Sheet im CSV-Format mit CORS-Proxy
-        var sheetUrl = 'https://cors-anywhere.herokuapp.com/https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv';
+            // Google Sheets URL
+            var query = new google.visualization.Query('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/gviz/tq?sheet=Tabellenblatt1');
 
-        $.get(sheetUrl, function(data) {
-            var rows = data.split("\n").slice(1);  // Überspringe die Kopfzeile
+            query.send(function(response) {
+                var data = response.getDataTable();
 
-            for (var i = 0; i < rows.length; i++) {
-                var cols = rows[i].split(",");
-                var lat = parseFloat(cols[0]) / 1000000;
-                var lon = parseFloat(cols[1]) / 1000000;
-                var time = cols[2].replace('"', '');
+                for (var i = 0; i < data.getNumberOfRows(); i++) {
+                    var lat = parseFloat(data.getValue(i, 0)) / 1000000;
+                    var lon = parseFloat(data.getValue(i, 1)) / 1000000;
+                    var time = data.getValue(i, 2);
 
-                if (!isNaN(lat) && !isNaN(lon)) {
-                    routeCoordinates.push([lat, lon]);
+                    if (!isNaN(lat) && !isNaN(lon)) {
+                        routeCoordinates.push([lat, lon]);
 
-                    var marker = L.marker([lat, lon]).addTo(map)
-                        .bindPopup(time)
-                        .openPopup();
+                        var marker = L.marker([lat, lon]).addTo(map)
+                            .bindPopup(time)
+                            .openPopup();
+                    }
                 }
-            }
 
-            // Zeichne die Route
-            var routePath = L.polyline(routeCoordinates, {color: 'red'}).addTo(map);
+                // Zeichne die Route
+                var routePath = L.polyline(routeCoordinates, {color: 'red'}).addTo(map);
 
-            // Passe die Karte an die Route an
-            map.fitBounds(routePath.getBounds());
-        });
+                // Passe die Karte an die Route an
+                map.fitBounds(routePath.getBounds());
+            });
+        }
+
+        google.charts.load('current', {packages: ['corechart', 'table', 'map']});
+        google.charts.setOnLoadCallback(drawMap);
     </script>
 </body>
 </html>
