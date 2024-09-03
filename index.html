@@ -19,15 +19,32 @@
 </head>
 <body>
     <h3>Van Tracking Map</h3>
-    <div id="controls">
+    <div id="controls" style="display:none;">
         <label for="speedRange">Abspielgeschwindigkeit (sek): </label>
         <input type="range" id="speedRange" min="10" max="120" value="60" oninput="updateSpeed(this.value)">
         <span id="speedValue">60</span> Sekunden
         <button onclick="startAnimation()">Start Animation</button>
+        <button onclick="showAllPoints()">Alle Punkte anzeigen</button>
     </div>
-    <div id="map"></div>
+    <div id="map" style="display:none;"></div>
 
     <script>
+        // Einfache Authentifizierung
+        var username = prompt("Benutzername:");
+        var password = prompt("Passwort:");
+
+        // Hier definierst du deinen Benutzernamen und das Passwort
+        var correctUsername = "thorsten";
+        var correctPassword = "b0untie";
+
+        if (username === correctUsername && password === correctPassword) {
+            document.getElementById("map").style.display = "block";
+            document.getElementById("controls").style.display = "block";
+        } else {
+            alert("Falscher Benutzername oder Passwort!");
+            window.location.href = "https://www.google.com"; // Leitet den Benutzer bei falschen Anmeldedaten weiter
+        }
+
         var map = L.map('map').setView([51.1657, 10.4515], 6);  // Zentrum auf Deutschland
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -54,6 +71,9 @@
                         routeCoordinates.push({lat: lat, lon: lon, time: time});
                     }
                 });
+
+                // Zeige alle Punkte sofort nach dem Laden der Daten an
+                showAllPoints();
             }
         });
 
@@ -89,6 +109,24 @@
                 // Schließe die Animation, indem du die Karte auf die gesamte Route zentrierst
                 map.fitBounds(routePath.getBounds());
             }
+        }
+
+        function showAllPoints() {
+            if (routePath) {
+                map.removeLayer(routePath);
+            }
+            routePath = L.polyline([], {color: 'red'}).addTo(map);
+            routeCoordinates.forEach(function(point, i) {
+                L.marker([point.lat, point.lon]).addTo(map)
+                    .bindPopup(point.time);
+
+                if (i > 0) {
+                    routePath.addLatLng([point.lat, point.lon]);
+                }
+            });
+
+            // Passe die Karte an die gesamte Route an
+            map.fitBounds(routePath.getBounds());
         }
     </script>
 </body>
