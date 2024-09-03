@@ -19,32 +19,21 @@
 </head>
 <body>
     <h3>Van Tracking Map</h3>
-    <div id="controls" style="display:none;">
+    <div id="controls">
         <label for="speedRange">Abspielgeschwindigkeit (sek): </label>
         <input type="range" id="speedRange" min="10" max="120" value="60" oninput="updateSpeed(this.value)">
         <span id="speedValue">60</span> Sekunden
+        <button onclick="togglePoints()">Punkte anzeigen</button>
         <button onclick="startAnimation()">Start Animation</button>
-        <button onclick="showAllPoints()">Alle Punkte anzeigen</button>
+        <br><br>
+        <label for="startDate">Startdatum: </label>
+        <input type="date" id="startDate">
+        <label for="endDate">Enddatum: </label>
+        <input type="date" id="endDate">
     </div>
-    <div id="map" style="display:none;"></div>
+    <div id="map"></div>
 
     <script>
-        // Einfache Authentifizierung
-        var username = prompt("Benutzername:");
-        var password = prompt("Passwort:");
-
-        // Hier definierst du deinen Benutzernamen und das Passwort
-        var correctUsername = "thorsten";
-        var correctPassword = "b0untie";
-
-        if (username === correctUsername && password === correctPassword) {
-            document.getElementById("map").style.display = "block";
-            document.getElementById("controls").style.display = "block";
-        } else {
-            alert("Falscher Benutzername oder Passwort!");
-            window.location.href = "https://www.google.com"; // Leitet den Benutzer bei falschen Anmeldedaten weiter
-        }
-
         var map = L.map('map').setView([51.1657, 10.4515], 6);  // Zentrum auf Deutschland
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -52,9 +41,11 @@
         }).addTo(map);
 
         var routeCoordinates = [];
+        var markers = [];
         var totalDuration = 60000;  // Default-Wert für 60 Sekunden
         var pointDuration;
         var routePath;
+        var pointsVisible = false;
 
         Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
             download: true,
@@ -71,9 +62,6 @@
                         routeCoordinates.push({lat: lat, lon: lon, time: time});
                     }
                 });
-
-                // Zeige alle Punkte sofort nach dem Laden der Daten an
-                showAllPoints();
             }
         });
 
@@ -82,10 +70,55 @@
             totalDuration = value * 1000;  // Setze die Gesamtdauer basierend auf dem Slider-Wert
         }
 
-        function startAnimation() {
+        function togglePoints() {
+            pointsVisible = !pointsVisible;
+
+            if (pointsVisible) {
+                showPoints();
+            } else {
+                hidePoints();
+            }
+        }
+
+        function showPoints() {
             if (routePath) {
                 map.removeLayer(routePath);
             }
+            routePath = L.polyline([], {color: 'red'}).addTo(map);
+            markers = [];
+
+            var startDate = new Date(document.getElementById('startDate').value);
+            var endDate = new Date(document.getElementById('endDate').value);
+
+            routeCoordinates.forEach(function(point) {
+                var pointDate = new Date(point.time);
+
+                if ((!isNaN(startDate) && pointDate < startDate) || (!isNaN(endDate) && pointDate > endDate)) {
+                    return;
+                }
+
+                var marker = L.marker([point.lat, point.lon]).addTo(map)
+                    .bindPopup(point.time);
+                markers.push(marker);
+
+                routePath.addLatLng([point.lat, point.lon]);
+            });
+
+            map.fitBounds(routePath.getBounds());
+        }
+
+        function hidePoints() {
+            markers.forEach(function(marker) {
+                map.removeLayer(marker);
+            });
+
+            if (routePath) {
+                map.removeLayer(routePath);
+            }
+        }
+
+        function startAnimation() {
+            hidePoints();
             routePath = L.polyline([], {color: 'red'}).addTo(map);
             pointDuration = totalDuration / routeCoordinates.length;
             animateRoute(0);
@@ -94,6 +127,18 @@
         function animateRoute(i) {
             if (i < routeCoordinates.length) {
                 var point = routeCoordinates[i];
+                var pointDate = new Date(point.time);
+
+                var startDate = new Date(document.getElementById('startDate').value);
+                var endDate = new Date(document.getElementById('endDate').value);
+
+                if ((!isNaN(startDate) && pointDate < startDate) || (!isNaN(endDate) && pointDate > endDate)) {
+                    setTimeout(function() {
+                        animateRoute(i + 1);
+                    }, pointDuration);
+                    return;
+                }
+
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
                     .bindPopup(point.time)
                     .openPopup();
@@ -106,27 +151,8 @@
                     animateRoute(i + 1);
                 }, pointDuration);
             } else {
-                // Schließe die Animation, indem du die Karte auf die gesamte Route zentrierst
                 map.fitBounds(routePath.getBounds());
             }
-        }
-
-        function showAllPoints() {
-            if (routePath) {
-                map.removeLayer(routePath);
-            }
-            routePath = L.polyline([], {color: 'red'}).addTo(map);
-            routeCoordinates.forEach(function(point, i) {
-                L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time);
-
-                if (i > 0) {
-                    routePath.addLatLng([point.lat, point.lon]);
-                }
-            });
-
-            // Passe die Karte an die gesamte Route an
-            map.fitBounds(routePath.getBounds());
         }
     </script>
 </body>
