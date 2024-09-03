@@ -26,6 +26,10 @@
         <button onclick="togglePoints()">Punkte anzeigen</button>
         <button onclick="toggleAnimation()">Animation starten</button>
         <br><br>
+        <label for="zoomIntensity">Zoom-Intensität: </label>
+        <input type="range" id="zoomIntensity" min="0" max="10" value="5" oninput="updateZoomIntensity(this.value)">
+        <span id="zoomValue">5</span>
+        <br><br>
         <label for="startDate">Startdatum: </label>
         <input type="date" id="startDate">
         <label for="endDate">Enddatum: </label>
@@ -49,6 +53,7 @@
         var animationRunning = false;
         var currentAnimationIndex = 0;
         var animationTimeout;
+        var zoomIntensity = 5;  // Default-Wert für die Zoom-Intensität
 
         Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
             download: true,
@@ -71,6 +76,11 @@
         function updateSpeed(value) {
             document.getElementById('speedValue').textContent = value;
             totalDuration = value * 1000;  // Setze die Gesamtdauer basierend auf dem Slider-Wert
+        }
+
+        function updateZoomIntensity(value) {
+            document.getElementById('zoomValue').textContent = value;
+            zoomIntensity = value;
         }
 
         function togglePoints() {
@@ -187,14 +197,11 @@
             var nextPoint = routeCoordinates[index];
             var distance = map.distance([prevPoint.lat, prevPoint.lon], [nextPoint.lat, nextPoint.lon]);
 
-            // Anpassung des Zoom-Levels basierend auf der Entfernung (kann angepasst werden)
-            if (distance < 10000) {
-                return 13;  // Naher Zoom bei kurzen Distanzen
-            } else if (distance < 50000) {
-                return 10;  // Mittlerer Zoom bei mittleren Distanzen
-            } else {
-                return 8;   // Weitwinkel bei großen Distanzen
-            }
+            // Anpassung des Zoom-Levels basierend auf der Entfernung und der Zoom-Intensität
+            var baseZoom = 13;  // Standardzoom-Level
+            var zoomAdjustment = (10 - zoomIntensity) * (distance / 100000);  // Zoom-Intensität steuert die Anpassung
+
+            return Math.max(baseZoom - zoomAdjustment, 5);  // Setzt einen Mindestzoom-Level von 5
         }
     </script>
 </body>
