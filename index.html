@@ -24,7 +24,7 @@
         <input type="range" id="speedRange" min="10" max="120" value="60" oninput="updateSpeed(this.value)">
         <span id="speedValue">60</span> Sekunden
         <button onclick="togglePoints()">Punkte anzeigen</button>
-        <button onclick="startAnimation()">Start Animation</button>
+        <button onclick="toggleAnimation()">Animation starten</button>
         <br><br>
         <label for="startDate">Startdatum: </label>
         <input type="date" id="startDate">
@@ -34,7 +34,7 @@
     <div id="map"></div>
 
     <script>
-        var map = L.map('map').setView([51.1657, 10.4515], 6);  // Zentrum auf Deutschland
+        var map = L.map('map').setView([50.9375, 6.9603], 10);  // Startansicht auf Köln/Bonn
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -46,6 +46,9 @@
         var pointDuration;
         var routePath;
         var pointsVisible = false;
+        var animationRunning = false;
+        var currentAnimationIndex = 0;
+        var animationTimeout;
 
         Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
             download: true,
@@ -117,15 +120,32 @@
             }
         }
 
+        function toggleAnimation() {
+            if (animationRunning) {
+                stopAnimation();
+            } else {
+                startAnimation();
+            }
+        }
+
         function startAnimation() {
             hidePoints();
             routePath = L.polyline([], {color: 'red'}).addTo(map);
             pointDuration = totalDuration / routeCoordinates.length;
-            animateRoute(0);
+            animationRunning = true;
+            currentAnimationIndex = 0;
+            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Animation stoppen";
+            animateRoute(currentAnimationIndex);
+        }
+
+        function stopAnimation() {
+            animationRunning = false;
+            clearTimeout(animationTimeout);
+            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Animation starten";
         }
 
         function animateRoute(i) {
-            if (i < routeCoordinates.length) {
+            if (i < routeCoordinates.length && animationRunning) {
                 var point = routeCoordinates[i];
                 var pointDate = new Date(point.time);
 
@@ -133,7 +153,7 @@
                 var endDate = new Date(document.getElementById('endDate').value);
 
                 if ((!isNaN(startDate) && pointDate < startDate) || (!isNaN(endDate) && pointDate > endDate)) {
-                    setTimeout(function() {
+                    animationTimeout = setTimeout(function() {
                         animateRoute(i + 1);
                     }, pointDuration);
                     return;
@@ -147,11 +167,33 @@
                     routePath.addLatLng([point.lat, point.lon]);
                 }
 
-                setTimeout(function() {
-                    animateRoute(i + 1);
+                map.setView([point.lat, point.lon], calculateZoom(i));
+
+                currentAnimationIndex = i + 1;
+                animationTimeout = setTimeout(function() {
+                    animateRoute(currentAnimationIndex);
                 }, pointDuration);
-            } else {
+            } else if (i >= routeCoordinates.length) {
+                stopAnimation();
                 map.fitBounds(routePath.getBounds());
+            }
+        }
+
+        function calculateZoom(index) {
+            if (index === 0 || index >= routeCoordinates.length - 1) {
+                return map.getZoom();  // Kein Zoom-Wechsel beim ersten oder letzten Punkt
+            }
+            var prevPoint = routeCoordinates[index - 1];
+            var nextPoint = routeCoordinates[index];
+            var distance = map.distance([prevPoint.lat, prevPoint.lon], [nextPoint.lat, nextPoint.lon]);
+
+            // Anpassung des Zoom-Levels basierend auf der Entfernung (kann angepasst werden)
+            if (distance < 10000) {
+                return 13;  // Naher Zoom bei kurzen Distanzen
+            } else if (distance < 50000) {
+                return 10;  // Mittlerer Zoom bei mittleren Distanzen
+            } else {
+                return 8;   // Weitwinkel bei großen Distanzen
             }
         }
     </script>
