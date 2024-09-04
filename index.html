@@ -62,8 +62,8 @@
                 var data = results.data;
 
                 data.forEach(function(row) {
-                    var lat = parseFloat(row.lat) / 1000000;
-                    var lon = parseFloat(row.lon) / 1000000;
+                    var lat = parseFloat(row.lat);  // Keine Umrechnung
+                    var lon = parseFloat(row.lon);  // Keine Umrechnung
                     var time = row.time;
 
                     if (!isNaN(lat) && !isNaN(lon)) {
