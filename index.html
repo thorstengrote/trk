@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <style>
         #map { height: 600px; width: 100%; }
         #controls { margin: 20px; }
@@ -76,7 +77,6 @@
         var animationTimeout;
         var zoomIntensity = 8;
         var driveRouteRunning = false;
-        var vanIcon;
         var vanMarker;
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -106,12 +106,6 @@
                         }))
                         .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
                         .sort((a, b) => a.time - b.time);
-
-                    vanIcon = L.icon({
-                        iconUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAC9UlEQVRoge2Zz2sTQRTHP7tJmja1tWkqVkWt4kERBRUP/gMeRMSDFz140h48efAiXjwI/h2CJw/24EFExYNIDyoIglYraqtNTZO2SZrEw0zYJN3NTrKT3UQ/EJbZmTfv+30/MztvVnAjCUwAp4Ap4AiQByaAMcDzvI0HC3QzsBKYBfLACfUI9HFgN7DRCdRe0gKOA9PAYWCzCrwN6NM0JoBzwFlgsOO6O20SeAB8Bp4B3zr0OApcBK4Aw+r6JPAQ+NglnUmXRSYDJIEfEfRKANeAi8CAun4HvHb0G0RW+THgaox7jQIn1XEjlp4uOkMh4V+ZOPAFmHb0nQIeAcWYegxEGRSXBPA9xjiTo8DZmGMD9FwA4HqA71jnkgHQAM8LCO8XH68H++w2A6+SKQzLkOyqDcfYfmuuVW8LPK9Nqylu1yBTgWoFatX/j3y9CvUaNBvQ9qHdhnabtN+GZG+FkPB3A/yvAC+I9ylULVKDVhNKe2DrYZg7Agv7YeWJfxTcWlsHPxYg+wrmD0DjNwxmX8KvJSBJCphU65iOCe9QgVqAX61CtQLv78HaKqwswGAelvbA+jpk0nLsWYLvs/D0JszvEvnaXngsrC3D4ltoNiSJLLL1nkAKlmOXFh1A5AvVKuSGJImVpYgj4fdnqK/Lyt1e//tapcWjqCO9BhVksIrQnRCX3kAlIDYTkAQAv1nGH//U6DdaYX5Bfk0mPQlOZj3JabDUxQe8DYxGXBRXZBVuVKDbArOHoLYG2ZwkMToGXgI2jMPobzh0SlazvCx7/dQQ/FyEz+/g0yv5HchKEsVd8k6Uy8HwKPgbcrZp7UBSW+aRTQW0YbG2JjvKhgH57zcl2VI5+JzGYIb+2gMl6rBxGL9WAFpRdJmuELnUFMxEZI02sBTDr25aQZFNZIBFxKGXOgfsRQqcR5AqswY8jiDeVe4Dd5B2OYPwrR2qfwaZ7B4wixQnwRxCau+jyA5zCClghpG2uYDU3v8AZWhP6R5Qw6gAAAAASUVORK5CYII=',
-                        iconSize: [32, 32],
-                        iconAnchor: [16, 16]
-                    });
 
                     // Initialize controls with default values
                     document.getElementById('speedRange').value = speed;
@@ -240,12 +234,6 @@
                 var start = routeCoordinates[index];
                 var end = routeCoordinates[index + 1];
                 getRouteFromOSRM([start, end], function(route) {
-                    // Check if the route significantly deviates from the main road
-                    if (index > 0 && !isOnMainRoad(start, routePath.getLatLngs())) {
-                        // If it deviates, find the closest point on the main route
-                        var closestPoint = findClosestPointOnRoute(start, routePath.getLatLngs());
-                        route.unshift(closestPoint);
-                    }
                     animateVanAlongRoute(route, 0, index);
                 });
             } else {
@@ -257,7 +245,7 @@
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
                 if (!vanMarker) {
-                    vanMarker = L.marker(point, {icon: vanIcon}).addTo(map);
+                    vanMarker = L.marker(point, {icon: L.divIcon({className: 'fas fa-shuttle-van', iconSize: [30, 30]})}).addTo(map);
                 } else {
                     vanMarker.setLatLng(point);
                 }
@@ -288,8 +276,8 @@
                     if (data.routes && data.routes.length > 0) {
                         var route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
                         
-                        // Simplify the route to avoid unnecessary detours
-                        route = simplifyRoute(route);
+                        // Ensure the route is always moving forward
+                        route = ensureForwardMovement(points[0], points[1], route);
                         
                         if (callback) {
                             callback(route);
@@ -301,59 +289,40 @@
                 });
         }
 
-        function simplifyRoute(route) {
-            // Implement Douglas-Peucker algorithm to simplify the route
-            const tolerance = 0.0001; // Adjust this value to control the level of simplification
-            if (route.length <= 2) return route;
-
-            var maxDist = 0;
-            var index = 0;
-            var end = route.length - 1;
-
-            for (var i = 1; i < end; i++) {
-                var dist = pointLineDistance(route[i], route[0], route[end]);
-                if (dist > maxDist) {
-                    index = i;
-                    maxDist = dist;
-                }
-            }
-
-            if (maxDist > tolerance) {
-                var results1 = simplifyRoute(route.slice(0, index + 1));
-                var results2 = simplifyRoute(route.slice(index));
-                return results1.slice(0, -1).concat(results2);
-            } else {
-                return [route[0], route[end]];
-            }
-        }
-
-        function pointLineDistance(point, lineStart, lineEnd) {
-            var n = Math.abs((lineEnd[1] - lineStart[1]) * point[0] - (lineEnd[0] - lineStart[0]) * point[1] + lineEnd[0] * lineStart[1] - lineEnd[1] * lineStart[0]);
-            var d = Math.sqrt(Math.pow(lineEnd[1] - lineStart[1], 2) + Math.pow(lineEnd[0] - lineStart[0], 2));
-            return n / d;
-        }
-
-        function isOnMainRoad(point, mainRoute) {
-            const threshold = 0.001; // Adjust this value to determine how close a point needs to be to the main route
-            for (let i = 0; i < mainRoute.length - 1; i++) {
-                if (pointLineDistance(point, mainRoute[i], mainRoute[i + 1]) < threshold) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        function findClosestPointOnRoute(point, route) {
-            var minDist = Infinity;
-            var closestPoint = null;
+        function ensureForwardMovement(start, end, route) {
+            var startIndex = 0;
+            var endIndex = route.length - 1;
+            
+            // Find the index closest to the start point
+            var minStartDist = Infinity;
             for (var i = 0; i < route.length; i++) {
-                var dist = map.distance(point, route[i]);
-                if (dist < minDist) {
-                    minDist = dist;
-                    closestPoint = route[i];
+                var dist = distance(start, route[i]);
+                if (dist < minStartDist) {
+                    minStartDist = dist;
+                    startIndex = i;
                 }
             }
-            return closestPoint;
+            
+            // Find the index closest to the end point
+            var minEndDist = Infinity;
+            for (var i = startIndex; i < route.length; i++) {
+                var dist = distance(end, route[i]);
+                if (dist < minEndDist) {
+                    minEndDist = dist;
+                    endIndex = i;
+                }
+            }
+            
+            // Return the section of the route that moves forward
+            return route.slice(startIndex, endIndex + 1);
+        }
+
+        function distance(point1, point2) {
+            var lat1 = point1.lat || point1[0];
+            var lon1 = point1.lon || point1[1];
+            var lat2 = point2.lat || point2[0];
+            var lon2 = point2.lon || point2[1];
+            return Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lon2 - lon1, 2));
         }
     </script>
 </body>
