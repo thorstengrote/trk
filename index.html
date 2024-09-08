@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -16,24 +17,34 @@
             margin: 20px;
         }
     </style>
+
+    <script>
+        // Password protection
+        var password = prompt("Enter the password:");
+        if (password !== "thorsten") {
+            alert("Wrong password.");
+            window.location.href = "about:blank";
+        }
+    </script>
 </head>
 <body>
     <h3>Map</h3>
     <div id="controls">
-        <label for="speedRange">Abspielgeschwindigkeit (sek): </label>
+        <label for="speedRange">Playback Speed (sec): </label>
         <input type="range" id="speedRange" min="10" max="120" value="60" oninput="updateSpeed(this.value)">
-        <span id="speedValue">60</span> Sekunden
-        <button onclick="togglePoints()">Punkte anzeigen</button>
-        <button onclick="toggleAnimation()">Animation starten</button>
-        <button onclick="toggleRoute()">Route anzeigen</button> <!-- Route toggle button -->
+        <span id="speedValue">60</span> seconds
+        <button onclick="togglePoints()">Show Points</button>
+        <button onclick="toggleAnimation()">Start Animation</button>
+        <button onclick="toggleRoute()">Show Route</button>
+        <button onclick="toggleDrive()">Drive Route</button>
         <br><br>
-        <label for="zoomIntensity">Zoom-Intensität: </label>
+        <label for="zoomIntensity">Zoom Intensity: </label>
         <input type="range" id="zoomIntensity" min="0" max="10" value="1" oninput="updateZoomIntensity(this.value)">
         <span id="zoomValue">1</span>
         <br><br>
-        <label for="startDate">Startdatum: </label>
+        <label for="startDate">Start Date: </label>
         <input type="date" id="startDate">
-        <label for="endDate">Enddatum: </label>
+        <label for="endDate">End Date: </label>
         <input type="date" id="endDate">
     </div>
     <div id="map"></div>
@@ -53,6 +64,7 @@
         var routeVisible = false;
         var pointsVisible = false;
         var animationRunning = false;
+        var drivingRoute = false;
         var currentAnimationIndex = 0;
         var animationTimeout;
         var zoomIntensity = 1;
@@ -62,6 +74,11 @@
             header: true,
             complete: function(results) {
                 var data = results.data;
+
+                // Sort by time
+                data.sort(function(a, b) {
+                    return new Date(a.time) - new Date(b.time);
+                });
 
                 data.forEach(function(row) {
                     var lat = parseFloat(row.lat);
@@ -78,6 +95,7 @@
         function updateSpeed(value) {
             document.getElementById('speedValue').textContent = value;
             totalDuration = value * 1000;
+            pointDuration = totalDuration / routeCoordinates.length;
         }
 
         function updateZoomIntensity(value) {
@@ -133,18 +151,67 @@
 
         function startAnimation() {
             hidePoints();
-            routePath = L.polyline([], {color: 'red'}).addTo(map);
             pointDuration = totalDuration / routeCoordinates.length;
             animationRunning = true;
             currentAnimationIndex = 0;
-            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Animation stoppen";
+            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Stop Animation";
             animateRoute(currentAnimationIndex);
         }
 
         function stopAnimation() {
             animationRunning = false;
             clearTimeout(animationTimeout);
-            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Animation starten";
+            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Start Animation";
+        }
+
+        // Toggle for driving route
+        function toggleDrive() {
+            drivingRoute = !drivingRoute;
+            if (drivingRoute) {
+                startDriving();
+            } else {
+                stopDriving();
+            }
+        }
+
+        function startDriving() {
+            hidePoints();
+            pointDuration = totalDuration / routeCoordinates.length;
+            currentAnimationIndex = 0;
+            document.querySelector('button[onclick="toggleDrive()"]').textContent = "Stop Drive";
+            driveAlongRoute(currentAnimationIndex);
+        }
+
+        function stopDriving() {
+            drivingRoute = false;
+            clearTimeout(animationTimeout);
+            document.querySelector('button[onclick="toggleDrive()"]').textContent = "Drive Route";
+        }
+
+        // Drive along the route with a van icon
+        function driveAlongRoute(i) {
+            if (i < routeCoordinates.length && drivingRoute) {
+                var point = routeCoordinates[i];
+
+                if (i === 0) {
+                    var vanIcon = L.icon({
+                        iconUrl: 'https://img.icons8.com/emoji/48/000000/minibus.png',
+                        iconSize: [48, 48],
+                        iconAnchor: [24, 24]
+                    });
+                    var vanMarker = L.marker([point.lat, point.lon], {icon: vanIcon}).addTo(map);
+                } else {
+                    vanMarker.setLatLng([point.lat, point.lon]);
+                }
+
+                currentAnimationIndex = i + 1;
+                animationTimeout = setTimeout(function() {
+                    driveAlongRoute(currentAnimationIndex);
+                }, pointDuration);
+            } else if (i >= routeCoordinates.length) {
+                stopDriving();
+                map.fitBounds(routePath.getBounds());
+            }
         }
 
         function toggleRoute() {
@@ -162,6 +229,7 @@
             }
             routePath = L.polyline([], {color: 'blue'}).addTo(map);
 
+            // Route based on sorted time
             for (var i = 1; i < routeCoordinates.length; i++) {
                 var start = [routeCoordinates[i - 1].lat, routeCoordinates[i - 1].lon];
                 var end = [routeCoordinates[i].lat, routeCoordinates[i].lon];
@@ -169,6 +237,7 @@
             }
         }
 
+        // Get route from OSRM API
         function getRoute(start, end) {
             var url = `https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`;
 
@@ -183,44 +252,6 @@
                 });
         }
 
-        function animateRoute(i) {
-            if (i < routeCoordinates.length && animationRunning) {
-                var point = routeCoordinates[i];
-                var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time)
-                    .openPopup();
-
-                if (i > 0) {
-                    var prevPoint = routeCoordinates[i - 1];
-                    getRoute([prevPoint.lat, prevPoint.lon], [point.lat, point.lon]);
-                }
-
-                currentAnimationIndex = i + 1;
-                animationTimeout = setTimeout(function() {
-                    animateRoute(currentAnimationIndex);
-                }, pointDuration);
-            } else if (i >= routeCoordinates.length) {
-                stopAnimation();
-                map.fitBounds(routePath.getBounds());
-            }
-        }
-
-        function calculateZoom(index) {
-            if (zoomIntensity === 0) {
-                return map.getZoom();
-            }
-            if (index === 0 || index >= routeCoordinates.length - 1) {
-                return map.getZoom();
-            }
-            var prevPoint = routeCoordinates[index - 1];
-            var nextPoint = routeCoordinates[index];
-            var distance = map.distance([prevPoint.lat, prevPoint.lon], [nextPoint.lat, nextPoint.lon]);
-
-            var baseZoom = 13;
-            var zoomAdjustment = (10 - zoomIntensity) * (distance / 200000);
-
-            return Math.max(baseZoom - zoomAdjustment, 5);
-        }
     </script>
 </body>
 </html>
