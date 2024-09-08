@@ -108,9 +108,9 @@
                         .sort((a, b) => a.time - b.time);
 
                     vanIcon = L.icon({
-                        iconUrl: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0zIDEzaDJ2LTJIM3Yyem0wIDRoMnYtMkgzdjJ6bTAgNGgydi0ySDN2MnpNMyA5aDJWN0gzdjJ6bTEwIDZoMnYtMmgtMnYyem02LTFINXY1aDJ2LTNoOHYzaDJ2LTVoLTR6TTkgMTdoMnYtMkg5djJ6bTYgMGgydi0yaC0ydjJ6bS02IDNoMnYtMkg5djJ6bTYgMGgydi0yaC0ydjJ6Ii8+PC9zdmc+',
-                        iconSize: [32, 32],
-                        iconAnchor: [16, 16]
+                        iconUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAC9UlEQVRoge2Zz2sTQRTHP7tJmja1tWkqVkWt4kERBRUP/gMeRMSDFz140h48efAiXjwI/h2CJw/24EFExYNIDyoIglYraqtNTZO2SZrEw0zYJN3NTrKT3UQ/EJbZmTfv+30/MztvVnAjCUwAp4Ap4AiQByaAMcDzvI0HC3QzsBKYBfLACfUI9HFgN7DRCdRe0gKOA9PAYWCzCrwN6NM0JoBzwFlgsOO6O20SeAB8Bp4B3zr0OApcBK4Aw+r6JPAQ+NglnUmXRSYDJIEfEfRKANeAi8CAun4HvHb0G0RW+THgaox7jQIn1XEjlp4uOkMh4V+ZOPAFmHb0nQIeAcWYegxEGRSXBPA9xjiTo8DZmGMD9FwA4HqA71jnkgHQAM8LCO8XH68H++w2A6+SKQzLkOyqDcfYfmuuVW8LPK9Nqylu1yBTgWoFatX/j3y9CvUaNBvQ9qHdhnabtN+GZG+FkPB3A/yvAC+I9ylULVKDVhNKe2DrYZg7Agv7YeWJfxTcWlsHPxYg+wrmD0DjNwxmX8KvJSBJCphU65iOCe9QgVqAX61CtQLv78HaKqwswGAelvbA+jpk0nLsWYLvs/D0JszvEvnaXngsrC3D4ltoNiSJLLL1nkAKlmOXFh1A5AvVKuSGJImVpYgj4fdnqK/Lyt1e//tapcWjqCO9BhVksIrQnRCX3kAlIDYTkAQAv1nGH//U6DdaYX5Bfk0mPQlOZj3JabDUxQe8DYxGXBRXZBVuVKDbArOHoLYG2ZwkMToGXgI2jMPobzh0SlazvCx7/dQQ/FyEz+/g0yv5HchKEsVd8k6Uy8HwKPgbcrZp7UBSW+aRTQW0YbG2JjvKhgH57zcl2VI5+JzGYIb+2gMl6rBxGL9WAFpRdJmuELnUFMxEZI02sBTDr25aQZFNZIBFxKGXOgfsRQqcR5AqswY8jiDeVe4Dd5B2OYPwrR2qfwaZ7B4wixQnwRxCau+jyA5zCClghpG2uYDU3v8AZWhP6R5Qw6gAAAAASUVORK5CYII=',
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
                     });
                 }
             });
@@ -153,8 +153,8 @@
         }
 
         function startAnimation() {
-            hidePoints();
             if (routePath) map.removeLayer(routePath);
+            routePath = L.polyline([], {color: 'blue'}).addTo(map);
             animationRunning = true;
             currentAnimationIndex = 0;
             document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Stop Animation";
@@ -184,11 +184,12 @@
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
                     .bindPopup(point.time.toLocaleString())
                     .openPopup();
+                markers.push(marker);
 
+                routePath.addLatLng([point.lat, point.lon]);
                 map.setView([point.lat, point.lon], calculateZoom(i));
 
                 animationTimeout = setTimeout(function() {
-                    map.removeLayer(marker);
                     animateRoute(i + 1);
                 }, 1000);
             } else if (i >= routeCoordinates.length) {
@@ -200,10 +201,6 @@
             if (zoomIntensity === 0) return 5; // Most zoomed out
             if (index === 0 || index >= routeCoordinates.length - 1) return map.getZoom();
             
-            var prevPoint = routeCoordinates[index - 1];
-            var nextPoint = routeCoordinates[index];
-            var distance = map.distance([prevPoint.lat, prevPoint.lon], [nextPoint.lat, nextPoint.lon]);
-
             var maxZoom = 18; // Most zoomed in
             var minZoom = 5;  // Most zoomed out
             var zoomRange = maxZoom - minZoom;
@@ -271,13 +268,17 @@
 
         function getRouteFromOSRM(points, callback) {
             var coordinates = points.map(p => p.lon + ',' + p.lat).join(';');
-            var url = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`;
+            var url = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&continue_straight=true`;
 
             fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     if (data.routes && data.routes.length > 0) {
                         var route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                        
+                        // Simplify the route to avoid unnecessary detours
+                        route = simplifyRoute(route);
+                        
                         if (callback) {
                             callback(route);
                         } else {
@@ -286,6 +287,80 @@
                         }
                     }
                 });
+        }
+
+        function simplifyRoute(route) {
+            // Implement Douglas-Peucker algorithm to simplify the route
+            const tolerance = 0.0001; // Adjust this value to control the level of simplification
+            if (route.length <= 2) return route;
+
+            var maxDist = 0;
+            var index = 0;
+            var end = route.length - 1;
+
+            for (var i = 1; i < end; i++) {
+                var dist = pointLineDistance(route[i], route[0], route[end]);
+                if (dist > maxDist) {
+                    index = i;
+                    maxDist = dist;
+                }
+            }
+
+            if (maxDist > tolerance) {
+                var results1 = simplifyRoute(route.slice(0, index + 1));
+                var results2 = simplifyRoute(route.slice(index));
+                return results1.slice(0, -1).concat(results2);
+            } else {
+                return [route[0], route[end]];
+            }
+        }
+
+        function pointLineDistance(point, lineStart, lineEnd) {
+            var n = Math.abs((lineEnd[1] - lineStart[1]) * point[0] - (lineEnd[0] - lineStart[0]) * point[1] + lineEnd[0] * lineStart[1] - lineEnd[1] * lineStart[0]);
+            var d = Math.sqrt(Math.pow(lineEnd[1] - lineStart[1], 2) + Math.pow(lineEnd[0] - lineStart[0], 2));
+            return n / d;
+        }
+
+        function isOnMainRoad(point, mainRoute) {
+            const threshold = 0.001; // Adjust this value to determine how close a point needs to be to the main route
+            for (let i = 0; i < mainRoute.length - 1; i++) {
+                if (pointLineDistance(point, mainRoute[i], mainRoute[i + 1]) < threshold) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Update the driveRoute function to use the main route
+        function driveRoute(index) {
+            if (index < routeCoordinates.length - 1 && driveRouteRunning) {
+                var start = routeCoordinates[index];
+                var end = routeCoordinates[index + 1];
+                getRouteFromOSRM([start, end], function(route) {
+                    // Check if the route significantly deviates from the main road
+                    if (index > 0 && !isOnMainRoad(start, routePath.getLatLngs())) {
+                        // If it deviates, find the closest point on the main route
+                        var closestPoint = findClosestPointOnRoute(start, routePath.getLatLngs());
+                        route.unshift(closestPoint);
+                    }
+                    animateVanAlongRoute(route, 0, index);
+                });
+            } else {
+                stopDriveRoute();
+            }
+        }
+
+        function findClosestPointOnRoute(point, route) {
+            var minDist = Infinity;
+            var closestPoint = null;
+            for (var i = 0; i < route.length; i++) {
+                var dist = map.distance(point, route[i]);
+                if (dist < minDist) {
+                    minDist = dist;
+                    closestPoint = route[i];
+                }
+            }
+            return closestPoint;
         }
     </script>
 </body>
