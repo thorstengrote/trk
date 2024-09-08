@@ -1,16 +1,7 @@
-Die Open Source Routing Machine (OSRM), die wir hier verwenden, benötigt **keinen API-Schlüssel**, da es sich um eine Open-Source-API handelt. Sie ist kostenlos und kann direkt verwendet werden, ohne dass eine Anmeldung oder ein API-Schlüssel erforderlich ist.
-
-Ich habe deinen Wunsch nach einem **„Route“-Toggle-Button** berücksichtigt. Die Route wird erst angezeigt, wenn du auf den „Route“-Button klickst, und dieser Button kann die Darstellung der Route wieder ausblenden, wenn du ihn erneut drückst.
-
-Hier ist der angepasste Code mit dem **„Route“-Toggle-Button**:
-
-### Angepasster HTML-Code mit „Route“-Toggle-Button:
-
-```html
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Van Tracking Map</title>
+    <title>Map</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
@@ -27,18 +18,18 @@ Hier ist der angepasste Code mit dem **„Route“-Toggle-Button**:
     </style>
 </head>
 <body>
-    <h3>Van Tracking Map</h3>
+    <h3>Map</h3>
     <div id="controls">
         <label for="speedRange">Abspielgeschwindigkeit (sek): </label>
         <input type="range" id="speedRange" min="10" max="120" value="60" oninput="updateSpeed(this.value)">
         <span id="speedValue">60</span> Sekunden
         <button onclick="togglePoints()">Punkte anzeigen</button>
         <button onclick="toggleAnimation()">Animation starten</button>
-        <button onclick="toggleRoute()">Route anzeigen</button> <!-- Neuer Button zum Anzeigen der Route -->
+        <button onclick="toggleRoute()">Route anzeigen</button> <!-- Route toggle button -->
         <br><br>
         <label for="zoomIntensity">Zoom-Intensität: </label>
-        <input type="range" id="zoomIntensity" min="0" max="10" value="0" oninput="updateZoomIntensity(this.value)">
-        <span id="zoomValue">0</span>
+        <input type="range" id="zoomIntensity" min="0" max="10" value="1" oninput="updateZoomIntensity(this.value)">
+        <span id="zoomValue">1</span>
         <br><br>
         <label for="startDate">Startdatum: </label>
         <input type="date" id="startDate">
@@ -48,7 +39,7 @@ Hier ist der angepasste Code mit dem **„Route“-Toggle-Button**:
     <div id="map"></div>
 
     <script>
-        var map = L.map('map').setView([50.9375, 6.9603], 10);  // Startansicht auf Köln/Bonn
+        var map = L.map('map').setView([50.9375, 6.9603], 10);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -56,17 +47,17 @@ Hier ist der angepasste Code mit dem **„Route“-Toggle-Button**:
 
         var routeCoordinates = [];
         var markers = [];
-        var totalDuration = 60000;  // Default-Wert für 60 Sekunden
+        var totalDuration = 60000;
         var pointDuration;
         var routePath;
-        var routeVisible = false;  // Kontrolliert die Sichtbarkeit der Route
+        var routeVisible = false;
         var pointsVisible = false;
         var animationRunning = false;
         var currentAnimationIndex = 0;
         var animationTimeout;
-        var zoomIntensity = 0;  // Default-Wert für die Zoom-Intensität
+        var zoomIntensity = 1;
 
-        Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
+        Papa.parse('https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/pub?gid=0&single=true&output=csv', {
             download: true,
             header: true,
             complete: function(results) {
@@ -86,7 +77,7 @@ Hier ist der angepasste Code mit dem **„Route“-Toggle-Button**:
 
         function updateSpeed(value) {
             document.getElementById('speedValue').textContent = value;
-            totalDuration = value * 1000;  // Setze die Gesamtdauer basierend auf dem Slider-Wert
+            totalDuration = value * 1000;
         }
 
         function updateZoomIntensity(value) {
@@ -111,16 +102,7 @@ Hier ist der angepasste Code mit dem **„Route“-Toggle-Button**:
             routePath = L.polyline([], {color: 'red'}).addTo(map);
             markers = [];
 
-            var startDate = new Date(document.getElementById('startDate').value);
-            var endDate = new Date(document.getElementById('endDate').value);
-
             routeCoordinates.forEach(function(point) {
-                var pointDate = new Date(point.time);
-
-                if ((!isNaN(startDate) && pointDate < startDate) || (!isNaN(endDate) && pointDate > endDate)) {
-                    return;
-                }
-
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
                     .bindPopup(point.time);
                 markers.push(marker);
@@ -165,7 +147,6 @@ Hier ist der angepasste Code mit dem **„Route“-Toggle-Button**:
             document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Animation starten";
         }
 
-        // Funktion zum Ein- und Ausblenden der Route
         function toggleRoute() {
             routeVisible = !routeVisible;
             if (routeVisible) {
@@ -188,7 +169,6 @@ Hier ist der angepasste Code mit dem **„Route“-Toggle-Button**:
             }
         }
 
-        // Funktion zur Berechnung der Route zwischen zwei Punkten mit OSRM-API
         function getRoute(start, end) {
             var url = `https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`;
 
@@ -206,34 +186,16 @@ Hier ist der angepasste Code mit dem **„Route“-Toggle-Button**:
         function animateRoute(i) {
             if (i < routeCoordinates.length && animationRunning) {
                 var point = routeCoordinates[i];
-                var pointDate = new Date(point.time);
-
-                var startDate = new Date(document.getElementById('startDate').value);
-                var endDate = new Date(document.getElementById('endDate').value);
-
-                if ((!isNaN(startDate) && pointDate < startDate) || (!isNaN(endDate) && pointDate > endDate)) {
-                    animationTimeout = setTimeout(function() {
-                        animateRoute(i + 1);
-                    }, pointDuration);
-                    return;
-                }
-
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
                     .bindPopup(point.time)
                     .openPopup();
 
                 if (i > 0) {
                     var prevPoint = routeCoordinates[i - 1];
-                    // Berechne die Route zwischen dem aktuellen und dem vorherigen Punkt
                     getRoute([prevPoint.lat, prevPoint.lon], [point.lat, point.lon]);
                 }
 
                 currentAnimationIndex = i + 1;
-                animationTimeout = setTimeout(function() {
-                    animateRoute(currentAnimationIndex);
-                }, pointDuration);
-            } else if (i >= route
-                                       currentAnimationIndex = i + 1;
                 animationTimeout = setTimeout(function() {
                     animateRoute(currentAnimationIndex);
                 }, pointDuration);
@@ -245,20 +207,19 @@ Hier ist der angepasste Code mit dem **„Route“-Toggle-Button**:
 
         function calculateZoom(index) {
             if (zoomIntensity === 0) {
-                return map.getZoom();  // Kein dynamischer Zoom bei Zoom-Intensität 0
+                return map.getZoom();
             }
             if (index === 0 || index >= routeCoordinates.length - 1) {
-                return map.getZoom();  // Kein Zoom-Wechsel beim ersten oder letzten Punkt
+                return map.getZoom();
             }
             var prevPoint = routeCoordinates[index - 1];
             var nextPoint = routeCoordinates[index];
             var distance = map.distance([prevPoint.lat, prevPoint.lon], [nextPoint.lat, nextPoint.lon]);
 
-            // Anpassung des Zoom-Levels basierend auf der Entfernung und der Zoom-Intensität
-            var baseZoom = 13;  // Standardzoom-Level
-            var zoomAdjustment = (10 - zoomIntensity) * (distance / 200000);  // Reduzierte Zoom-Intensität
+            var baseZoom = 13;
+            var zoomAdjustment = (10 - zoomIntensity) * (distance / 200000);
 
-            return Math.max(baseZoom - zoomAdjustment, 5);  // Setzt einen Mindestzoom-Level von 5
+            return Math.max(baseZoom - zoomAdjustment, 5);
         }
     </script>
 </body>
