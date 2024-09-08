@@ -40,17 +40,17 @@
 
     <h3>Map</h3>
     <div id="controls">
-        <label for="speedRange">Playback Speed (km/h): </label>
-        <input type="range" id="speedRange" min="10" max="120" value="60" oninput="updateSpeed(this.value)">
-        <span id="speedValue">60</span> km/h
+        <label for="speedRange">Playback Speed (km/s): </label>
+        <input type="range" id="speedRange" min="1" max="100" value="10" oninput="updateSpeed(this.value)">
+        <span id="speedValue">10</span> km/s
         <button onclick="togglePoints()">Show Points</button>
         <button onclick="toggleAnimation()">Start Animation</button>
         <button onclick="toggleRoute()">Show Route</button>
         <button onclick="toggleDriveRoute()">Drive Route</button>
         <br><br>
         <label for="zoomIntensity">Zoom Intensity: </label>
-        <input type="range" id="zoomIntensity" min="0" max="10" value="1" oninput="updateZoomIntensity(this.value)">
-        <span id="zoomValue">1</span>
+        <input type="range" id="zoomIntensity" min="0" max="10" value="5" oninput="updateZoomIntensity(this.value)">
+        <span id="zoomValue">5</span>
         <br><br>
         <label for="startDate">Start Date: </label>
         <input type="date" id="startDate">
@@ -67,14 +67,14 @@
 
         var routeCoordinates = [];
         var markers = [];
-        var speed = 60; // km/h
+        var speed = 10; // km/s
         var routePath;
         var routeVisible = false;
         var pointsVisible = false;
         var animationRunning = false;
         var currentAnimationIndex = 0;
         var animationTimeout;
-        var zoomIntensity = 1;
+        var zoomIntensity = 5;
         var driveRouteRunning = false;
         var vanIcon;
         var vanMarker;
@@ -108,7 +108,7 @@
                         .sort((a, b) => a.time - b.time);
 
                     vanIcon = L.icon({
-                        iconUrl: 'https://cdn-icons-png.flaticon.com/512/171/171239.png',
+                        iconUrl: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0zIDEzaDJ2LTJIM3Yyem0wIDRoMnYtMkgzdjJ6bTAgNGgydi0ySDN2MnpNMyA5aDJWN0gzdjJ6bTEwIDZoMnYtMmgtMnYyem02LTFINXY1aDJ2LTNoOHYzaDJ2LTVoLTR6TTkgMTdoMnYtMkg5djJ6bTYgMGgydi0yaC0ydjJ6bS02IDNoMnYtMkg5djJ6bTYgMGgydi0yaC0ydjJ6Ii8+PC9zdmc+',
                         iconSize: [32, 32],
                         iconAnchor: [16, 16]
                     });
@@ -197,17 +197,19 @@
         }
 
         function calculateZoom(index) {
-            if (zoomIntensity === 0) return map.getZoom();
+            if (zoomIntensity === 0) return 5; // Most zoomed out
             if (index === 0 || index >= routeCoordinates.length - 1) return map.getZoom();
             
             var prevPoint = routeCoordinates[index - 1];
             var nextPoint = routeCoordinates[index];
             var distance = map.distance([prevPoint.lat, prevPoint.lon], [nextPoint.lat, nextPoint.lon]);
 
-            var baseZoom = 13;
-            var zoomAdjustment = (10 - zoomIntensity) * (distance / 200000);
+            var maxZoom = 18; // Most zoomed in
+            var minZoom = 5;  // Most zoomed out
+            var zoomRange = maxZoom - minZoom;
+            var zoomLevel = maxZoom - (zoomIntensity / 10) * zoomRange;
 
-            return Math.max(baseZoom - zoomAdjustment, 5);
+            return Math.max(Math.min(zoomLevel, maxZoom), minZoom);
         }
 
         function toggleDriveRoute() {
@@ -264,7 +266,7 @@
 
         function calculateTimeToNextPoint(point1, point2) {
             var distance = map.distance(point1, point2);
-            return (distance / (speed * 1000 / 3600)) * 1000; // Convert to milliseconds
+            return (distance / (speed * 1000)) * 1000; // Convert to milliseconds
         }
 
         function getRouteFromOSRM(points, callback) {
