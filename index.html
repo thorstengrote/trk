@@ -282,30 +282,26 @@
 
                 promises.push(new Promise((resolve) => {
                     getRouteFromOSRM([start, end], (route) => {
-                        resolve(route);
+                        resolve({route: route, start: start, end: end});
                     });
                 }));
             }
 
-            Promise.all(promises).then((routes) => {
-                routes.forEach((route) => {
-                    completeRoute = completeRoute.concat(route);
+            Promise.all(promises).then((results) => {
+                results.forEach((result) => {
+                    completeRoute = completeRoute.concat(result.route);
                 });
                 document.getElementById('loadingModal').style.display = 'none';
-                animateVanAlongRoute(completeRoute, 0);
+                animateVanAlongRoute(completeRoute, 0, results);
             });
         }
 
-        function animateVanAlongRoute(route, step) {
+        function animateVanAlongRoute(route, step, routeSegments) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
                 if (!vanMarker) {
                     vanMarker = L.marker(point, {
-                        icon: L.divIcon({
-                            className: 'fas fa-shuttle-van',
-                            iconSize: [60, 60],
-                            html: '<i class="fas fa-shuttle-van" style="font-size: 60px; color: white;"></i>'
-                        })
+                        icon: L.divIcon({className: 'fas fa-shuttle-van', iconSize: [30, 30]})
                     }).addTo(map);
                 } else {
                     vanMarker.setLatLng(point);
@@ -313,9 +309,13 @@
                 routePath.addLatLng(point);
                 map.setView(point, calculateZoom(step));
 
-                // Check if we've reached a pause or camp point
-                let targetPoint = routeCoordinates.find(coord => coord.lat === point[0] && coord.lon === point[1]);
-                if (targetPoint) {
+                // Check if we've reached a target point
+                let segmentIndex = routeSegments.findIndex(segment => 
+                    segment.route[segment.route.length - 1][0] === point[0] && 
+                    segment.route[segment.route.length - 1][1] === point[1]
+                );
+                if (segmentIndex !== -1) {
+                    let targetPoint = routeSegments[segmentIndex].end;
                     if (targetPoint.isPause) {
                         let pauseMarker = L.marker(point, {
                             icon: L.divIcon({
@@ -339,7 +339,7 @@
 
                 var timeToNextPoint = calculateTimeToNextPoint(route[step], route[step + 1] || route[step]);
                 animationTimeout = setTimeout(function() {
-                    animateVanAlongRoute(route, step + 1);
+                    animateVanAlongRoute(route, step + 1, routeSegments);
                 }, timeToNextPoint);
             } else if (!driveRouteRunning) {
                 stopDriveRoute();
