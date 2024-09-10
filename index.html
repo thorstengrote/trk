@@ -156,11 +156,18 @@
         function updateSpeed(value) {
             document.getElementById('speedValue').textContent = value;
             speed = parseInt(value);
+            if (driveRouteRunning) {
+                stopDriveRoute();
+                startDriveRoute();
+            }
         }
 
         function updateZoomIntensity(value) {
             document.getElementById('zoomValue').textContent = value;
             zoomIntensity = parseInt(value);
+            if (driveRouteRunning) {
+                map.setZoom(calculateZoom(currentAnimationIndex));
+            }
         }
 
         function togglePoints() {
@@ -316,27 +323,30 @@
                 );
                 if (segmentIndex !== -1) {
                     let targetPoint = routeSegments[segmentIndex].end;
-                    if (targetPoint.isPause) {
+                    if (targetPoint.isPause && !pauseMarkers.some(m => m.getLatLng().equals(point))) {
                         let pauseMarker = L.marker(point, {
                             icon: L.divIcon({
-                                className: 'fas fa-coffee',
+                                className: 'custom-div-icon',
+                                html: '<div style="background-color:#c30b82;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-coffee"></i></div>',
                                 iconSize: [30, 30],
-                                html: '<i class="fas fa-coffee" style="font-size: 30px; color: brown;"></i>'
+                                iconAnchor: [15, 15]
                             })
                         }).addTo(map);
                         pauseMarkers.push(pauseMarker);
-                    } else if (targetPoint.isCamp) {
+                    } else if (targetPoint.isCamp && !campMarkers.some(m => m.getLatLng().equals(point))) {
                         let campMarker = L.marker(point, {
                             icon: L.divIcon({
-                                className: 'fas fa-campground',
+                                className: 'custom-div-icon',
+                                html: '<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-campground"></i></div>',
                                 iconSize: [30, 30],
-                                html: '<i class="fas fa-campground" style="font-size: 30px; color: green;"></i>'
+                                iconAnchor: [15, 15]
                             })
                         }).addTo(map);
                         campMarkers.push(campMarker);
                     }
                 }
 
+                currentAnimationIndex = step;
                 var timeToNextPoint = calculateTimeToNextPoint(route[step], route[step + 1] || route[step]);
                 animationTimeout = setTimeout(function() {
                     animateVanAlongRoute(route, step + 1, routeSegments);
