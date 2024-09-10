@@ -9,22 +9,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            margin: 0; 
-            padding: 0; 
-        }
-        #map { 
-            height: 70vh; 
-            width: 100%; 
-        }
-        #controls { 
-            padding: 10px; 
-            background-color: #f0f0f0; 
-        }
-        #controls > * {
-            margin-bottom: 10px;
-        }
+        #map { height: 600px; width: 100%; }
+        #controls { margin: 20px; }
         #passwordModal, #loadingModal {
             display: none;
             position: fixed;
@@ -40,8 +26,7 @@
             margin: 15% auto;
             padding: 20px;
             border: 1px solid #888;
-            width: 80%;
-            max-width: 300px;
+            width: 300px;
             text-align: center;
         }
         .spinner {
@@ -56,17 +41,6 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
-        }
-        input[type="range"] {
-            width: 100%;
-        }
-        button {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-        }
-        #shareLink {
-            word-break: break-all;
         }
     </style>
 </head>
@@ -85,26 +59,22 @@
         </div>
     </div>
 
-    <div id="map"></div>
+    <h3>Map</h3>
     <div id="controls">
         <label for="speedRange">Playback Speed (km/s): </label>
         <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
         <span id="speedValue">20</span> km/s
-        <br>
         <button onclick="togglePoints()">Show Points</button>
         <button onclick="toggleAnimation()">Start Animation</button>
         <button onclick="toggleRoute()">Show Route</button>
         <button onclick="toggleDriveRoute()">Drive Route</button>
-        <br>
+        <br><br>
         <label for="startDate">Start Date: </label>
         <input type="date" id="startDate">
-        <br>
         <label for="endDate">End Date: </label>
         <input type="date" id="endDate">
-        <br>
-        <button onclick="generateShareLink()">Generate Share Link</button>
-        <div id="shareLink"></div>
     </div>
+    <div id="map"></div>
 
     <script>
         var map = L.map('map').setView([50.9375, 6.9603], 10);
@@ -128,19 +98,6 @@
 
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('passwordModal').style.display = 'block';
-            
-            // Check for URL parameters
-            const urlParams = new URLSearchParams(window.location.search);
-            const startDate = urlParams.get('start');
-            const endDate = urlParams.get('end');
-            const autoplay = urlParams.get('autoplay');
-
-            if (startDate) document.getElementById('startDate').value = startDate;
-            if (endDate) document.getElementById('endDate').value = endDate;
-
-            if (autoplay === 'true') {
-                checkPassword();
-            }
         });
 
         function checkPassword() {
@@ -172,12 +129,6 @@
                     // Initialize controls with default values
                     document.getElementById('speedRange').value = speed;
                     document.getElementById('speedValue').textContent = speed;
-
-                    // Start autoplay if URL parameter is set
-                    const urlParams = new URLSearchParams(window.location.search);
-                    if (urlParams.get('autoplay') === 'true') {
-                        startDriveRoute();
-                    }
                 }
             });
         }
@@ -399,56 +350,6 @@
             var lat2 = point2.lat || point2[0];
             var lon2 = point2.lon || point2[1];
             return Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lon2 - lon1, 2));
-        }
-
-        function generateShareLink() {
-            var startDate = document.getElementById('startDate').value;
-            var endDate = document.getElementById('endDate').value;
-            if (!startDate || !endDate) {
-                alert('Please select both start and end dates.');
-                return;
-            }
-            var currentUrl = window.location.href.split('?')[0]; // Remove any existing query parameters
-            var shareUrl = `${currentUrl}?start=${startDate}&end=${endDate}&autoplay=true`;
-            var shareLinkElement = document.getElementById('shareLink');
-            shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
-        }
-
-        // Filter route based on date range
-        function filterRouteByDateRange(startDate, endDate) {
-            return routeCoordinates.filter(point => {
-                return point.time >= new Date(startDate) && point.time <= new Date(endDate);
-            });
-        }
-
-        // Update this function to use the date range
-        function calculateCompleteRoute() {
-            let startDate = document.getElementById('startDate').value;
-            let endDate = document.getElementById('endDate').value;
-            let filteredCoordinates = filterRouteByDateRange(startDate, endDate);
-            
-            let completeRoute = [];
-            let promises = [];
-            let targetPoints = filteredCoordinates.filter(point => point.isTarget);
-
-            for (let i = 0; i < targetPoints.length - 1; i++) {
-                let start = targetPoints[i];
-                let end = targetPoints[i + 1];
-
-                promises.push(new Promise((resolve) => {
-                    getRouteFromOSRM([start, end], (route) => {
-                        resolve({route: route, start: start, end: end});
-                    });
-                }));
-            }
-
-            Promise.all(promises).then((results) => {
-                results.forEach((result) => {
-                    completeRoute = completeRoute.concat(result.route);
-                });
-                document.getElementById('loadingModal').style.display = 'none';
-                animateVanAlongRoute(completeRoute, 0, results);
-            });
         }
     </script>
 </body>
