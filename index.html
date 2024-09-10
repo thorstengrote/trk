@@ -107,6 +107,9 @@
                         .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
                         .sort((a, b) => a.time - b.time);
 
+                    // Analyze time intervals and mark continuous travel segments
+                    analyzeTimeIntervals(routeCoordinates);
+
                     // Initialize controls with default values
                     document.getElementById('speedRange').value = speed;
                     document.getElementById('speedValue').textContent = speed;
@@ -114,6 +117,17 @@
                     document.getElementById('zoomValue').textContent = zoomIntensity;
                 }
             });
+        }
+
+        function analyzeTimeIntervals(coordinates) {
+            for (let i = 0; i < coordinates.length; i++) {
+                if (i === 0) {
+                    coordinates[i].continuousTravel = true;
+                } else {
+                    const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60); // difference in minutes
+                    coordinates[i].continuousTravel = timeDiff <= 30;
+                }
+            }
         }
 
         function updateSpeed(value) {
@@ -233,9 +247,18 @@
             if (index < routeCoordinates.length - 1 && driveRouteRunning) {
                 var start = routeCoordinates[index];
                 var end = routeCoordinates[index + 1];
-                getRouteFromOSRM([start, end], function(route) {
-                    animateVanAlongRoute(route, 0, index);
-                });
+                
+                if (start.continuousTravel && end.continuousTravel) {
+                    // For continuous travel, use fastest route
+                    getRouteFromOSRM([start, end], function(route) {
+                        animateVanAlongRoute(route, 0, index);
+                    }, true);
+                } else {
+                    // For non-continuous travel, consider actual tower locations
+                    getRouteFromOSRM([start, end], function(route) {
+                        animateVanAlongRoute(route, 0, index);
+                    }, false);
+                }
             } else {
                 stopDriveRoute();
             }
@@ -266,9 +289,13 @@
             return (distance / (speed * 1000)) * 1000; // Convert to milliseconds
         }
 
-        function getRouteFromOSRM(points, callback) {
+        function getRouteFromOSRM(points, callback, useFastestRoute) {
             var coordinates = points.map(p => p.lon + ',' + p.lat).join(';');
             var url = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&continue_straight=true`;
+            
+            if (useFastestRoute) {
+                url += '&annotations=true&steps=true';
+            }
 
             fetch(url)
                 .then(response => response.json())
@@ -276,8 +303,11 @@
                     if (data.routes && data.routes.length > 0) {
                         var route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
                         
-                        // Ensure the route is always moving forward
-                        route = ensureForwardMovement(points[0], points[1], route);
+                        if (useFastestRoute) {
+                            // Find the fastest segment (likely a highway)
+                            var fastestSegment = findFastestSegment(data.routes[0]);
+                            route = adjustRouteToFastestSegment(route, fastestSegment);
+                        }
                         
                         if (callback) {
                             callback(route);
@@ -289,32 +319,58 @@
                 });
         }
 
-        function ensureForwardMovement(start, end, route) {
-            var startIndex = 0;
-            var endIndex = route.length - 1;
-            
-            // Find the index closest to the start point
-            var minStartDist = Infinity;
-            for (var i = 0; i < route.length; i++) {
-                var dist = distance(start, route[i]);
-                if (dist < minStartDist) {
-                    minStartDist = dist;
-                    startIndex = i;
+        function findFastestSegment(route) {
+            let fastestSegment = null;
+            let maxSpeed = 0;
+
+            if (route.legs && route.legs.length > 0) {
+                route.legs[0].steps.forEach(step => {
+                    if (step.duration / step.distance > maxSpeed) {
+                        maxSpeed = step.duration / step.distance;
+                        fastestSegment = step;
+                    }
+                });
+            }
+
+            return fastestSegment;
+        }
+
+        function adjustRouteToFastestSegment(route, fastestSegment) {
+            if (!fastestSegment) return route;
+
+            let adjustedRoute = [];
+            let segmentStart = fastestSegment.geometry.coordinates[0];
+            let segmentEnd = fastestSegment.geometry.coordinates[fastestSegment.geometry.coordinates.length - 1];
+
+            // Find the closest points on the original route to the fastest segment
+            let startIndex = findClosestPointIndex(route, [segmentStart[1], segmentStart[0]]);
+            let endIndex = findClosestPointIndex(route, [segmentEnd[1], segmentEnd[0]]);
+
+            // Use the original route up to the start of the fastest segment
+            adjustedRoute = adjustedRoute.concat(route.slice(0, startIndex));
+
+            // Add the fastest segment
+            adjustedRoute = adjustedRoute.concat(fastestSegment.geometry.coordinates.map(coord => [coord[1], coord[0]]));
+
+            // Use the original route from the end of the fastest segment
+        adjustedRoute = adjustedRoute.concat(route.slice(endIndex + 1));
+
+            return adjustedRoute;
+        }
+
+        function findClosestPointIndex(route, point) {
+            let minDist = Infinity;
+            let closestIndex = 0;
+
+            for (let i = 0; i < route.length; i++) {
+                let dist = distance(point, route[i]);
+                if (dist < minDist) {
+                    minDist = dist;
+                    closestIndex = i;
                 }
             }
-            
-            // Find the index closest to the end point
-            var minEndDist = Infinity;
-            for (var i = startIndex; i < route.length; i++) {
-                var dist = distance(end, route[i]);
-                if (dist < minEndDist) {
-                    minEndDist = dist;
-                    endIndex = i;
-                }
-            }
-            
-            // Return the section of the route that moves forward
-            return route.slice(startIndex, endIndex + 1);
+
+            return closestIndex;
         }
 
         function distance(point1, point2) {
