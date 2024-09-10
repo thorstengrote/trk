@@ -107,8 +107,7 @@
                         .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
                         .sort((a, b) => a.time - b.time);
 
-                    // Analyze time intervals and mark continuous travel segments
-                    analyzeTimeIntervals(routeCoordinates);
+                    identifyTargetPoints(routeCoordinates);
 
                     // Initialize controls with default values
                     document.getElementById('speedRange').value = speed;
@@ -119,13 +118,13 @@
             });
         }
 
-        function analyzeTimeIntervals(coordinates) {
+        function identifyTargetPoints(coordinates) {
             for (let i = 0; i < coordinates.length; i++) {
                 if (i === 0) {
-                    coordinates[i].continuousTravel = true;
+                    coordinates[i].isTarget = true; // First point is always a target
                 } else {
                     const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60); // difference in minutes
-                    coordinates[i].continuousTravel = timeDiff <= 30;
+                    coordinates[i].isTarget = timeDiff > 30;
                 }
             }
         }
@@ -150,7 +149,7 @@
             hidePoints();
             routeCoordinates.forEach(function(point) {
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString());
+                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""));
                 markers.push(marker);
             });
             map.fitBounds(L.latLngBounds(routeCoordinates.map(point => [point.lat, point.lon])));
@@ -189,14 +188,14 @@
 
         function showRoute() {
             if (routePath) map.removeLayer(routePath);
-            getRouteFromOSRM(routeCoordinates);
+            calculateCompleteRoute();
         }
 
         function animateRoute(i) {
             if (i < routeCoordinates.length && animationRunning) {
                 var point = routeCoordinates[i];
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString())
+                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""))
                     .openPopup();
                 markers.push(marker);
 
@@ -233,7 +232,7 @@
             routePath = L.polyline([], {color: 'blue'}).addTo(map);
             driveRouteRunning = true;
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
-            driveRoute(0);
+            calculateCompleteRoute();
         }
 
         function stopDriveRoute() {
@@ -243,28 +242,31 @@
             if (vanMarker) map.removeLayer(vanMarker);
         }
 
-        function driveRoute(index) {
-            if (index < routeCoordinates.length - 1 && driveRouteRunning) {
-                var start = routeCoordinates[index];
-                var end = routeCoordinates[index + 1];
-                
-                if (start.continuousTravel && end.continuousTravel) {
-                    // For continuous travel, use fastest route
-                    getRouteFromOSRM([start, end], function(route) {
-                        animateVanAlongRoute(route, 0, index);
-                    }, true);
-                } else {
-                    // For non-continuous travel, consider actual tower locations
-                    getRouteFromOSRM([start, end], function(route) {
-                        animateVanAlongRoute(route, 0, index);
-                    }, false);
-                }
-            } else {
-                stopDriveRoute();
+        function calculateCompleteRoute() {
+            let completeRoute = [];
+            let promises = [];
+            let targetPoints = routeCoordinates.filter(point => point.isTarget);
+
+            for (let i = 0; i < targetPoints.length - 1; i++) {
+                let start = targetPoints[i];
+                let end = targetPoints[i + 1];
+
+                promises.push(new Promise((resolve) => {
+                    getRouteFromOSRM([start, end], (route) => {
+                        resolve(route);
+                    });
+                }));
             }
+
+            Promise.all(promises).then((routes) => {
+                routes.forEach((route) => {
+                    completeRoute = completeRoute.concat(route);
+                });
+                animateVanAlongRoute(completeRoute, 0);
+            });
         }
 
-        function animateVanAlongRoute(route, step, routeIndex) {
+        function animateVanAlongRoute(route, step) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
                 if (!vanMarker) {
@@ -273,14 +275,14 @@
                     vanMarker.setLatLng(point);
                 }
                 routePath.addLatLng(point);
-                map.setView(point, calculateZoom(routeIndex));
+                map.setView(point, calculateZoom(step));
 
                 var timeToNextPoint = calculateTimeToNextPoint(route[step], route[step + 1] || route[step]);
                 animationTimeout = setTimeout(function() {
-                    animateVanAlongRoute(route, step + 1, routeIndex);
+                    animateVanAlongRoute(route, step + 1);
                 }, timeToNextPoint);
-            } else if (driveRouteRunning) {
-                driveRoute(routeIndex + 1);
+            } else if (!driveRouteRunning) {
+                stopDriveRoute();
             }
         }
 
@@ -289,88 +291,18 @@
             return (distance / (speed * 1000)) * 1000; // Convert to milliseconds
         }
 
-        function getRouteFromOSRM(points, callback, useFastestRoute) {
+        function getRouteFromOSRM(points, callback) {
             var coordinates = points.map(p => p.lon + ',' + p.lat).join(';');
             var url = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&continue_straight=true`;
-            
-            if (useFastestRoute) {
-                url += '&annotations=true&steps=true';
-            }
 
             fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     if (data.routes && data.routes.length > 0) {
                         var route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
-                        
-                        if (useFastestRoute) {
-                            // Find the fastest segment (likely a highway)
-                            var fastestSegment = findFastestSegment(data.routes[0]);
-                            route = adjustRouteToFastestSegment(route, fastestSegment);
-                        }
-                        
-                        if (callback) {
-                            callback(route);
-                        } else {
-                            routePath = L.polyline(route, {color: 'blue'}).addTo(map);
-                            map.fitBounds(routePath.getBounds());
-                        }
+                        callback(route);
                     }
                 });
-        }
-
-        function findFastestSegment(route) {
-            let fastestSegment = null;
-            let maxSpeed = 0;
-
-            if (route.legs && route.legs.length > 0) {
-                route.legs[0].steps.forEach(step => {
-                    if (step.duration / step.distance > maxSpeed) {
-                        maxSpeed = step.duration / step.distance;
-                        fastestSegment = step;
-                    }
-                });
-            }
-
-            return fastestSegment;
-        }
-
-        function adjustRouteToFastestSegment(route, fastestSegment) {
-            if (!fastestSegment) return route;
-
-            let adjustedRoute = [];
-            let segmentStart = fastestSegment.geometry.coordinates[0];
-            let segmentEnd = fastestSegment.geometry.coordinates[fastestSegment.geometry.coordinates.length - 1];
-
-            // Find the closest points on the original route to the fastest segment
-            let startIndex = findClosestPointIndex(route, [segmentStart[1], segmentStart[0]]);
-            let endIndex = findClosestPointIndex(route, [segmentEnd[1], segmentEnd[0]]);
-
-            // Use the original route up to the start of the fastest segment
-            adjustedRoute = adjustedRoute.concat(route.slice(0, startIndex));
-
-            // Add the fastest segment
-            adjustedRoute = adjustedRoute.concat(fastestSegment.geometry.coordinates.map(coord => [coord[1], coord[0]]));
-
-            // Use the original route from the end of the fastest segment
-        adjustedRoute = adjustedRoute.concat(route.slice(endIndex + 1));
-
-            return adjustedRoute;
-        }
-
-        function findClosestPointIndex(route, point) {
-            let minDist = Infinity;
-            let closestIndex = 0;
-
-            for (let i = 0; i < route.length; i++) {
-                let dist = distance(point, route[i]);
-                if (dist < minDist) {
-                    minDist = dist;
-                    closestIndex = i;
-                }
-            }
-
-            return closestIndex;
         }
 
         function distance(point1, point2) {
