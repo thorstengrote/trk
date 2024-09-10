@@ -20,7 +20,7 @@
         }
         #controls-overlay {
             position: absolute;
-            top: 10px;
+            bottom: 20px;
             left: 10px;
             background-color: rgba(255, 255, 255, 0.9);
             border-radius: 5px;
@@ -35,10 +35,13 @@
             background-color: #4a4a4a;
             color: white;
             border-radius: 5px 5px 0 0;
+            text-align: center;
         }
         #controls-content {
             padding: 10px;
             display: none;
+            max-height: 60vh;
+            overflow-y: auto;
         }
         #controls-content.expanded {
             display: block;
@@ -115,7 +118,7 @@
     <div id="map"></div>
     <div id="controls-overlay">
         <div id="controls-header" onclick="toggleControls()">
-            <i class="fas fa-cog"></i> Controls
+            <i class="fas fa-cog"></i>
         </div>
         <div id="controls-content">
             <div class="control-group">
@@ -167,6 +170,11 @@
         function toggleControls() {
             var content = document.getElementById('controls-content');
             content.classList.toggle('expanded');
+        }
+
+        function collapseControls() {
+            var content = document.getElementById('controls-content');
+            content.classList.remove('expanded');
         }
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -247,6 +255,7 @@
             pointsVisible = !pointsVisible;
             if (pointsVisible) showPoints();
             else hidePoints();
+            collapseControls();
         }
 
         function showPoints() {
@@ -267,6 +276,7 @@
         function toggleAnimation() {
             if (animationRunning) stopAnimation();
             else startAnimation();
+            collapseControls();
         }
 
         function startAnimation() {
@@ -288,6 +298,7 @@
             routeVisible = !routeVisible;
             if (routeVisible) showRoute();
             else if (routePath) map.removeLayer(routePath);
+            collapseControls();
         }
 
         function showRoute() {
@@ -317,6 +328,7 @@
         function toggleDriveRoute() {
             if (driveRouteRunning) stopDriveRoute();
             else startDriveRoute();
+            collapseControls();
         }
 
         function startDriveRoute() {
