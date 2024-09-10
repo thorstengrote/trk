@@ -9,12 +9,63 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <style>
-        #map { height: 600px; width: 100%; }
-        #controls { margin: 20px; }
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 0; 
+        }
+        #map { 
+            height: 100vh; 
+            width: 100%; 
+        }
+        #controls-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+            max-width: 300px;
+            transition: all 0.3s ease;
+        }
+        #controls-header {
+            padding: 10px;
+            cursor: pointer;
+            background-color: #4a4a4a;
+            color: white;
+            border-radius: 5px 5px 0 0;
+        }
+        #controls-content {
+            padding: 10px;
+            display: none;
+        }
+        #controls-content.expanded {
+            display: block;
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        button {
+            width: 100%;
+            padding: 5px;
+            margin-top: 5px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
         #passwordModal, #loadingModal {
             display: none;
             position: fixed;
-            z-index: 1000;
+            z-index: 2000;
             left: 0;
             top: 0;
             width: 100%;
@@ -26,8 +77,10 @@
             margin: 15% auto;
             padding: 20px;
             border: 1px solid #888;
-            width: 300px;
+            width: 80%;
+            max-width: 300px;
             text-align: center;
+            border-radius: 5px;
         }
         .spinner {
             border: 4px solid #f3f3f3;
@@ -59,22 +112,37 @@
         </div>
     </div>
 
-    <h3>Map</h3>
-    <div id="controls">
-        <label for="speedRange">Playback Speed (km/s): </label>
-        <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
-        <span id="speedValue">20</span> km/s
-        <button onclick="togglePoints()">Show Points</button>
-        <button onclick="toggleAnimation()">Start Animation</button>
-        <button onclick="toggleRoute()">Show Route</button>
-        <button onclick="toggleDriveRoute()">Drive Route</button>
-        <br><br>
-        <label for="startDate">Start Date: </label>
-        <input type="date" id="startDate">
-        <label for="endDate">End Date: </label>
-        <input type="date" id="endDate">
-    </div>
     <div id="map"></div>
+    <div id="controls-overlay">
+        <div id="controls-header" onclick="toggleControls()">
+            <i class="fas fa-cog"></i> Controls
+        </div>
+        <div id="controls-content">
+            <div class="control-group">
+                <label for="speedRange">Playback Speed (km/s): </label>
+                <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
+                <span id="speedValue">20</span> km/s
+            </div>
+            <div class="control-group">
+                <button onclick="togglePoints()">Show Points</button>
+                <button onclick="toggleAnimation()">Start Animation</button>
+                <button onclick="toggleRoute()">Show Route</button>
+                <button onclick="toggleDriveRoute()">Drive Route</button>
+            </div>
+            <div class="control-group">
+                <label for="startDate">Start Date: </label>
+                <input type="date" id="startDate">
+            </div>
+            <div class="control-group">
+                <label for="endDate">End Date: </label>
+                <input type="date" id="endDate">
+            </div>
+            <div class="control-group">
+                <button onclick="generateShareLink()">Generate Share Link</button>
+                <div id="shareLink"></div>
+            </div>
+        </div>
+    </div>
 
     <script>
         var map = L.map('map').setView([50.9375, 6.9603], 10);
@@ -96,8 +164,26 @@
         var pauseMarkers = [];
         var campMarkers = [];
 
+        function toggleControls() {
+            var content = document.getElementById('controls-content');
+            content.classList.toggle('expanded');
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('passwordModal').style.display = 'block';
+            
+            // Check for URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const startDate = urlParams.get('start');
+            const endDate = urlParams.get('end');
+            const autoplay = urlParams.get('autoplay');
+
+            if (startDate) document.getElementById('startDate').value = startDate;
+            if (endDate) document.getElementById('endDate').value = endDate;
+
+            if (autoplay === 'true') {
+                checkPassword();
+            }
         });
 
         function checkPassword() {
@@ -129,6 +215,12 @@
                     // Initialize controls with default values
                     document.getElementById('speedRange').value = speed;
                     document.getElementById('speedValue').textContent = speed;
+
+                    // Start autoplay if URL parameter is set
+                    const urlParams = new URLSearchParams(window.location.search);
+                    if (urlParams.get('autoplay') === 'true') {
+                        startDriveRoute();
+                    }
                 }
             });
         }
@@ -248,9 +340,13 @@
         }
 
         function calculateCompleteRoute() {
+            let startDate = document.getElementById('startDate').value;
+            let endDate = document.getElementById('endDate').value;
+            let filteredCoordinates = filterRouteByDateRange(startDate, endDate);
+            
             let completeRoute = [];
             let promises = [];
-            let targetPoints = routeCoordinates.filter(point => point.isTarget);
+            let targetPoints = filteredCoordinates.filter(point => point.isTarget);
 
             for (let i = 0; i < targetPoints.length - 1; i++) {
                 let start = targetPoints[i];
@@ -342,6 +438,26 @@
                         callback(route);
                     }
                 });
+        }
+
+        function filterRouteByDateRange(startDate, endDate) {
+            if (!startDate || !endDate) return routeCoordinates;
+            return routeCoordinates.filter(point => {
+                return point.time >= new Date(startDate) && point.time <= new Date(endDate);
+            });
+        }
+
+        function generateShareLink() {
+            var startDate = document.getElementById('startDate').value;
+            var endDate = document.getElementById('endDate').value;
+            if (!startDate || !endDate) {
+                alert('Please select both start and end dates.');
+                return;
+            }
+            var currentUrl = window.location.href.split('?')[0]; // Remove any existing query parameters
+            var shareUrl = `${currentUrl}?start=${startDate}&end=${endDate}&autoplay=true`;
+            var shareLinkElement = document.getElementById('shareLink');
+            shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
         }
 
         function distance(point1, point2) {
