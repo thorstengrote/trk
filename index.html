@@ -11,7 +11,7 @@
     <style>
         #map { height: 600px; width: 100%; }
         #controls { margin: 20px; }
-        #passwordModal {
+        #passwordModal, #loadingModal {
             display: none;
             position: fixed;
             z-index: 1000;
@@ -27,6 +27,20 @@
             padding: 20px;
             border: 1px solid #888;
             width: 300px;
+            text-align: center;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -36,6 +50,12 @@
             <h2>Enter Password</h2>
             <input type="password" id="passwordInput">
             <button onclick="checkPassword()">Submit</button>
+        </div>
+    </div>
+    <div id="loadingModal">
+        <div class="modal-content">
+            <h2>Calculating Route</h2>
+            <div class="spinner"></div>
         </div>
     </div>
 
@@ -78,6 +98,8 @@
         var zoomIntensity = 8;
         var driveRouteRunning = false;
         var vanMarker;
+        var pauseMarkers = [];
+        var campMarkers = [];
 
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('passwordModal').style.display = 'block';
@@ -125,6 +147,8 @@
                 } else {
                     const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60); // difference in minutes
                     coordinates[i].isTarget = timeDiff > 30;
+                    coordinates[i].isPause = timeDiff > 30 && timeDiff <= 240;
+                    coordinates[i].isCamp = timeDiff > 240 && coordinates[i].time.getDate() !== coordinates[i-1].time.getDate();
                 }
             }
         }
@@ -228,6 +252,7 @@
         }
 
         function startDriveRoute() {
+            document.getElementById('loadingModal').style.display = 'block';
             if (routePath) map.removeLayer(routePath);
             routePath = L.polyline([], {color: 'blue'}).addTo(map);
             driveRouteRunning = true;
@@ -240,6 +265,10 @@
             clearTimeout(animationTimeout);
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Drive Route";
             if (vanMarker) map.removeLayer(vanMarker);
+            pauseMarkers.forEach(marker => map.removeLayer(marker));
+            campMarkers.forEach(marker => map.removeLayer(marker));
+            pauseMarkers = [];
+            campMarkers = [];
         }
 
         function calculateCompleteRoute() {
@@ -262,6 +291,7 @@
                 routes.forEach((route) => {
                     completeRoute = completeRoute.concat(route);
                 });
+                document.getElementById('loadingModal').style.display = 'none';
                 animateVanAlongRoute(completeRoute, 0);
             });
         }
@@ -270,12 +300,42 @@
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
                 if (!vanMarker) {
-                    vanMarker = L.marker(point, {icon: L.divIcon({className: 'fas fa-shuttle-van', iconSize: [30, 30]})}).addTo(map);
+                    vanMarker = L.marker(point, {
+                        icon: L.divIcon({
+                            className: 'fas fa-shuttle-van',
+                            iconSize: [60, 60],
+                            html: '<i class="fas fa-shuttle-van" style="font-size: 60px; color: white;"></i>'
+                        })
+                    }).addTo(map);
                 } else {
                     vanMarker.setLatLng(point);
                 }
                 routePath.addLatLng(point);
                 map.setView(point, calculateZoom(step));
+
+                // Check if we've reached a pause or camp point
+                let targetPoint = routeCoordinates.find(coord => coord.lat === point[0] && coord.lon === point[1]);
+                if (targetPoint) {
+                    if (targetPoint.isPause) {
+                        let pauseMarker = L.marker(point, {
+                            icon: L.divIcon({
+                                className: 'fas fa-coffee',
+                                iconSize: [30, 30],
+                                html: '<i class="fas fa-coffee" style="font-size: 30px; color: brown;"></i>'
+                            })
+                        }).addTo(map);
+                        pauseMarkers.push(pauseMarker);
+                    } else if (targetPoint.isCamp) {
+                        let campMarker = L.marker(point, {
+                            icon: L.divIcon({
+                                className: 'fas fa-campground',
+                                iconSize: [30, 30],
+                                html: '<i class="fas fa-campground" style="font-size: 30px; color: green;"></i>'
+                            })
+                        }).addTo(map);
+                        campMarkers.push(campMarker);
+                    }
+                }
 
                 var timeToNextPoint = calculateTimeToNextPoint(route[step], route[step + 1] || route[step]);
                 animationTimeout = setTimeout(function() {
