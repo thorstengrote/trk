@@ -69,10 +69,6 @@
         <button onclick="toggleRoute()">Show Route</button>
         <button onclick="toggleDriveRoute()">Drive Route</button>
         <br><br>
-        <label for="zoomIntensity">Zoom Intensity: </label>
-        <input type="range" id="zoomIntensity" min="0" max="10" value="8" oninput="updateZoomIntensity(this.value)">
-        <span id="zoomValue">8</span>
-        <br><br>
         <label for="startDate">Start Date: </label>
         <input type="date" id="startDate">
         <label for="endDate">End Date: </label>
@@ -95,7 +91,6 @@
         var animationRunning = false;
         var currentAnimationIndex = 0;
         var animationTimeout;
-        var zoomIntensity = 8;
         var driveRouteRunning = false;
         var vanMarker;
         var pauseMarkers = [];
@@ -134,8 +129,6 @@
                     // Initialize controls with default values
                     document.getElementById('speedRange').value = speed;
                     document.getElementById('speedValue').textContent = speed;
-                    document.getElementById('zoomIntensity').value = zoomIntensity;
-                    document.getElementById('zoomValue').textContent = zoomIntensity;
                 }
             });
         }
@@ -156,18 +149,6 @@
         function updateSpeed(value) {
             document.getElementById('speedValue').textContent = value;
             speed = parseInt(value);
-            if (driveRouteRunning) {
-                stopDriveRoute();
-                startDriveRoute();
-            }
-        }
-
-        function updateZoomIntensity(value) {
-            document.getElementById('zoomValue').textContent = value;
-            zoomIntensity = parseInt(value);
-            if (driveRouteRunning) {
-                map.setZoom(calculateZoom(currentAnimationIndex));
-            }
         }
 
         function togglePoints() {
@@ -231,7 +212,7 @@
                 markers.push(marker);
 
                 routePath.addLatLng([point.lat, point.lon]);
-                map.setView([point.lat, point.lon], calculateZoom(i));
+                map.setView([point.lat, point.lon]);
 
                 animationTimeout = setTimeout(function() {
                     animateRoute(i + 1);
@@ -239,18 +220,6 @@
             } else if (i >= routeCoordinates.length) {
                 stopAnimation();
             }
-        }
-
-        function calculateZoom(index) {
-            if (zoomIntensity === 0) return 5; // Most zoomed out
-            if (index === 0 || index >= routeCoordinates.length - 1) return map.getZoom();
-            
-            var maxZoom = 18; // Most zoomed in
-            var minZoom = 5;  // Most zoomed out
-            var zoomRange = maxZoom - minZoom;
-            var zoomLevel = maxZoom - (zoomIntensity / 10) * zoomRange;
-
-            return Math.max(Math.min(zoomLevel, maxZoom), minZoom);
         }
 
         function toggleDriveRoute() {
@@ -314,7 +283,7 @@
                     vanMarker.setLatLng(point);
                 }
                 routePath.addLatLng(point);
-                map.setView(point, calculateZoom(step));
+                map.setView(point);
 
                 // Check if we've reached a target point
                 let segmentIndex = routeSegments.findIndex(segment => 
