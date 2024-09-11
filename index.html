@@ -172,11 +172,7 @@
     </div>
 
     <script>
-        var map = L.map('map').setView([50.9375, 6.9603], 10);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
-
+        var map;
         var routeCoordinates = [];
         var markers = [];
         var speed = 20; // km/s
@@ -191,38 +187,33 @@
         var pauseMarkers = [];
         var campMarkers = [];
 
-        function toggleControls() {
-            var content = document.getElementById('controls-content');
-            content.classList.toggle('expanded');
-        }
-
-        function collapseControls() {
-            var content = document.getElementById('controls-content');
-            content.classList.remove('expanded');
-        }
-
         document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('passwordOverlay').style.display = 'flex';
+            
             const urlParams = new URLSearchParams(window.location.search);
             const startDate = urlParams.get('start');
             const endDate = urlParams.get('end');
-            const autoplay = urlParams.get('autoplay');
 
             if (startDate) document.getElementById('startDate').value = startDate;
             if (endDate) document.getElementById('endDate').value = endDate;
-
-            if (autoplay === 'true') {
-                document.getElementById('passwordOverlay').style.display = 'flex';
-            }
         });
 
         function checkPassword() {
             var password = document.getElementById('passwordInput').value;
             if (password === 'thorsten') {
                 document.getElementById('passwordOverlay').style.display = 'none';
+                initializeMap();
                 loadData();
             } else {
                 alert('Incorrect password');
             }
+        }
+
+        function initializeMap() {
+            map = L.map('map').setView([50.9375, 6.9603], 10);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
         }
 
         function loadData() {
@@ -250,6 +241,16 @@
                     }
                 }
             });
+        }
+
+        function toggleControls() {
+            var content = document.getElementById('controls-content');
+            content.classList.toggle('expanded');
+        }
+
+        function collapseControls() {
+            var content = document.getElementById('controls-content');
+            content.classList.remove('expanded');
         }
 
         function identifyTargetPoints(coordinates) {
