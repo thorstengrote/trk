@@ -72,7 +72,7 @@
             width: 100%;
             height: 100%;
             background-color: rgba(0,0,0,0.5);
-            display: flex;
+            display: none;
             justify-content: center;
             align-items: center;
             z-index: 2000;
@@ -202,7 +202,6 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            // Check for URL parameters
             const urlParams = new URLSearchParams(window.location.search);
             const startDate = urlParams.get('start');
             const endDate = urlParams.get('end');
@@ -212,7 +211,7 @@
             if (endDate) document.getElementById('endDate').value = endDate;
 
             if (autoplay === 'true') {
-                checkPassword();
+                document.getElementById('passwordOverlay').style.display = 'flex';
             }
         });
 
@@ -242,11 +241,9 @@
 
                     identifyTargetPoints(routeCoordinates);
 
-                    // Initialize controls with default values
                     document.getElementById('speedRange').value = speed;
                     document.getElementById('speedValue').textContent = speed;
 
-                    // Start autoplay if URL parameter is set
                     const urlParams = new URLSearchParams(window.location.search);
                     if (urlParams.get('autoplay') === 'true') {
                         startDriveRoute();
@@ -258,9 +255,9 @@
         function identifyTargetPoints(coordinates) {
             for (let i = 0; i < coordinates.length; i++) {
                 if (i === 0) {
-                    coordinates[i].isTarget = true; // First point is always a target
+                    coordinates[i].isTarget = true;
                 } else {
-                    const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60); // difference in minutes
+                    const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
                     coordinates[i].isTarget = timeDiff > 30;
                     coordinates[i].isPause = timeDiff > 30 && timeDiff <= 240;
                     coordinates[i].isCamp = timeDiff > 240 && coordinates[i].time.getDate() !== coordinates[i-1].time.getDate();
