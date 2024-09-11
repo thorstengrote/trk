@@ -147,7 +147,7 @@
         <div id="controls-content">
             <div class="control-group">
                 <label for="speedRange">Playback Speed (km/s): </label>
-                <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
+                <input type="range" id="speedRange" min="1" max="500" value="30" oninput="updateSpeed(this.value)">
                 <span id="speedValue">20</span> km/s
             </div>
             <div class="control-group">
@@ -254,18 +254,18 @@
         }
 
         function identifyTargetPoints(coordinates) {
-            for (let i = 0; i < coordinates.length; i++) {
-                if (i === 0) {
-                    coordinates[i].isTarget = true;
-                } else {
-                    const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
-                    coordinates[i].isTarget = timeDiff > 30;
-                    coordinates[i].isPause = timeDiff > 30 && timeDiff <= 240;
-                    coordinates[i].isCamp = timeDiff > 240 && coordinates[i].time.getDate() !== coordinates[i-1].time.getDate();
-                }
-            }
+    for (let i = 0; i < coordinates.length; i++) {
+        if (i === 0) {
+            coordinates[i].isTarget = true;
+        } else {
+            const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
+            coordinates[i].isTarget = timeDiff > 30;
+            coordinates[i].isPause = timeDiff > 30 && timeDiff <= 240;
+            coordinates[i].isPark = timeDiff > 240 && timeDiff <= 1440 && coordinates[i].time.getDate() === coordinates[i-1].time.getDate();
+            coordinates[i].isCamp = timeDiff > 240 && coordinates[i].time.getDate() !== coordinates[i-1].time.getDate();
         }
-
+    }
+}
         function updateSpeed(value) {
             document.getElementById('speedValue').textContent = value;
             speed = parseInt(value);
@@ -401,57 +401,67 @@
         }
 
         function animateVanAlongRoute(route, step, routeSegments) {
-            if (step < route.length && driveRouteRunning) {
-                var point = route[step];
-                if (!vanMarker) {
-                    vanMarker = L.marker(point, {
-                        icon: L.divIcon({className: 'fas fa-shuttle-van', iconSize: [30, 30]})
-                    }).addTo(map);
-                } else {
-                    vanMarker.setLatLng(point);
-                }
-                routePath.addLatLng(point);
-                map.setView(point);
+    if (step < route.length && driveRouteRunning) {
+        var point = route[step];
+        if (!vanMarker) {
+            vanMarker = L.marker(point, {
+                icon: L.divIcon({className: 'fas fa-shuttle-van', iconSize: [30, 30]})
+            }).addTo(map);
+        } else {
+            vanMarker.setLatLng(point);
+        }
+        routePath.addLatLng(point);
+        map.setView(point);
 
-                // Check if we've reached a target point
-                let segmentIndex = routeSegments.findIndex(segment => 
-                    segment.route[segment.route.length - 1][0] === point[0] && 
-                    segment.route[segment.route.length - 1][1] === point[1]
-                );
-                if (segmentIndex !== -1) {
-                    let targetPoint = routeSegments[segmentIndex].end;
-                    if (targetPoint.isPause && !pauseMarkers.some(m => m.getLatLng().equals(point))) {
-                        let pauseMarker = L.marker(point, {
-                            icon: L.divIcon({
-                                className: 'custom-div-icon',
-                                html: '<div style="background-color:#c30b82;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-coffee"></i></div>',
-                                iconSize: [30, 30],
-                                iconAnchor: [15, 15]
-                            })
-                        }).addTo(map);
-                        pauseMarkers.push(pauseMarker);
-                    } else if (targetPoint.isCamp && !campMarkers.some(m => m.getLatLng().equals(point))) {
-                        let campMarker = L.marker(point, {
-                            icon: L.divIcon({
-                                className: 'custom-div-icon',
-                                html: '<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-campground"></i></div>',
-                                iconSize: [30, 30],
-                                iconAnchor: [15, 15]
-                            })
-                        }).addTo(map);
-                        campMarkers.push(campMarker);
-                    }
-                }
-
-                currentAnimationIndex = step;
-                var timeToNextPoint = calculateTimeToNextPoint(route[step], route[step + 1] || route[step]);
-                animationTimeout = setTimeout(function() {
-                    animateVanAlongRoute(route, step + 1, routeSegments);
-                }, timeToNextPoint);
-            } else if (!driveRouteRunning) {
-                stopDriveRoute();
+        // Check if we've reached a target point
+        let segmentIndex = routeSegments.findIndex(segment => 
+            segment.route[segment.route.length - 1][0] === point[0] && 
+            segment.route[segment.route.length - 1][1] === point[1]
+        );
+        if (segmentIndex !== -1) {
+            let targetPoint = routeSegments[segmentIndex].end;
+            if (targetPoint.isPause && !pauseMarkers.some(m => m.getLatLng().equals(point))) {
+                let pauseMarker = L.marker(point, {
+                    icon: L.divIcon({
+                        className: 'custom-div-icon',
+                        html: '<div style="background-color:#c30b82;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-coffee"></i></div>',
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    })
+                }).addTo(map);
+                pauseMarkers.push(pauseMarker);
+            } else if (targetPoint.isPark && !pauseMarkers.some(m => m.getLatLng().equals(point))) {
+                let parkMarker = L.marker(point, {
+                    icon: L.divIcon({
+                        className: 'custom-div-icon',
+                        html: '<div style="background-color:#3498db;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-parking"></i></div>',
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    })
+                }).addTo(map);
+                pauseMarkers.push(parkMarker);
+            } else if (targetPoint.isCamp && !campMarkers.some(m => m.getLatLng().equals(point))) {
+                let campMarker = L.marker(point, {
+                    icon: L.divIcon({
+                        className: 'custom-div-icon',
+                        html: '<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-campground"></i></div>',
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    })
+                }).addTo(map);
+                campMarkers.push(campMarker);
             }
         }
+
+        currentAnimationIndex = step;
+        var timeToNextPoint = calculateTimeToNextPoint(route[step], route[step + 1] || route[step]);
+        animationTimeout = setTimeout(function() {
+            animateVanAlongRoute(route, step + 1, routeSegments);
+        }, timeToNextPoint);
+    } else if (!driveRouteRunning) {
+        stopDriveRoute();
+    }
+}
 
         function calculateTimeToNextPoint(point1, point2) {
             var distance = map.distance(point1, point2);
