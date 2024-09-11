@@ -146,16 +146,15 @@
         </div>
         <div id="controls-content">
             <div class="control-group">
-                <label for="speedRange">Playback Speed (km/h): </label>
-                <input type="range" id="speedRange" min="1" max="1000" value="20" oninput="updateSpeed(this.value)">
-                <span id="speedValue">20</span> km/h
+                <label for="speedRange">Playback Speed (km/s): </label>
+                <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
+                <span id="speedValue">20</span> km/s
             </div>
             <div class="control-group">
                 <button onclick="togglePoints()">Show Points</button>
                 <button onclick="toggleAnimation()">Start Animation</button>
                 <button onclick="toggleRoute()">Show Route</button>
                 <button onclick="toggleDriveRoute()">Drive Route</button>
-                <button onclick="toggleHeatmap()">Toggle Heatmap</button>
             </div>
             <div class="control-group">
                 <label for="startDate">Start Date: </label>
@@ -176,7 +175,7 @@
         var map;
         var routeCoordinates = [];
         var markers = [];
-        var speed = 20;
+        var speed = 20; // km/s
         var routePath;
         var routeVisible = false;
         var pointsVisible = false;
@@ -187,11 +186,9 @@
         var vanMarker;
         var pauseMarkers = [];
         var campMarkers = [];
-        var heatmapVisible = false;
-        var heatmapLayer;
 
         document.addEventListener('DOMContentLoaded', function() {
-            showPasswordDialog();
+            document.getElementById('passwordOverlay').style.display = 'flex';
             
             const urlParams = new URLSearchParams(window.location.search);
             const startDate = urlParams.get('start');
@@ -200,10 +197,6 @@
             if (startDate) document.getElementById('startDate').value = startDate;
             if (endDate) document.getElementById('endDate').value = endDate;
         });
-
-        function showPasswordDialog() {
-            document.getElementById('passwordOverlay').style.display = 'flex';
-        }
 
         function checkPassword() {
             var password = document.getElementById('passwordInput').value;
@@ -240,7 +233,7 @@
                     identifyTargetPoints(routeCoordinates);
 
                     document.getElementById('speedRange').value = speed;
-                    updateSpeed(speed);
+                    document.getElementById('speedValue').textContent = speed;
 
                     const urlParams = new URLSearchParams(window.location.search);
                     if (urlParams.get('autoplay') === 'true') {
@@ -274,13 +267,8 @@
         }
 
         function updateSpeed(value) {
+            document.getElementById('speedValue').textContent = value;
             speed = parseInt(value);
-            let displaySpeed = Math.round(Math.pow(10, speed / 250));
-            document.getElementById('speedValue').textContent = displaySpeed;
-            if (driveRouteRunning) {
-                clearTimeout(animationTimeout);
-                animateVanAlongRoute(routePath.getLatLngs(), currentAnimationIndex);
-            }
         }
 
         function togglePoints() {
@@ -351,7 +339,7 @@
 
                 animationTimeout = setTimeout(function() {
                     animateRoute(i + 1);
-                }, 1000 / Math.pow(10, speed / 250));
+                }, 1000);
             } else if (i >= routeCoordinates.length) {
                 stopAnimation();
             }
@@ -467,7 +455,7 @@
 
         function calculateTimeToNextPoint(point1, point2) {
             var distance = map.distance(point1, point2);
-            return (distance / (Math.pow(10, speed / 250) * 1000 / 3600)) * 1000; // Convert to milliseconds
+            return (distance / (speed * 1000)) * 1000; // Convert to milliseconds
         }
 
         function getRouteFromOSRM(points, callback) {
@@ -502,61 +490,6 @@
             var shareUrl = `${currentUrl}?start=${startDate}&end=${endDate}&autoplay=true`;
             var shareLinkElement = document.getElementById('shareLink');
             shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
-        }
-
-        function calculateHeatmapData() {
-            let heatmapData = [];
-            for (let i = 0; i < routeCoordinates.length - 1; i++) {
-                let timeDiff = (routeCoordinates[i+1].time - routeCoordinates[i].time) / (1000 * 60 * 60); // in hours
-                if (timeDiff >= 4) {
-                    let intensity = Math.min(timeDiff / 24, 1); // Normalize intensity to a value between 0 and 1
-                    heatmapData.push({
-                        lat: routeCoordinates[i].lat,
-                        lng: routeCoordinates[i].lon,
-                        intensity: intensity
-                    });
-                }
-            }
-            return heatmapData;
-        }
-
-        function toggleHeatmap() {
-            heatmapVisible = !heatmapVisible;
-            if (heatmapVisible) {
-                showHeatmap();
-            } else {
-                hideHeatmap();
-            }
-            collapseControls();
-        }
-
-        function showHeatmap() {
-            hideHeatmap(); // Remove any existing heatmap layers first
-            let heatmapData = calculateHeatmapData();
-            heatmapLayer = L.layerGroup().addTo(map);
-            
-            heatmapData.forEach(point => {
-                let circle = L.circle([point.lat, point.lng], {
-                    radius: 500,
-                    fillColor: getHeatmapColor(point.intensity),
-                    fillOpacity: 0.5,
-                    stroke: false
-                }).addTo(heatmapLayer);
-            });
-        }
-
-        function hideHeatmap() {
-            if (heatmapLayer) {
-                map.removeLayer(heatmapLayer);
-            }
-        }
-
-        function getHeatmapColor(intensity) {
-            // Color gradient from blue to green to red
-            let r = Math.floor(intensity * 255);
-            let g = Math.floor((1 - Math.abs(2 * intensity - 1)) * 255);
-            let b = Math.floor((1 - intensity) * 255);
-            return `rgb(${r},${g},${b})`;
         }
 
         function distance(point1, point2) {
