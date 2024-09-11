@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <style>
         body { 
@@ -188,9 +187,8 @@
         var vanMarker;
         var pauseMarkers = [];
         var campMarkers = [];
-        var heatmapLayer;
         var heatmapVisible = false;
-        var heatmapData = [];
+        var heatmapLayer;
 
         document.addEventListener('DOMContentLoaded', function() {
             showPasswordDialog();
@@ -240,7 +238,6 @@
                         .sort((a, b) => a.time - b.time);
 
                     identifyTargetPoints(routeCoordinates);
-                    calculateHeatmapData(routeCoordinates);
 
                     document.getElementById('speedRange').value = speed;
                     updateSpeed(speed);
@@ -276,23 +273,13 @@
             }
         }
 
-        function calculateHeatmapData(coordinates) {
-            heatmapData = [];
-            for (let i = 0; i < coordinates.length - 1; i++) {
-                let timeDiff = (coordinates[i+1].time - coordinates[i].time) / (1000 * 60 * 60); // in hours
-                if (timeDiff >= 4) {
-                    heatmapData.push([coordinates[i].lat, coordinates[i].lon, timeDiff]);
-                }
-            }
-        }
-
         function updateSpeed(value) {
             speed = parseInt(value);
             let displaySpeed = Math.round(Math.pow(10, speed / 250));
             document.getElementById('speedValue').textContent = displaySpeed;
             if (driveRouteRunning) {
-                stopDriveRoute();
-                startDriveRoute();
+                clearTimeout(animationTimeout);
+                animateVanAlongRoute(routePath.getLatLngs(), currentAnimationIndex);
             }
         }
 
@@ -361,10 +348,6 @@
 
                 routePath.addLatLng([point.lat, point.lon]);
                 map.setView([point.lat, point.lon]);
-
-                if (heatmapVisible) {
-                    updateDynamicHeatmap(i);
-                }
 
                 animationTimeout = setTimeout(function() {
                     animateRoute(i + 1);
@@ -472,10 +455,6 @@
                     }
                 }
 
-                if (heatmapVisible) {
-                    updateDynamicHeatmap(step);
-                }
-
                 currentAnimationIndex = step;
                 var timeToNextPoint = calculateTimeToNextPoint(route[step], route[step + 1] || route[step]);
                 animationTimeout = setTimeout(function() {
@@ -525,6 +504,22 @@
             shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
         }
 
+        function calculateHeatmapData() {
+            let heatmapData = [];
+            for (let i = 0; i < routeCoordinates.length - 1; i++) {
+                let timeDiff = (routeCoordinates[i+1].time - routeCoordinates[i].time) / (1000 * 60 * 60); // in hours
+                if (timeDiff >= 4) {
+                    let intensity = Math.min(timeDiff / 24, 1); // Normalize intensity to a value between 0 and 1
+                    heatmapData.push({
+                        lat: routeCoordinates[i].lat,
+                        lng: routeCoordinates[i].lon,
+                        intensity: intensity
+                    });
+                }
+            }
+            return heatmapData;
+        }
+
         function toggleHeatmap() {
             heatmapVisible = !heatmapVisible;
             if (heatmapVisible) {
@@ -536,17 +531,18 @@
         }
 
         function showHeatmap() {
-            if (!heatmapLayer) {
-                heatmapLayer = L.heatLayer(heatmapData, {
-                    radius: 25,
-                    blur: 15,
-                    maxZoom: 17,
-                    max: Math.max(...heatmapData.map(point => point[2])),
-                    gradient: {0.4: 'blue', 0.65: 'lime', 1: 'red'}
-                }).addTo(map);
-            } else {
-                map.addLayer(heatmapLayer);
-            }
+            hideHeatmap(); // Remove any existing heatmap layers first
+            let heatmapData = calculateHeatmapData();
+            heatmapLayer = L.layerGroup().addTo(map);
+            
+            heatmapData.forEach(point => {
+                let circle = L.circle([point.lat, point.lng], {
+                    radius: 500,
+                    fillColor: getHeatmapColor(point.intensity),
+                    fillOpacity: 0.5,
+                    stroke: false
+                }).addTo(heatmapLayer);
+            });
         }
 
         function hideHeatmap() {
@@ -555,18 +551,12 @@
             }
         }
 
-        function updateDynamicHeatmap(index) {
-            if (heatmapLayer) {
-                map.removeLayer(heatmapLayer);
-            }
-            let currentData = heatmapData.slice(0, index + 1);
-            heatmapLayer = L.heatLayer(currentData, {
-                radius: 25,
-                blur: 15,
-                maxZoom: 17,
-                max: Math.max(...heatmapData.map(point => point[2])),
-                gradient: {0.4: 'blue', 0.65: 'lime', 1: 'red'}
-            }).addTo(map);
+        function getHeatmapColor(intensity) {
+            // Color gradient from blue to green to red
+            let r = Math.floor(intensity * 255);
+            let g = Math.floor((1 - Math.abs(2 * intensity - 1)) * 255);
+            let b = Math.floor((1 - intensity) * 255);
+            return `rgb(${r},${g},${b})`;
         }
 
         function distance(point1, point2) {
