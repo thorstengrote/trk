@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <style>
         body { 
@@ -156,7 +155,6 @@
                 <button onclick="toggleAnimation()">Start Animation</button>
                 <button onclick="toggleRoute()">Show Route</button>
                 <button onclick="toggleDriveRoute()">Drive Route</button>
-                <button onclick="toggleHeatmap()">Toggle Heatmap</button>
             </div>
             <div class="control-group">
                 <label for="startDate">Start Date: </label>
@@ -188,12 +186,9 @@
         var vanMarker;
         var pauseMarkers = [];
         var campMarkers = [];
-        var heatmapLayer;
-        var heatmapVisible = false;
-        var heatmapData = [];
 
         document.addEventListener('DOMContentLoaded', function() {
-            showPasswordDialog();
+            document.getElementById('passwordOverlay').style.display = 'flex';
             
             const urlParams = new URLSearchParams(window.location.search);
             const startDate = urlParams.get('start');
@@ -202,10 +197,6 @@
             if (startDate) document.getElementById('startDate').value = startDate;
             if (endDate) document.getElementById('endDate').value = endDate;
         });
-
-        function showPasswordDialog() {
-            document.getElementById('passwordOverlay').style.display = 'flex';
-        }
 
         function checkPassword() {
             var password = document.getElementById('passwordInput').value;
@@ -240,7 +231,6 @@
                         .sort((a, b) => a.time - b.time);
 
                     identifyTargetPoints(routeCoordinates);
-                    calculateHeatmapData(routeCoordinates);
 
                     document.getElementById('speedRange').value = speed;
                     document.getElementById('speedValue').textContent = speed;
@@ -276,50 +266,9 @@
             }
         }
 
-        function calculateHeatmapData(coordinates) {
-            let heatmapPoints = [];
-            for (let i = 0; i < coordinates.length - 1; i++) {
-                let timeDiff = (coordinates[i+1].time - coordinates[i].time) / (1000 * 60 * 60); // in hours
-                if (timeDiff >= 4) {
-                    heatmapPoints.push({
-                        lat: coordinates[i].lat,
-                        lon: coordinates[i].lon,
-                        intensity: timeDiff
-                    });
-                }
-            }
-            
-            // Aggregate close points
-            heatmapData = aggregateClosePoints(heatmapPoints);
-        }
-
-        function aggregateClosePoints(points) {
-            const threshold = 0.01; // Adjust this value to change the aggregation radius
-            let aggregatedPoints = [];
-
-            for (let point of points) {
-                let existingPoint = aggregatedPoints.find(p => 
-                    Math.abs(p.lat - point.lat) < threshold && 
-                    Math.abs(p.lon - point.lon) < threshold
-                );
-
-                if (existingPoint) {
-                    existingPoint.intensity += point.intensity;
-                } else {
-                    aggregatedPoints.push(point);
-                }
-            }
-
-            return aggregatedPoints.map(point => [point.lat, point.lon, point.intensity]);
-        }
-
         function updateSpeed(value) {
             document.getElementById('speedValue').textContent = value;
             speed = parseInt(value);
-            if (driveRouteRunning) {
-                stopDriveRoute();
-                startDriveRoute();
-            }
         }
 
         function togglePoints() {
@@ -388,13 +337,9 @@
                 routePath.addLatLng([point.lat, point.lon]);
                 map.setView([point.lat, point.lon]);
 
-                if (heatmapVisible) {
-                    updateDynamicHeatmap(i);
-                }
-
                 animationTimeout = setTimeout(function() {
                     animateRoute(i + 1);
-                }, 1000 / speed);
+                }, 1000);
             } else if (i >= routeCoordinates.length) {
                 stopAnimation();
             }
@@ -402,7 +347,7 @@
 
         function toggleDriveRoute() {
             if (driveRouteRunning) stopDriveRoute();
-else startDriveRoute();
+            else startDriveRoute();
             collapseControls();
         }
 
@@ -498,10 +443,6 @@ else startDriveRoute();
                     }
                 }
 
-                if (heatmapVisible) {
-                    updateDynamicHeatmap(step);
-                }
-
                 currentAnimationIndex = step;
                 var timeToNextPoint = calculateTimeToNextPoint(route[step], route[step + 1] || route[step]);
                 animationTimeout = setTimeout(function() {
@@ -549,50 +490,6 @@ else startDriveRoute();
             var shareUrl = `${currentUrl}?start=${startDate}&end=${endDate}&autoplay=true`;
             var shareLinkElement = document.getElementById('shareLink');
             shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
-        }
-
-        function toggleHeatmap() {
-            heatmapVisible = !heatmapVisible;
-            if (heatmapVisible) {
-                showHeatmap();
-            } else {
-                hideHeatmap();
-            }
-            collapseControls();
-        }
-
-        function showHeatmap() {
-            if (!heatmapLayer && typeof L.heatLayer === 'function') {
-                heatmapLayer = L.heatLayer(heatmapData, {
-                    radius: 25,
-                    blur: 15,
-                    maxZoom: 17,
-                    max: Math.max(...heatmapData.map(point => point[2])),
-                    gradient: {0.4: 'blue', 0.65: 'lime', 1: 'red'}
-                }).addTo(map);
-            } else if (heatmapLayer) {
-                map.addLayer(heatmapLayer);
-            }
-        }
-
-        function hideHeatmap() {
-            if (heatmapLayer) {
-                map.removeLayer(heatmapLayer);
-            }
-        }
-
-        function updateDynamicHeatmap(index) {
-            if (heatmapLayer && typeof L.heatLayer === 'function') {
-                map.removeLayer(heatmapLayer);
-                let currentData = heatmapData.filter((_, i) => i <= index);
-                heatmapLayer = L.heatLayer(currentData, {
-                    radius: 25,
-                    blur: 15,
-                    maxZoom: 17,
-                    max: Math.max(...heatmapData.map(point => point[2])),
-                    gradient: {0.4: 'blue', 0.65: 'lime', 1: 'red'}
-                }).addTo(map);
-            }
         }
 
         function distance(point1, point2) {
