@@ -193,7 +193,7 @@
         var heatmapData = [];
 
         document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('passwordOverlay').style.display = 'flex';
+            showPasswordDialog();
             
             const urlParams = new URLSearchParams(window.location.search);
             const startDate = urlParams.get('start');
@@ -202,6 +202,10 @@
             if (startDate) document.getElementById('startDate').value = startDate;
             if (endDate) document.getElementById('endDate').value = endDate;
         });
+
+        function showPasswordDialog() {
+            document.getElementById('passwordOverlay').style.display = 'flex';
+        }
 
         function checkPassword() {
             var password = document.getElementById('passwordInput').value;
@@ -397,9 +401,7 @@
             else startDriveRoute();
             collapseControls();
         }
-
         function startDriveRoute() {
-            function startDriveRoute() {
             document.getElementById('loadingModal').style.display = 'block';
             if (routePath) map.removeLayer(routePath);
             routePath = L.polyline([], {color: 'blue'}).addTo(map);
