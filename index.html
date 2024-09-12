@@ -186,6 +186,13 @@
         var vanMarker;
         var pauseMarkers = [];
         var campMarkers = [];
+        var routeCache = new Map();
+        var currentRoutingService = 'osrm';
+        var userAgents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
+        ];
 
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('passwordOverlay').style.display = 'flex';
@@ -371,6 +378,73 @@
             campMarkers = [];
         }
 
+        function getRouteFromService(points, callback) {
+            var coordinates = points.map(p => p.lon + ',' + p.lat).join(';');
+            var cacheKey = coordinates + '_' + currentRoutingService;
+            
+            if (routeCache.has(cacheKey)) {
+                callback(routeCache.get(cacheKey));
+                return;
+            }
+
+            var url, headers;
+            if (currentRoutingService === 'osrm') {
+                url = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&continue_straight=true`;
+                headers = {
+                    'User-Agent': userAgents[Math.floor(Math.random() * userAgents.length)],
+                    'Referer': 'https://www.openstreetmap.org/'
+                };
+            } else {
+                // OpenRouteService
+                url = 'https://api.openrouteservice.org/v2/directions/driving-car';
+                headers = {
+                    'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
+                    'Authorization': '5b3ce3597851110001cf6248c56af19b19b2427c9486702926df507d', // Replace with your actual API key
+                    'Content-Type': 'application/json; charset=utf-8'
+                };
+            }
+
+            let fetchOptions = {
+                method: currentRoutingService === 'osrm' ? 'GET' : 'POST',
+                headers: headers
+            };
+
+            if (currentRoutingService === 'openroute') {
+                fetchOptions.body = JSON.stringify({
+                    coordinates: points.map(p => [p.lon, p.lat])
+                });
+            }
+
+            fetch(url, fetchOptions)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    let route;
+                    if (currentRoutingService === 'osrm') {
+                        route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    } else {
+                        route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    }
+                    routeCache.set(cacheKey, route);
+                    callback(route);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    if (currentRoutingService === 'osrm') {
+                        console.log('Switching to OpenRouteService');
+                        currentRoutingService = 'openroute';
+                        getRouteFromService(points, callback);
+                    } else {
+                        alert('Unable to calculate route. Please try again later.');
+                        document.getElementById('loadingModal').style.display = 'none';
+                    }
+                });
+        }
+
         function calculateCompleteRoute() {
             let startDate = document.getElementById('startDate').value;
             let endDate = document.getElementById('endDate').value;
@@ -385,7 +459,7 @@
                 let end = targetPoints[i + 1];
 
                 promises.push(new Promise((resolve) => {
-                    getRouteFromOSRM([start, end], (route) => {
+                    getRouteFromService([start, end], (route) => {
                         resolve({route: route, start: start, end: end});
                     });
                 }));
@@ -397,6 +471,10 @@
                 });
                 document.getElementById('loadingModal').style.display = 'none';
                 animateVanAlongRoute(completeRoute, 0, results);
+            }).catch((error) => {
+                console.error('Error in route calculation:', error);
+                document.getElementById('loadingModal').style.display = 'none';
+                alert('An error occurred while calculating the route. Please try again later.');
             });
         }
 
@@ -456,20 +534,6 @@
         function calculateTimeToNextPoint(point1, point2) {
             var distance = map.distance(point1, point2);
             return (distance / (speed * 1000)) * 1000; // Convert to milliseconds
-        }
-
-        function getRouteFromOSRM(points, callback) {
-            var coordinates = points.map(p => p.lon + ',' + p.lat).join(';');
-            var url = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&continue_straight=true`;
-
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.routes && data.routes.length > 0) {
-                        var route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
-                        callback(route);
-                    }
-                });
         }
 
         function filterRouteByDateRange(startDate, endDate) {
