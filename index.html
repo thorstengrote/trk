@@ -200,12 +200,16 @@
         var vanMarker;
         var pauseMarkers = [];
         var campMarkers = [];
+        var parkingMarkers = [];
+        var homeMarker;
 
         const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving/';
         const OPENROUTE_URL = 'https://api.openrouteservice.org/v2/directions/driving-car';
         const OPENROUTE_API_KEY = '5b3ce3597851110001cf6248c56af19b19b2427c9486702926df507d';
         const MAX_REQUESTS_PER_SECOND = 1;
         let lastRequestTime = 0;
+
+        const HOME_COORDINATES = [50.7852, 7.0141]; // Coordinates for Altmühlstr., 53332 Bornheim, Germany
 
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('passwordOverlay').style.display = 'flex';
@@ -230,9 +234,19 @@
         }
 
         function initializeMap() {
-            map = L.map('map').setView([50.9375, 6.9603], 10);
+            map = L.map('map').setView(HOME_COORDINATES, 10);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Add home marker
+            homeMarker = L.marker(HOME_COORDINATES, {
+                icon: L.divIcon({
+                    className: 'custom-div-icon',
+                    html: '<div style="background-color:#FF5733;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-home"></i></div>',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
             }).addTo(map);
         }
 
@@ -250,7 +264,7 @@
                         .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
                         .sort((a, b) => a.time - b.time);
 
-                    identifyTargetPoints(routeCoordinates);
+                    identifyStops(routeCoordinates);
 
                     document.getElementById('speedRange').value = speed;
                     document.getElementById('speedValue').textContent = speed;
@@ -273,18 +287,18 @@
             content.classList.remove('expanded');
         }
 
-        function identifyTargetPoints(coordinates) {
-            for (let i = 0; i < coordinates.length; i++) {
-                if (i === 0) {
-                    coordinates[i].isTarget = true;
-                } else {
-                    const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
-                    coordinates[i].isTarget = timeDiff > 30;
-                    coordinates[i].isPause = timeDiff > 30 && timeDiff <= 240;
-                    coordinates[i].isParking = timeDiff > 240 && coordinates[i].time.getDate() === coordinates[i-1].time.getDate();
-                    coordinates[i].isCamp = timeDiff > 240 && coordinates[i].time.getDate() !== coordinates[i-1].time.getDate();
-                }
+        function identifyStops(coordinates) {
+            for (let i = 1; i < coordinates.length; i++) {
+                const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
+                coordinates[i].isStop = timeDiff > 30;
+                coordinates[i].stopType = getStopType(timeDiff, coordinates[i].time, coordinates[i-1].time);
             }
+        }
+
+        function getStopType(timeDiff, currentTime, previousTime) {
+            if (timeDiff <= 240) return 'pause';
+            if (currentTime.getDate() === previousTime.getDate()) return 'parking';
+            return 'camp';
         }
 
         function updateSpeed(value) {
@@ -303,7 +317,7 @@
             hidePoints();
             routeCoordinates.forEach(function(point) {
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""));
+                    .bindPopup(point.time.toLocaleString() + (point.isStop ? ` (${point.stopType})` : ""));
                 markers.push(marker);
             });
             map.fitBounds(L.latLngBounds(routeCoordinates.map(point => [point.lat, point.lon])));
@@ -351,7 +365,7 @@
             if (i < routeCoordinates.length && animationRunning) {
                 var point = routeCoordinates[i];
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""))
+                    .bindPopup(point.time.toLocaleString() + (point.isStop ? ` (${point.stopType})` : ""))
                     .openPopup();
                 markers.push(marker);
 
@@ -388,8 +402,10 @@
             if (vanMarker) map.removeLayer(vanMarker);
             pauseMarkers.forEach(marker => map.removeLayer(marker));
             campMarkers.forEach(marker => map.removeLayer(marker));
+            parkingMarkers.forEach(marker => map.removeLayer(marker));
             pauseMarkers = [];
             campMarkers = [];
+            parkingMarkers = [];
         }
 
         async function getRouteFromOSRM(points) {
@@ -480,18 +496,18 @@
             let filteredCoordinates = filterRouteByDateRange(startDate, endDate);
             
             let completeRoute = [];
-            let targetPoints = filteredCoordinates.filter(point => point.isTarget);
+            let stopPoints = filteredCoordinates.filter(point => point.isStop);
 
             try {
-                for (let i = 0; i < targetPoints.length - 1; i++) {
-                    let start = targetPoints[i];
-                    let end = targetPoints[i + 1];
+                for (let i = 0; i < stopPoints.length - 1; i++) {
+                    let start = stopPoints[i];
+                    let end = stopPoints[i + 1];
                     let route = await getRouteFromOSRM([start, end]);
                     completeRoute = completeRoute.concat(route);
                 }
 
                 document.getElementById('loadingModal').style.display = 'none';
-                animateVanAlongRoute(completeRoute, 0, targetPoints);
+                animateVanAlongRoute(completeRoute, 0, stopPoints);
             } catch (error) {
                 console.error('Error calculating route:', error);
                 alert('An error occurred while calculating the route. Please try again later.');
@@ -500,7 +516,7 @@
             }
         }
 
-        function animateVanAlongRoute(route, step, routeSegments) {
+        function animateVanAlongRoute(route, step, stopPoints) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
                 var nextPoint = route[step + 1] || route[step];
@@ -527,53 +543,55 @@
                 routePath.addLatLng(point);
                 map.setView(point);
 
-                // Check if we've reached a target point
-                let targetPoint = routeSegments.find(segment => 
-                    Math.abs(segment.lat - point[0]) < 0.0001 && 
-                    Math.abs(segment.lon - point[1]) < 0.0001
+                // Check if we've reached a stop point
+                let stopPoint = stopPoints.find(stop => 
+                    Math.abs(stop.lat - point[0]) < 0.0001 && 
+                    Math.abs(stop.lon - point[1]) < 0.0001
                 );
 
-                if (targetPoint) {
-                    if (targetPoint.isPause && !pauseMarkers.some(m => m.getLatLng().equals(point))) {
-                        let pauseMarker = L.marker(point, {
-                            icon: L.divIcon({
-                                className: 'custom-div-icon',
-                                html: '<div style="background-color:#c30b82;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-coffee"></i></div>',
-                                iconSize: [30, 30],
-                                iconAnchor: [15, 15]
-                            })
-                        }).addTo(map);
-                        pauseMarkers.push(pauseMarker);
-                    } else if (targetPoint.isParking && !pauseMarkers.some(m => m.getLatLng().equals(point))) {
-                        let parkingMarker = L.marker(point, {
-                            icon: L.divIcon({
-                                className: 'custom-div-icon',
-                                html: '<div style="background-color:#3498db;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-parking"></i></div>',
-                                iconSize: [30, 30],
-                                iconAnchor: [15, 15]
-                            })
-                        }).addTo(map);
-                        pauseMarkers.push(parkingMarker);
-                    } else if (targetPoint.isCamp && !campMarkers.some(m => m.getLatLng().equals(point))) {
-                        let campMarker = L.marker(point, {
-                            icon: L.divIcon({
-                                className: 'custom-div-icon',
-                                html: '<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-campground"></i></div>',
-                                iconSize: [30, 30],
-                                iconAnchor: [15, 15]
-                            })
-                        }).addTo(map);
-                        campMarkers.push(campMarker);
-                    }
+                if (stopPoint) {
+                    addStopMarker(stopPoint);
                 }
 
                 currentAnimationIndex = step;
                 var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint);
                 animationTimeout = setTimeout(function() {
-                    animateVanAlongRoute(route, step + 1, routeSegments);
+                    animateVanAlongRoute(route, step + 1, stopPoints);
                 }, timeToNextPoint);
             } else if (!driveRouteRunning) {
                 stopDriveRoute();
+            }
+        }
+
+        function addStopMarker(stopPoint) {
+            let markerIcon;
+            let markerArray;
+
+            switch (stopPoint.stopType) {
+                case 'pause':
+                    markerIcon = '<div style="background-color:#c30b82;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-coffee"></i></div>';
+                    markerArray = pauseMarkers;
+                    break;
+                case 'parking':
+                    markerIcon = '<div style="background-color:#3498db;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-parking"></i></div>';
+                    markerArray = parkingMarkers;
+                    break;
+                case 'camp':
+                    markerIcon = '<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-campground"></i></div>';
+                    markerArray = campMarkers;
+                    break;
+            }
+
+            if (!markerArray.some(m => m.getLatLng().equals([stopPoint.lat, stopPoint.lon]))) {
+                let marker = L.marker([stopPoint.lat, stopPoint.lon], {
+                    icon: L.divIcon({
+                        className: 'custom-div-icon',
+                        html: markerIcon,
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    })
+                }).addTo(map);
+                markerArray.push(marker);
             }
         }
 
