@@ -4,8 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Terrain Route: Bornheim to Davos</title>
-    <script src='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.js'></script>
-    <link href='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.css' rel='stylesheet' />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.9.0/css/ol.css">
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.9.0/build/ol.js"></script>
     <style>
         body { margin: 0; padding: 0; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
@@ -14,101 +14,87 @@
 <body>
     <div id="map"></div>
     <script>
-        mapboxgl.accessToken = 'pk.eyJ1IjoiZXhhbXBsZXVzZXIiLCJhIjoiY2xscXhqMTV2MDJ2MjNycWdqMWl2ZG93ciJ9.wqCsXM0NwL0xQXvxoS2vIg';
-        const map = new mapboxgl.Map({
-            container: 'map',
-            style: 'mapbox://styles/mapbox/outdoors-v11',
-            center: [8.4, 48.5], // Midpoint between Bornheim and Davos
-            zoom: 6,
-            pitch: 60, // Tilted view
-            bearing: 0,
-            antialias: true
+        const bornheim = ol.proj.fromLonLat([7.0141, 50.7852]);
+        const davos = ol.proj.fromLonLat([9.8458, 46.8032]);
+
+        const route = [
+            bornheim,
+            ol.proj.fromLonLat([7.7689, 49.4478]), // Kaiserslautern
+            ol.proj.fromLonLat([9.1829, 48.7758]), // Stuttgart
+            ol.proj.fromLonLat([9.1732, 47.6779]), // Friedrichshafen
+            davos
+        ];
+
+        const map = new ol.Map({
+            target: 'map',
+            layers: [
+                new ol.layer.Tile({
+                    source: new ol.source.OSM()
+                }),
+                new ol.layer.Vector({
+                    source: new ol.source.Vector({
+                        features: [new ol.Feature({
+                            geometry: new ol.geom.LineString(route)
+                        })]
+                    }),
+                    style: new ol.style.Style({
+                        stroke: new ol.style.Stroke({
+                            color: 'red',
+                            width: 4
+                        })
+                    })
+                })
+            ],
+            view: new ol.View({
+                center: ol.proj.fromLonLat([8.4, 48.5]),
+                zoom: 7
+            })
         });
 
-        map.on('load', () => {
-            map.addSource('mapbox-dem', {
-                'type': 'raster-dem',
-                'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
-                'tileSize': 512,
-                'maxzoom': 14
+        // Add markers for start and end points
+        const addMarker = (coordinates) => {
+            const marker = new ol.Feature({
+                geometry: new ol.geom.Point(coordinates)
             });
-            
-            // Add 3D terrain
-            map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
-
-            // Add sky layer
-            map.addLayer({
-                'id': 'sky',
-                'type': 'sky',
-                'paint': {
-                    'sky-type': 'atmosphere',
-                    'sky-atmosphere-sun': [0.0, 0.0],
-                    'sky-atmosphere-sun-intensity': 15
-                }
+            marker.setStyle(new ol.style.Style({
+                image: new ol.style.Circle({
+                    radius: 7,
+                    fill: new ol.style.Fill({color: 'black'}),
+                    stroke: new ol.style.Stroke({
+                        color: 'white', width: 2
+                    })
+                })
+            }));
+            const vectorSource = new ol.source.Vector({
+                features: [marker]
             });
-
-            // Add route
-            map.addLayer({
-                'id': 'route',
-                'type': 'line',
-                'source': {
-                    'type': 'geojson',
-                    'data': {
-                        'type': 'Feature',
-                        'properties': {},
-                        'geometry': {
-                            'type': 'LineString',
-                            'coordinates': [
-                                [7.0141, 50.7852],  // Bornheim
-                                [7.7689, 49.4478],  // Kaiserslautern
-                                [9.1829, 48.7758],  // Stuttgart
-                                [9.1732, 47.6779],  // Friedrichshafen
-                                [9.8458, 46.8032]   // Davos
-                            ]
-                        }
-                    }
-                },
-                'layout': {
-                    'line-join': 'round',
-                    'line-cap': 'round'
-                },
-                'paint': {
-                    'line-color': '#ff0000',
-                    'line-width': 5
-                }
+            const markerVectorLayer = new ol.layer.Vector({
+                source: vectorSource,
             });
+            map.addLayer(markerVectorLayer);
+        };
 
-            // Add markers for start and end points
-            new mapboxgl.Marker().setLngLat([7.0141, 50.7852]).addTo(map);
-            new mapboxgl.Marker().setLngLat([9.8458, 46.8032]).addTo(map);
+        addMarker(bornheim);
+        addMarker(davos);
 
-            // Animate the map camera along the route
-            let start = [7.0141, 50.7852];
-            let end = [9.8458, 46.8032];
-            let isReversed = false;
-
-            function animate() {
-                const animationDuration = 20000;
-                const cameraAltitude = 15000;
-
-                const target = isReversed ? start : end;
-                
-                map.flyTo({
-                    center: target,
-                    zoom: 10,
-                    bearing: isReversed ? 225 : 45,
-                    pitch: 75,
-                    altitude: cameraAltitude,
-                    duration: animationDuration,
-                    easing: (t) => t,
+        // Animate along the route
+        let routeIndex = 0;
+        const animateRoute = () => {
+            if (routeIndex < route.length) {
+                map.getView().animate({
+                    center: route[routeIndex],
+                    duration: 2000,
+                    zoom: 10
                 });
-
-                isReversed = !isReversed;
-                setTimeout(animate, animationDuration);
+                routeIndex++;
+                setTimeout(animateRoute, 2000);
+            } else {
+                routeIndex = 0;
+                setTimeout(animateRoute, 2000);
             }
+        };
 
-            setTimeout(animate, 2000);
-        });
+        setTimeout(animateRoute, 2000);
     </script>
 </body>
 </html>
