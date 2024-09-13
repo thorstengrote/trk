@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+    <title>3D Route: Bornheim to Davos</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <style>
+        html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    <script>
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYWE1OWUxNy1mMWZiLTQzYjYtYTQ0OS1kMWFjYmFkNjc5YzciLCJpZCI6NTc3MzMsImlhdCI6MTYyMjg0MTAyMn0.XcKpgANiY19MC4bdFUXMVEBToBmqS8kuYpUlxJHYZxk';
+
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            terrainProvider: Cesium.createWorldTerrain()
+        });
+
+        const bornheim = Cesium.Cartesian3.fromDegrees(7.0141, 50.7852);
+        const davos = Cesium.Cartesian3.fromDegrees(9.8458, 46.8032);
+
+        viewer.entities.add({
+            polyline: {
+                positions: [bornheim, davos],
+                width: 5,
+                material: Cesium.Color.BLUE
+            }
+        });
+
+        viewer.zoomTo(viewer.entities);
+
+        function flyAlong() {
+            viewer.scene.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(7.0141, 50.7852, 50000),
+                orientation: {
+                    heading: Cesium.Math.toRadians(45.0),
+                    pitch: Cesium.Math.toRadians(-35.0),
+                    roll: 0.0
+                },
+                duration: 5
+            });
+
+            setTimeout(() => {
+                viewer.scene.camera.flyTo({
+                    destination: Cesium.Cartesian3.fromDegrees(9.8458, 46.8032, 50000),
+                    orientation: {
+                        heading: Cesium.Math.toRadians(45.0),
+                        pitch: Cesium.Math.toRadians(-35.0),
+                        roll: 0.0
+                    },
+                    duration: 10
+                });
+            }, 6000);
+        }
+
+        setTimeout(flyAlong, 2000);
+    </script>
+</body>
+</html>
