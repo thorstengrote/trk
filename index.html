@@ -305,10 +305,7 @@
             for (let i = 1; i < coordinates.length; i++) {
                 const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
                 if (timeDiff > 25) {
-                    let stopType = 'pause';
-                    if (timeDiff > 240) {
-                        stopType = coordinates[i].time.getDate() === coordinates[i-1].time.getDate() ? 'parking' : 'camp';
-                    }
+                    let stopType = getStopType(coordinates[i-1].time, coordinates[i].time);
                     stopPoints.push({
                         lat: coordinates[i].lat,
                         lon: coordinates[i].lon,
@@ -316,6 +313,17 @@
                         stopType: stopType
                     });
                 }
+            }
+        }
+
+        function getStopType(startTime, endTime) {
+            const timeDiff = (endTime - startTime) / (1000 * 60); // difference in minutes
+            if (timeDiff > 24 * 60) { // More than a day
+                return 'camp';
+            } else if (timeDiff > 240) { // More than 4 hours
+                return 'parking';
+            } else {
+                return 'pause';
             }
         }
 
@@ -568,7 +576,6 @@
                 }
 
                 document.getElementById('loadingModal').style.display = 'none';
-                showStopPoints();
                 animateVanAlongRoute(completeRoute, 0);
             } catch (error) {
                 console.error('Error calculating route:', error);
