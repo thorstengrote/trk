@@ -123,6 +123,10 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .leaflet-div-icon {
+            background: none;
+            border: none;
+        }
     </style>
 </head>
 <body>
@@ -268,6 +272,7 @@
                     const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
                     coordinates[i].isTarget = timeDiff > 30;
                     coordinates[i].isPause = timeDiff > 30 && timeDiff <= 240;
+                    coordinates[i].isParking = timeDiff > 240 && coordinates[i].time.getDate() === coordinates[i-1].time.getDate();
                     coordinates[i].isCamp = timeDiff > 240 && coordinates[i].time.getDate() !== coordinates[i-1].time.getDate();
                 }
             }
@@ -491,7 +496,11 @@
                 var point = route[step];
                 if (!vanMarker) {
                     vanMarker = L.marker(point, {
-                        icon: L.divIcon({className: 'fas fa-shuttle-van', iconSize: [30, 30]})
+                        icon: L.divIcon({
+                            className: 'fas fa-shuttle-van',
+                            iconSize: [30, 30],
+                            html: '<i class="fas fa-shuttle-van" style="font-size: 30px; color: #4a4a4a;"></i>'
+                        })
                     }).addTo(map);
                 } else {
                     vanMarker.setLatLng(point);
@@ -500,11 +509,12 @@
                 map.setView(point);
 
                 // Check if we've reached a target point
-                let segmentIndex = routeSegments.findIndex(segment => 
-                    segment.lat === point[0] && segment.lon === point[1]
+                let targetPoint = routeSegments.find(segment => 
+                    Math.abs(segment.lat - point[0]) < 0.0001 && 
+                    Math.abs(segment.lon - point[1]) < 0.0001
                 );
-                if (segmentIndex !== -1) {
-                    let targetPoint = routeSegments[segmentIndex];
+
+                if (targetPoint) {
                     if (targetPoint.isPause && !pauseMarkers.some(m => m.getLatLng().equals(point))) {
                         let pauseMarker = L.marker(point, {
                             icon: L.divIcon({
@@ -515,6 +525,16 @@
                             })
                         }).addTo(map);
                         pauseMarkers.push(pauseMarker);
+                    } else if (targetPoint.isParking && !pauseMarkers.some(m => m.getLatLng().equals(point))) {
+                        let parkingMarker = L.marker(point, {
+                            icon: L.divIcon({
+                                className: 'custom-div-icon',
+                                html: '<div style="background-color:#3498db;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-parking"></i></div>',
+                                iconSize: [30, 30],
+                                iconAnchor: [15, 15]
+                            })
+                        }).addTo(map);
+                        pauseMarkers.push(parkingMarker);
                     } else if (targetPoint.isCamp && !campMarkers.some(m => m.getLatLng().equals(point))) {
                         let campMarker = L.marker(point, {
                             icon: L.divIcon({
