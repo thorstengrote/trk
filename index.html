@@ -172,11 +172,11 @@
             </div>
             <div class="control-group">
                 <label for="startDate">Start Date: </label>
-                <input type="date" id="startDate">
+                <input type="date" id="startDate" onchange="updateDateRange()">
             </div>
             <div class="control-group">
                 <label for="endDate">End Date: </label>
-                <input type="date" id="endDate">
+                <input type="date" id="endDate" onchange="updateDateRange()">
             </div>
             <div class="control-group">
                 <button onclick="generateShareLink()">Generate Share Link</button>
@@ -188,6 +188,7 @@
     <script>
         var map;
         var routeCoordinates = [];
+        var filteredCoordinates = [];
         var markers = [];
         var speed = 20; // km/s
         var routePath;
@@ -265,6 +266,7 @@
                         .sort((a, b) => a.time - b.time);
 
                     identifyStops(routeCoordinates);
+                    updateDateRange();
 
                     document.getElementById('speedRange').value = speed;
                     document.getElementById('speedValue').textContent = speed;
@@ -290,7 +292,7 @@
         function identifyStops(coordinates) {
             for (let i = 1; i < coordinates.length; i++) {
                 const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
-                coordinates[i].isStop = timeDiff > 30;
+                coordinates[i].isStop = timeDiff > 25;
                 coordinates[i].stopType = getStopType(timeDiff, coordinates[i].time, coordinates[i-1].time);
             }
         }
@@ -306,6 +308,37 @@
             speed = parseInt(value);
         }
 
+        function updateDateRange() {
+            let startDate = document.getElementById('startDate').value;
+            let endDate = document.getElementById('endDate').value;
+            filteredCoordinates = filterRouteByDateRange(startDate, endDate);
+            
+            // Clear existing markers and path
+            clearMap();
+
+            // Redraw points if they were visible
+            if (pointsVisible) {
+                showPoints();
+            }
+
+            // Redraw route if it was visible
+            if (routeVisible) {
+                showRoute();
+            }
+        }
+
+        function clearMap() {
+            if (routePath) map.removeLayer(routePath);
+            markers.forEach(marker => map.removeLayer(marker));
+            pauseMarkers.forEach(marker => map.removeLayer(marker));
+            campMarkers.forEach(marker => map.removeLayer(marker));
+            parkingMarkers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+            pauseMarkers = [];
+            campMarkers = [];
+            parkingMarkers = [];
+        }
+
         function togglePoints() {
             pointsVisible = !pointsVisible;
             if (pointsVisible) showPoints();
@@ -315,12 +348,12 @@
 
         function showPoints() {
             hidePoints();
-            routeCoordinates.forEach(function(point) {
+            filteredCoordinates.forEach(function(point) {
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
                     .bindPopup(point.time.toLocaleString() + (point.isStop ? ` (${point.stopType})` : ""));
                 markers.push(marker);
             });
-            map.fitBounds(L.latLngBounds(routeCoordinates.map(point => [point.lat, point.lon])));
+            map.fitBounds(L.latLngBounds(filteredCoordinates.map(point => [point.lat, point.lon])));
         }
 
         function hidePoints() {
@@ -362,8 +395,8 @@
         }
 
         function animateRoute(i) {
-            if (i < routeCoordinates.length && animationRunning) {
-                var point = routeCoordinates[i];
+            if (i < filteredCoordinates.length && animationRunning) {
+                var point = filteredCoordinates[i];
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
                     .bindPopup(point.time.toLocaleString() + (point.isStop ? ` (${point.stopType})` : ""))
                     .openPopup();
@@ -372,10 +405,14 @@
                 routePath.addLatLng([point.lat, point.lon]);
                 map.setView([point.lat, point.lon]);
 
+                if (point.isStop) {
+                    addStopMarker(point);
+                }
+
                 animationTimeout = setTimeout(function() {
                     animateRoute(i + 1);
                 }, 1000);
-            } else if (i >= routeCoordinates.length) {
+            } else if (i >= filteredCoordinates.length) {
                 stopAnimation();
             }
         }
@@ -491,10 +528,6 @@
         }
 
         async function calculateCompleteRoute() {
-            let startDate = document.getElementById('startDate').value;
-            let endDate = document.getElementById('endDate').value;
-            let filteredCoordinates = filterRouteByDateRange(startDate, endDate);
-            
             let completeRoute = [];
             let stopPoints = filteredCoordinates.filter(point => point.isStop);
 
