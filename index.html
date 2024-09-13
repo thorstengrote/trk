@@ -283,10 +283,6 @@
                     coordinates[i].isPause = timeDiff > 30 && timeDiff <= 240;
                     coordinates[i].isParking = timeDiff > 240 && coordinates[i].time.getDate() === coordinates[i-1].time.getDate();
                     coordinates[i].isCamp = timeDiff > 240 && coordinates[i].time.getDate() !== coordinates[i-1].time.getDate();
-                    
-                    // Add these properties for more precise comparison
-                    coordinates[i].lat = parseFloat(coordinates[i].lat);
-                    coordinates[i].lon = parseFloat(coordinates[i].lon);
                 }
             }
         }
@@ -385,7 +381,7 @@
             calculateCompleteRoute();
         }
 
-       function stopDriveRoute() {
+        function stopDriveRoute() {
             driveRouteRunning = false;
             clearTimeout(animationTimeout);
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Drive Route";
@@ -584,7 +580,7 @@
         function calculateAngle(point1, point2) {
             var latDiff = point2[0] - point1[0];
             var lngDiff = point2[1] - point1[1];
-            return (Math.atan2(lngDiff, latDiff) * 180 / Math.PI) + 90;
+            return (Math.atan2(lngDiff, latDiff) * 180 / Math.PI) - 90;
         }
 
         function calculateTimeToNextPoint(point1, point2) {
