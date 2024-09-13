@@ -127,6 +127,15 @@
             background: none;
             border: none;
         }
+        .van-icon {
+            background: none;
+            border: none;
+        }
+        .van-icon i {
+            display: block;
+            text-align: center;
+            line-height: 30px;
+        }
     </style>
 </head>
 <body>
@@ -274,6 +283,10 @@
                     coordinates[i].isPause = timeDiff > 30 && timeDiff <= 240;
                     coordinates[i].isParking = timeDiff > 240 && coordinates[i].time.getDate() === coordinates[i-1].time.getDate();
                     coordinates[i].isCamp = timeDiff > 240 && coordinates[i].time.getDate() !== coordinates[i-1].time.getDate();
+                    
+                    // Add these properties for more precise comparison
+                    coordinates[i].lat = parseFloat(coordinates[i].lat);
+                    coordinates[i].lon = parseFloat(coordinates[i].lon);
                 }
             }
         }
@@ -372,7 +385,7 @@
             calculateCompleteRoute();
         }
 
-        function stopDriveRoute() {
+       function stopDriveRoute() {
             driveRouteRunning = false;
             clearTimeout(animationTimeout);
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Drive Route";
@@ -494,16 +507,26 @@
         function animateVanAlongRoute(route, step, routeSegments) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
+                var nextPoint = route[step + 1] || route[step];
+                var angle = calculateAngle(point, nextPoint);
+
                 if (!vanMarker) {
                     vanMarker = L.marker(point, {
                         icon: L.divIcon({
-                            className: 'fas fa-shuttle-van',
+                            className: 'van-icon',
                             iconSize: [30, 30],
-                            html: '<i class="fas fa-shuttle-van" style="font-size: 30px; color: #4a4a4a;"></i>'
+                            iconAnchor: [15, 15],
+                            html: '<i class="fas fa-shuttle-van" style="font-size: 30px; color: #4a4a4a; transform: rotate(' + angle + 'deg);"></i>'
                         })
                     }).addTo(map);
                 } else {
                     vanMarker.setLatLng(point);
+                    vanMarker.setIcon(L.divIcon({
+                        className: 'van-icon',
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15],
+                        html: '<i class="fas fa-shuttle-van" style="font-size: 30px; color: #4a4a4a; transform: rotate(' + angle + 'deg);"></i>'
+                    }));
                 }
                 routePath.addLatLng(point);
                 map.setView(point);
@@ -549,13 +572,19 @@
                 }
 
                 currentAnimationIndex = step;
-                var timeToNextPoint = calculateTimeToNextPoint(route[step], route[step + 1] || route[step]);
+                var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint);
                 animationTimeout = setTimeout(function() {
                     animateVanAlongRoute(route, step + 1, routeSegments);
                 }, timeToNextPoint);
             } else if (!driveRouteRunning) {
                 stopDriveRoute();
             }
+        }
+
+        function calculateAngle(point1, point2) {
+            var latDiff = point2[0] - point1[0];
+            var lngDiff = point2[1] - point1[1];
+            return (Math.atan2(lngDiff, latDiff) * 180 / Math.PI) + 90;
         }
 
         function calculateTimeToNextPoint(point1, point2) {
