@@ -199,9 +199,7 @@
         var animationTimeout;
         var driveRouteRunning = false;
         var vanMarker;
-        var pauseMarkers = [];
-        var campMarkers = [];
-        var parkingMarkers = [];
+        var stopMarkers = [];
         var homeMarker;
         var stopPoints = [];
 
@@ -330,6 +328,7 @@
             let startDate = document.getElementById('startDate').value;
             let endDate = document.getElementById('endDate').value;
             filteredCoordinates = filterRouteByDateRange(startDate, endDate);
+            stopPoints = filterStopPointsByDateRange(startDate, endDate);
             
             // Clear existing markers and path
             clearMap();
@@ -348,13 +347,9 @@
         function clearMap() {
             if (routePath) map.removeLayer(routePath);
             markers.forEach(marker => map.removeLayer(marker));
-            pauseMarkers.forEach(marker => map.removeLayer(marker));
-            campMarkers.forEach(marker => map.removeLayer(marker));
-            parkingMarkers.forEach(marker => map.removeLayer(marker));
+            stopMarkers.forEach(marker => map.removeLayer(marker));
             markers = [];
-            pauseMarkers = [];
-            campMarkers = [];
-            parkingMarkers = [];
+            stopMarkers = [];
         }
 
         function togglePoints() {
@@ -371,12 +366,21 @@
                     .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""));
                 markers.push(marker);
             });
+            showStopPoints();
             map.fitBounds(L.latLngBounds(filteredCoordinates.map(point => [point.lat, point.lon])));
         }
 
         function hidePoints() {
             markers.forEach(marker => map.removeLayer(marker));
+            stopMarkers.forEach(marker => map.removeLayer(marker));
             markers = [];
+            stopMarkers = [];
+        }
+
+        function showStopPoints() {
+            stopPoints.forEach(function(stopPoint) {
+                addStopMarker(stopPoint);
+            });
         }
 
         function toggleAnimation() {
@@ -403,7 +407,11 @@
         function toggleRoute() {
             routeVisible = !routeVisible;
             if (routeVisible) showRoute();
-            else if (routePath) map.removeLayer(routePath);
+            else if (routePath) {
+                map.removeLayer(routePath);
+                stopMarkers.forEach(marker => map.removeLayer(marker));
+                stopMarkers = [];
+            }
             collapseControls();
         }
 
@@ -461,12 +469,8 @@
             clearTimeout(animationTimeout);
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Drive Route";
             if (vanMarker) map.removeLayer(vanMarker);
-            pauseMarkers.forEach(marker => map.removeLayer(marker));
-            campMarkers.forEach(marker => map.removeLayer(marker));
-            parkingMarkers.forEach(marker => map.removeLayer(marker));
-            pauseMarkers = [];
-            campMarkers = [];
-            parkingMarkers = [];
+            stopMarkers.forEach(marker => map.removeLayer(marker));
+            stopMarkers = [];
         }
 
         async function getRouteFromOSRM(points) {
@@ -564,6 +568,7 @@
                 }
 
                 document.getElementById('loadingModal').style.display = 'none';
+                showStopPoints();
                 animateVanAlongRoute(completeRoute, 0);
             } catch (error) {
                 console.error('Error calculating route:', error);
@@ -622,24 +627,20 @@
 
         function addStopMarker(stopPoint) {
             let markerIcon;
-            let markerArray;
 
             switch (stopPoint.stopType) {
                 case 'pause':
                     markerIcon = '<div style="background-color:#c30b82;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-coffee"></i></div>';
-                    markerArray = pauseMarkers;
                     break;
                 case 'parking':
                     markerIcon = '<div style="background-color:#3498db;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-parking"></i></div>';
-                    markerArray = parkingMarkers;
                     break;
                 case 'camp':
                     markerIcon = '<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-campground"></i></div>';
-                    markerArray = campMarkers;
                     break;
             }
 
-            if (!markerArray.some(m => m.getLatLng().equals([stopPoint.lat, stopPoint.lon]))) {
+            if (!stopMarkers.some(m => m.getLatLng().equals([stopPoint.lat, stopPoint.lon]))) {
                 let marker = L.marker([stopPoint.lat, stopPoint.lon], {
                     icon: L.divIcon({
                         className: 'custom-div-icon',
@@ -648,7 +649,7 @@
                         iconAnchor: [15, 15]
                     })
                 }).addTo(map);
-                markerArray.push(marker);
+                stopMarkers.push(marker);
             }
         }
 
@@ -666,6 +667,13 @@
         function filterRouteByDateRange(startDate, endDate) {
             if (!startDate || !endDate) return routeCoordinates;
             return routeCoordinates.filter(point => {
+                return point.time >= new Date(startDate) && point.time <= new Date(endDate);
+            });
+        }
+
+        function filterStopPointsByDateRange(startDate, endDate) {
+            if (!startDate || !endDate) return stopPoints;
+            return stopPoints.filter(point => {
                 return point.time >= new Date(startDate) && point.time <= new Date(endDate);
             });
         }
