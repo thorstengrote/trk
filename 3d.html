@@ -3,9 +3,10 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Terrain Route: Bornheim to Davos</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.9.0/css/ol.css">
-    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.9.0/build/ol.js"></script>
+    <title>OSM Terrain Route: Bornheim to Davos</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-providers@1.13.0/leaflet-providers.js"></script>
     <style>
         body { margin: 0; padding: 0; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
@@ -14,87 +15,54 @@
 <body>
     <div id="map"></div>
     <script>
-        const bornheim = ol.proj.fromLonLat([7.0141, 50.7852]);
-        const davos = ol.proj.fromLonLat([9.8458, 46.8032]);
+        const map = L.map('map').setView([48.5, 8.4], 7);
+        
+        // Add OSM Terrain layer
+        L.tileLayer.provider('OpenTopoMap').addTo(map);
+
+        const bornheim = [50.7852, 7.0141];
+        const davos = [46.8032, 9.8458];
 
         const route = [
             bornheim,
-            ol.proj.fromLonLat([7.7689, 49.4478]), // Kaiserslautern
-            ol.proj.fromLonLat([9.1829, 48.7758]), // Stuttgart
-            ol.proj.fromLonLat([9.1732, 47.6779]), // Friedrichshafen
+            [49.4478, 7.7689], // Kaiserslautern
+            [48.7758, 9.1829], // Stuttgart
+            [47.6779, 9.1732], // Friedrichshafen
             davos
         ];
 
-        const map = new ol.Map({
-            target: 'map',
-            layers: [
-                new ol.layer.Tile({
-                    source: new ol.source.OSM()
-                }),
-                new ol.layer.Vector({
-                    source: new ol.source.Vector({
-                        features: [new ol.Feature({
-                            geometry: new ol.geom.LineString(route)
-                        })]
-                    }),
-                    style: new ol.style.Style({
-                        stroke: new ol.style.Stroke({
-                            color: 'red',
-                            width: 4
-                        })
-                    })
-                })
-            ],
-            view: new ol.View({
-                center: ol.proj.fromLonLat([8.4, 48.5]),
-                zoom: 7
-            })
-        });
+        // Add route
+        L.polyline(route, {color: 'red', weight: 5}).addTo(map);
 
         // Add markers for start and end points
-        const addMarker = (coordinates) => {
-            const marker = new ol.Feature({
-                geometry: new ol.geom.Point(coordinates)
-            });
-            marker.setStyle(new ol.style.Style({
-                image: new ol.style.Circle({
-                    radius: 7,
-                    fill: new ol.style.Fill({color: 'black'}),
-                    stroke: new ol.style.Stroke({
-                        color: 'white', width: 2
-                    })
-                })
-            }));
-            const vectorSource = new ol.source.Vector({
-                features: [marker]
-            });
-            const markerVectorLayer = new ol.layer.Vector({
-                source: vectorSource,
-            });
-            map.addLayer(markerVectorLayer);
-        };
+        L.marker(bornheim).addTo(map).bindPopup('Bornheim').openPopup();
+        L.marker(davos).addTo(map).bindPopup('Davos');
 
-        addMarker(bornheim);
-        addMarker(davos);
+        // Van icon
+        const vanIcon = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/3774/3774278.png',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
 
-        // Animate along the route
+        const van = L.marker(bornheim, {icon: vanIcon}).addTo(map);
+
+        // Animate van along the route
         let routeIndex = 0;
-        const animateRoute = () => {
+        function animateVan() {
             if (routeIndex < route.length) {
-                map.getView().animate({
-                    center: route[routeIndex],
-                    duration: 2000,
-                    zoom: 10
-                });
+                van.setLatLng(route[routeIndex]);
+                map.setView(route[routeIndex], 10);
                 routeIndex++;
-                setTimeout(animateRoute, 2000);
+                setTimeout(animateVan, 2000);
             } else {
                 routeIndex = 0;
-                setTimeout(animateRoute, 2000);
+                setTimeout(animateVan, 2000);
             }
-        };
+        }
 
-        setTimeout(animateRoute, 2000);
+        // Start animation after 2 seconds
+        setTimeout(animateVan, 2000);
     </script>
 </body>
 </html>
