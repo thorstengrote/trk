@@ -3,21 +3,46 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OSM Terrain Route: Bornheim to Davos</title>
+    <title>Enhanced OSM Terrain Route: Bornheim to Davos</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-providers@1.13.0/leaflet-providers.js"></script>
+    <script src="https://unpkg.com/@raruto/leaflet-elevation@2.2.5/dist/leaflet-elevation.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@raruto/leaflet-elevation@2.2.5/dist/leaflet-elevation.min.css" />
     <style>
         body { margin: 0; padding: 0; }
-        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        #map { position: absolute; top: 0; bottom: 200px; width: 100%; }
+        #elevation-div { 
+            height: 200px; 
+            width: 100%; 
+            position: absolute; 
+            bottom: 0;
+            background: white;
+        }
+        #info-box {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
 <body>
     <div id="map"></div>
+    <div id="elevation-div"></div>
+    <div id="info-box">
+        <h3>Current Info:</h3>
+        <p>Elevation: <span id="current-elevation">N/A</span> m</p>
+        <p>Speed: <span id="current-speed">N/A</span> km/h</p>
+        <p>Distance: <span id="current-distance">0</span> km</p>
+    </div>
     <script>
         const map = L.map('map').setView([48.5, 8.4], 7);
         
-        // Add OSM Terrain layer
         L.tileLayer.provider('OpenTopoMap').addTo(map);
 
         const bornheim = [50.7852, 7.0141];
@@ -31,14 +56,11 @@
             davos
         ];
 
-        // Add route
-        L.polyline(route, {color: 'red', weight: 5}).addTo(map);
+        const routeLine = L.polyline(route, {color: 'red', weight: 5}).addTo(map);
 
-        // Add markers for start and end points
         L.marker(bornheim).addTo(map).bindPopup('Bornheim').openPopup();
         L.marker(davos).addTo(map).bindPopup('Davos');
 
-        // Van icon
         const vanIcon = L.icon({
             iconUrl: 'https://cdn-icons-png.flaticon.com/512/3774/3774278.png',
             iconSize: [30, 30],
@@ -47,21 +69,78 @@
 
         const van = L.marker(bornheim, {icon: vanIcon}).addTo(map);
 
-        // Animate van along the route
+        // Elevation control
+        var elevation_options = {
+            theme: "lime-theme",
+            detached: true,
+            elevationDiv: "#elevation-div",
+            followMarker: false,
+            waypoints: false,
+            summary: false,
+            legend: false,
+        };
+        var elevation_control = L.control.elevation(elevation_options);
+        elevation_control.addTo(map);
+        var geojson = {
+            "type": "FeatureCollection",
+            "features": [{
+                "type": "Feature",
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": route.map(point => [point[1], point[0]])
+                }
+            }]
+        };
+        var elevation_data = L.geoJson(geojson, {
+            onEachFeature: elevation_control.addData.bind(elevation_control)
+        }).addTo(map);
+
         let routeIndex = 0;
+        let totalDistance = 0;
+
         function animateVan() {
-            if (routeIndex < route.length) {
-                van.setLatLng(route[routeIndex]);
-                map.setView(route[routeIndex], 10);
-                routeIndex++;
-                setTimeout(animateVan, 2000);
-            } else {
-                routeIndex = 0;
-                setTimeout(animateVan, 2000);
+            if (routeIndex < route.length - 1) {
+                const start = route[routeIndex];
+                const end = route[routeIndex + 1];
+                const duration = 2000; // 2 seconds between points
+                const steps = 100;
+                let step = 0;
+
+                function interpolate() {
+                    if (step <= steps) {
+                        const lat = start[0] + (end[0] - start[0]) * step / steps;
+                        const lng = start[1] + (end[1] - start[1]) * step / steps;
+                        van.setLatLng([lat, lng]);
+                        map.setView([lat, lng], 10);
+
+                        // Update info box
+                        const segmentDistance = L.latLng(start[0], start[1]).distanceTo(L.latLng(end[0], end[1])) / 1000;
+                        totalDistance += segmentDistance / steps;
+                        document.getElementById('current-distance').textContent = totalDistance.toFixed(2);
+                        document.getElementById('current-speed').textContent = ((segmentDistance / (duration / 1000)) * 3600).toFixed(2);
+
+                        // Get elevation data
+                        const elevations = elevation_control._results.map(r => r.z);
+                        const elevationIndex = Math.floor((elevations.length - 1) * (routeIndex + step / steps) / (route.length - 1));
+                        document.getElementById('current-elevation').textContent = elevations[elevationIndex].toFixed(0);
+
+                        step++;
+                        setTimeout(interpolate, duration / steps);
+                    } else {
+                        routeIndex++;
+                        if (routeIndex < route.length - 1) {
+                            animateVan();
+                        } else {
+                            routeIndex = 0;
+                            totalDistance = 0;
+                            setTimeout(animateVan, 2000);
+                        }
+                    }
+                }
+                interpolate();
             }
         }
 
-        // Start animation after 2 seconds
         setTimeout(animateVan, 2000);
     </script>
 </body>
