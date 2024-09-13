@@ -203,6 +203,7 @@
         var campMarkers = [];
         var parkingMarkers = [];
         var homeMarker;
+        var stopPoints = [];
 
         const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving/';
         const OPENROUTE_URL = 'https://api.openrouteservice.org/v2/directions/driving-car';
@@ -265,7 +266,8 @@
                         .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
                         .sort((a, b) => a.time - b.time);
 
-                    identifyStops(routeCoordinates);
+                    identifyTargetPoints(routeCoordinates);
+                    identifyStopPoints(routeCoordinates);
                     updateDateRange();
 
                     document.getElementById('speedRange').value = speed;
@@ -289,18 +291,34 @@
             content.classList.remove('expanded');
         }
 
-        function identifyStops(coordinates) {
-            for (let i = 1; i < coordinates.length; i++) {
-                const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
-                coordinates[i].isStop = timeDiff > 25;
-                coordinates[i].stopType = getStopType(timeDiff, coordinates[i].time, coordinates[i-1].time);
+        function identifyTargetPoints(coordinates) {
+            for (let i = 0; i < coordinates.length; i++) {
+                if (i === 0) {
+                    coordinates[i].isTarget = true;
+                } else {
+                    const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
+                    coordinates[i].isTarget = timeDiff > 30;
+                }
             }
         }
 
-        function getStopType(timeDiff, currentTime, previousTime) {
-            if (timeDiff <= 240) return 'pause';
-            if (currentTime.getDate() === previousTime.getDate()) return 'parking';
-            return 'camp';
+        function identifyStopPoints(coordinates) {
+            stopPoints = [];
+            for (let i = 1; i < coordinates.length; i++) {
+                const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
+                if (timeDiff > 25) {
+                    let stopType = 'pause';
+                    if (timeDiff > 240) {
+                        stopType = coordinates[i].time.getDate() === coordinates[i-1].time.getDate() ? 'parking' : 'camp';
+                    }
+                    stopPoints.push({
+                        lat: coordinates[i].lat,
+                        lon: coordinates[i].lon,
+                        time: coordinates[i].time,
+                        stopType: stopType
+                    });
+                }
+            }
         }
 
         function updateSpeed(value) {
@@ -350,7 +368,7 @@
             hidePoints();
             filteredCoordinates.forEach(function(point) {
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString() + (point.isStop ? ` (${point.stopType})` : ""));
+                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""));
                 markers.push(marker);
             });
             map.fitBounds(L.latLngBounds(filteredCoordinates.map(point => [point.lat, point.lon])));
@@ -398,15 +416,21 @@
             if (i < filteredCoordinates.length && animationRunning) {
                 var point = filteredCoordinates[i];
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString() + (point.isStop ? ` (${point.stopType})` : ""))
+                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""))
                     .openPopup();
                 markers.push(marker);
 
                 routePath.addLatLng([point.lat, point.lon]);
                 map.setView([point.lat, point.lon]);
 
-                if (point.isStop) {
-                    addStopMarker(point);
+                // Check if we've reached a stop point
+                let stopPoint = stopPoints.find(stop => 
+                    Math.abs(stop.lat - point.lat) < 0.0001 && 
+                    Math.abs(stop.lon - point.lon) < 0.0001
+                );
+
+                if (stopPoint) {
+                    addStopMarker(stopPoint);
                 }
 
                 animationTimeout = setTimeout(function() {
@@ -529,18 +553,18 @@
 
         async function calculateCompleteRoute() {
             let completeRoute = [];
-            let stopPoints = filteredCoordinates.filter(point => point.isStop);
+            let targetPoints = filteredCoordinates.filter(point => point.isTarget);
 
             try {
-                for (let i = 0; i < stopPoints.length - 1; i++) {
-                    let start = stopPoints[i];
-                    let end = stopPoints[i + 1];
+                for (let i = 0; i < targetPoints.length - 1; i++) {
+                    let start = targetPoints[i];
+                    let end = targetPoints[i + 1];
                     let route = await getRouteFromOSRM([start, end]);
                     completeRoute = completeRoute.concat(route);
                 }
 
                 document.getElementById('loadingModal').style.display = 'none';
-                animateVanAlongRoute(completeRoute, 0, stopPoints);
+                animateVanAlongRoute(completeRoute, 0);
             } catch (error) {
                 console.error('Error calculating route:', error);
                 alert('An error occurred while calculating the route. Please try again later.');
@@ -549,7 +573,7 @@
             }
         }
 
-        function animateVanAlongRoute(route, step, stopPoints) {
+        function animateVanAlongRoute(route, step) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
                 var nextPoint = route[step + 1] || route[step];
@@ -589,7 +613,7 @@
                 currentAnimationIndex = step;
                 var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint);
                 animationTimeout = setTimeout(function() {
-                    animateVanAlongRoute(route, step + 1, stopPoints);
+                    animateVanAlongRoute(route, step + 1);
                 }, timeToNextPoint);
             } else if (!driveRouteRunning) {
                 stopDriveRoute();
