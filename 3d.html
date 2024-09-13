@@ -3,114 +3,112 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Route: Bornheim to Davos</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script>
+    <title>3D Terrain Route: Bornheim to Davos</title>
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.css' rel='stylesheet' />
     <style>
-        body { margin: 0; overflow: hidden; }
-        canvas { display: block; }
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
     </style>
 </head>
 <body>
+    <div id="map"></div>
     <script>
-        let scene, camera, renderer, terrain, van;
-        const terrainSize = 100;
-        const terrainResolution = 100;
+        mapboxgl.accessToken = 'pk.eyJ1IjoiZXhhbXBsZXVzZXIiLCJhIjoiY2xscXhqMTV2MDJ2MjNycWdqMWl2ZG93ciJ9.wqCsXM0NwL0xQXvxoS2vIg';
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/outdoors-v11',
+            center: [8.4, 48.5], // Midpoint between Bornheim and Davos
+            zoom: 6,
+            pitch: 60, // Tilted view
+            bearing: 0,
+            antialias: true
+        });
 
-        function init() {
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
+        map.on('load', () => {
+            map.addSource('mapbox-dem', {
+                'type': 'raster-dem',
+                'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+                'tileSize': 512,
+                'maxzoom': 14
+            });
+            
+            // Add 3D terrain
+            map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
 
-            // Light
-            const light = new THREE.DirectionalLight(0xffffff, 1);
-            light.position.set(0, 1, 0);
-            scene.add(light);
-
-            // Terrain
-            const geometry = new THREE.PlaneGeometry(terrainSize, terrainSize, terrainResolution, terrainResolution);
-            const material = new THREE.MeshPhongMaterial({ color: 0x55aa55, wireframe: false });
-            terrain = new THREE.Mesh(geometry, material);
-            terrain.rotation.x = -Math.PI / 2;
-            scene.add(terrain);
-
-            // Generate random terrain
-            const positions = terrain.geometry.attributes.position.array;
-            for (let i = 0; i < positions.length; i += 3) {
-                positions[i + 2] = Math.random() * 5;
-            }
-            terrain.geometry.attributes.position.needsUpdate = true;
-
-            // Van
-            const vanGeometry = new THREE.BoxGeometry(1, 1, 2);
-            const vanMaterial = new THREE.MeshPhongMaterial({ color: 0x0000ff });
-            van = new THREE.Mesh(vanGeometry, vanMaterial);
-            van.position.set(-terrainSize/2, 2, -terrainSize/2);
-            scene.add(van);
-
-            camera.position.set(0, 20, 20);
-            camera.lookAt(van.position);
-
-            // GUI
-            const gui = new dat.GUI();
-            const cameraFolder = gui.addFolder('Camera');
-            cameraFolder.add(camera.position, 'y', 0, 50);
-            cameraFolder.add(camera.position, 'z', 0, 50);
-            cameraFolder.open();
-
-            animate();
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-
-            // Move van
-            van.position.x += 0.1;
-            van.position.z += 0.1;
-            if (van.position.x > terrainSize/2) van.position.x = -terrainSize/2;
-            if (van.position.z > terrainSize/2) van.position.z = -terrainSize/2;
-
-            // Update van's y position based on terrain height
-            const terrainY = getTerrainHeight(van.position.x, van.position.z);
-            van.position.y = terrainY + 0.5;
-
-            // Update camera to follow van
-            camera.position.x = van.position.x;
-            camera.position.z = van.position.z + 20;
-            camera.lookAt(van.position);
-
-            renderer.render(scene, camera);
-        }
-
-        function getTerrainHeight(x, z) {
-            const positionAttribute = terrain.geometry.attributes.position;
-            const vertex = new THREE.Vector3();
-            let closestHeight = 0;
-            let closestDistance = Infinity;
-
-            for (let i = 0; i < positionAttribute.count; i++) {
-                vertex.fromBufferAttribute(positionAttribute, i);
-                const distance = Math.sqrt(Math.pow(x - vertex.x, 2) + Math.pow(z - vertex.y, 2));
-                if (distance < closestDistance) {
-                    closestDistance = distance;
-                    closestHeight = vertex.z;
+            // Add sky layer
+            map.addLayer({
+                'id': 'sky',
+                'type': 'sky',
+                'paint': {
+                    'sky-type': 'atmosphere',
+                    'sky-atmosphere-sun': [0.0, 0.0],
+                    'sky-atmosphere-sun-intensity': 15
                 }
+            });
+
+            // Add route
+            map.addLayer({
+                'id': 'route',
+                'type': 'line',
+                'source': {
+                    'type': 'geojson',
+                    'data': {
+                        'type': 'Feature',
+                        'properties': {},
+                        'geometry': {
+                            'type': 'LineString',
+                            'coordinates': [
+                                [7.0141, 50.7852],  // Bornheim
+                                [7.7689, 49.4478],  // Kaiserslautern
+                                [9.1829, 48.7758],  // Stuttgart
+                                [9.1732, 47.6779],  // Friedrichshafen
+                                [9.8458, 46.8032]   // Davos
+                            ]
+                        }
+                    }
+                },
+                'layout': {
+                    'line-join': 'round',
+                    'line-cap': 'round'
+                },
+                'paint': {
+                    'line-color': '#ff0000',
+                    'line-width': 5
+                }
+            });
+
+            // Add markers for start and end points
+            new mapboxgl.Marker().setLngLat([7.0141, 50.7852]).addTo(map);
+            new mapboxgl.Marker().setLngLat([9.8458, 46.8032]).addTo(map);
+
+            // Animate the map camera along the route
+            let start = [7.0141, 50.7852];
+            let end = [9.8458, 46.8032];
+            let isReversed = false;
+
+            function animate() {
+                const animationDuration = 20000;
+                const cameraAltitude = 15000;
+
+                const target = isReversed ? start : end;
+                
+                map.flyTo({
+                    center: target,
+                    zoom: 10,
+                    bearing: isReversed ? 225 : 45,
+                    pitch: 75,
+                    altitude: cameraAltitude,
+                    duration: animationDuration,
+                    easing: (t) => t,
+                });
+
+                isReversed = !isReversed;
+                setTimeout(animate, animationDuration);
             }
 
-            return closestHeight;
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        window.addEventListener('resize', onWindowResize, false);
-
-        init();
+            setTimeout(animate, 2000);
+        });
     </script>
 </body>
 </html>
