@@ -3,70 +3,114 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Route: Bornheim to Davos</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <title>3D Route: Bornheim to Davos</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script>
     <style>
-        body { margin: 0; padding: 0; }
-        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
-        #info { 
-            position: absolute; 
-            bottom: 10px; 
-            left: 10px; 
-            z-index: 1000; 
-            background: white; 
-            padding: 10px; 
-            border-radius: 5px;
-        }
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
     </style>
 </head>
 <body>
-    <div id="map"></div>
-    <div id="info">Click on the map to start animation</div>
     <script>
-        const map = L.map('map').setView([48.5, 8.4], 7);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+        let scene, camera, renderer, terrain, van;
+        const terrainSize = 100;
+        const terrainResolution = 100;
 
-        const bornheim = [50.7852, 7.0141];
-        const davos = [46.8032, 9.8458];
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
 
-        const route = [
-            bornheim,
-            [49.4478, 7.7689], // Kaiserslautern
-            [48.7758, 9.1829], // Stuttgart
-            [47.6779, 9.1732], // Friedrichshafen
-            davos
-        ];
+            // Light
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(0, 1, 0);
+            scene.add(light);
 
-        const routeLine = L.polyline(route, {color: 'red'}).addTo(map);
-        map.fitBounds(routeLine.getBounds());
+            // Terrain
+            const geometry = new THREE.PlaneGeometry(terrainSize, terrainSize, terrainResolution, terrainResolution);
+            const material = new THREE.MeshPhongMaterial({ color: 0x55aa55, wireframe: false });
+            terrain = new THREE.Mesh(geometry, material);
+            terrain.rotation.x = -Math.PI / 2;
+            scene.add(terrain);
 
-        L.marker(bornheim).addTo(map).bindPopup('Bornheim').openPopup();
-        L.marker(davos).addTo(map).bindPopup('Davos');
-
-        let vanIcon = L.icon({
-            iconUrl: 'https://cdn-icons-png.flaticon.com/512/3774/3774278.png',
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
-        });
-
-        let van = L.marker(bornheim, {icon: vanIcon}).addTo(map);
-
-        function animateVan() {
-            let i = 0;
-            function move() {
-                if (i < route.length - 1) {
-                    van.setLatLng(route[i]);
-                    i++;
-                    setTimeout(move, 1000);
-                }
+            // Generate random terrain
+            const positions = terrain.geometry.attributes.position.array;
+            for (let i = 0; i < positions.length; i += 3) {
+                positions[i + 2] = Math.random() * 5;
             }
-            move();
+            terrain.geometry.attributes.position.needsUpdate = true;
+
+            // Van
+            const vanGeometry = new THREE.BoxGeometry(1, 1, 2);
+            const vanMaterial = new THREE.MeshPhongMaterial({ color: 0x0000ff });
+            van = new THREE.Mesh(vanGeometry, vanMaterial);
+            van.position.set(-terrainSize/2, 2, -terrainSize/2);
+            scene.add(van);
+
+            camera.position.set(0, 20, 20);
+            camera.lookAt(van.position);
+
+            // GUI
+            const gui = new dat.GUI();
+            const cameraFolder = gui.addFolder('Camera');
+            cameraFolder.add(camera.position, 'y', 0, 50);
+            cameraFolder.add(camera.position, 'z', 0, 50);
+            cameraFolder.open();
+
+            animate();
         }
 
-        map.on('click', animateVan);
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Move van
+            van.position.x += 0.1;
+            van.position.z += 0.1;
+            if (van.position.x > terrainSize/2) van.position.x = -terrainSize/2;
+            if (van.position.z > terrainSize/2) van.position.z = -terrainSize/2;
+
+            // Update van's y position based on terrain height
+            const terrainY = getTerrainHeight(van.position.x, van.position.z);
+            van.position.y = terrainY + 0.5;
+
+            // Update camera to follow van
+            camera.position.x = van.position.x;
+            camera.position.z = van.position.z + 20;
+            camera.lookAt(van.position);
+
+            renderer.render(scene, camera);
+        }
+
+        function getTerrainHeight(x, z) {
+            const positionAttribute = terrain.geometry.attributes.position;
+            const vertex = new THREE.Vector3();
+            let closestHeight = 0;
+            let closestDistance = Infinity;
+
+            for (let i = 0; i < positionAttribute.count; i++) {
+                vertex.fromBufferAttribute(positionAttribute, i);
+                const distance = Math.sqrt(Math.pow(x - vertex.x, 2) + Math.pow(z - vertex.y, 2));
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestHeight = vertex.z;
+                }
+            }
+
+            return closestHeight;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.addEventListener('resize', onWindowResize, false);
+
+        init();
     </script>
 </body>
 </html>
