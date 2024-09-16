@@ -626,10 +626,10 @@
                 routePath.addLatLng(point);
                 map.setView(point);
 
-                // Check if we've reached a stop point
-                let stopPoint = findClosestStopPoint(point);
-                if (stopPoint && !stopMarkers.some(m => m.getLatLng().equals([stopPoint.lat, stopPoint.lon]))) {
-                    addStopMarker(stopPoint);
+                // Check if we've reached a point of interest (pause/sleep/park)
+                let poi = findClosestPointOfInterest(point);
+                if (poi && !stopMarkers.some(m => m.getLatLng().equals([poi.lat, poi.lon]))) {
+                    addStopMarker(poi);
                 }
 
                 // Find the closest point in filteredCoordinates to get elevation data
@@ -648,7 +648,7 @@
             }
         }
 
-        function findClosestStopPoint(point) {
+        function findClosestPointOfInterest(point) {
             return stopPoints.reduce((closest, current) => {
                 const currentDistance = distance(point, [current.lat, current.lon]);
                 const closestDistance = closest ? distance(point, [closest.lat, closest.lon]) : Infinity;
