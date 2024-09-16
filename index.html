@@ -627,12 +627,8 @@
                 map.setView(point);
 
                 // Check if we've reached a stop point
-                let stopPoint = stopPoints.find(stop => 
-                    Math.abs(stop.lat - point[0]) < 0.0001 && 
-                    Math.abs(stop.lon - point[1]) < 0.0001
-                );
-
-                if (stopPoint) {
+                let stopPoint = findClosestStopPoint(point);
+                if (stopPoint && !stopMarkers.some(m => m.getLatLng().equals([stopPoint.lat, stopPoint.lon]))) {
                     addStopMarker(stopPoint);
                 }
 
@@ -650,6 +646,14 @@
             } else if (!driveRouteRunning) {
                 stopDriveRoute();
             }
+        }
+
+        function findClosestStopPoint(point) {
+            return stopPoints.reduce((closest, current) => {
+                const currentDistance = distance(point, [current.lat, current.lon]);
+                const closestDistance = closest ? distance(point, [closest.lat, closest.lon]) : Infinity;
+                return currentDistance < closestDistance && currentDistance < 0.0001 ? current : closest;
+            }, null);
         }
 
         function findClosestPoint(point, points) {
@@ -681,17 +685,15 @@
                     break;
             }
 
-            if (!stopMarkers.some(m => m.getLatLng().equals([stopPoint.lat, stopPoint.lon]))) {
-                let marker = L.marker([stopPoint.lat, stopPoint.lon], {
-                    icon: L.divIcon({
-                        className: 'custom-div-icon',
-                        html: markerIcon,
-                        iconSize: [30, 30],
-                        iconAnchor: [15, 15]
-                    })
-                }).addTo(map);
-                stopMarkers.push(marker);
-            }
+            let marker = L.marker([stopPoint.lat, stopPoint.lon], {
+                icon: L.divIcon({
+                    className: 'custom-div-icon',
+                    html: markerIcon,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            }).addTo(map);
+            stopMarkers.push(marker);
         }
 
         function calculateTimeToNextPoint(point1, point2) {
@@ -744,7 +746,20 @@
                     maintainAspectRatio: false,
                     scales: {
                         y: {
-                            beginAtZero: false
+                            beginAtZero: true,
+                            max: 2500,
+                            title: {
+                                display: true,
+                                text: 'Elevation (m)'
+                            }
+                        },
+                        x: {
+                            display: false
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
                         }
                     }
                 }
@@ -752,10 +767,10 @@
         }
 
         function updateElevationChart(point) {
-            const windowSize = 20; // Number of points to show in the chart
+            const windowSize = 100; // Increased window size for a broader view
             const currentData = elevationChart.data;
             
-            currentData.labels.push(point.time.toLocaleTimeString());
+            currentData.labels.push('');
             currentData.datasets[0].data.push(point.elevation);
 
             if (currentData.labels.length > windowSize) {
