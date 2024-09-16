@@ -523,49 +523,53 @@
         }
 
         async function getRouteFromOpenRoute(points) {
-            const cacheKey = `openroute_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
-            const cachedRoute = await localforage.getItem(cacheKey);
-            
-            if (cachedRoute) {
-                return cachedRoute;
-            }
+    const cacheKey = `openroute_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
+    const cachedRoute = await localforage.getItem(cacheKey);
+    
+    if (cachedRoute) {
+        return cachedRoute;
+    }
 
-            await throttleRequest();
+    await throttleRequest();
 
-            const body = {
-                coordinates: points.map(p => [p.lon, p.lat]),
-                elevation: true
-            };
+    const body = {
+        coordinates: points.map(p => [p.lon, p.lat]),
+        elevation: true
+    };
 
-            try {
-                const response = await fetch(OPENROUTE_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': OPENROUTE_API_KEY
-                    },
-                    body: JSON.stringify(body)
-                });
+    try {
+        const response = await fetch(OPENROUTE_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': OPENROUTE_API_KEY
+            },
+            body: JSON.stringify(body)
+        });
 
-                if (!response.ok) {
-                    throw new Error('OpenRoute request failed');
-                }
-
-                const data = await response.json();
-                if (data.routes && data.routes.length > 0) {
-                    const route = data.routes[0].geometry.coordinates.map(coord => ({
-                        lat: coord[1],
-                        lon: coord[0],
-                        elevation: coord[2] || 0
-                    }));
-                    await localforage.setItem(cacheKey, route);
-                    return route;
-                }
-            } catch (error) {
-                console.error('Error fetching route from OpenRoute:', error);
-                throw error;
-            }
+        if (!response.ok) {
+            throw new Error(`OpenRoute request failed with status ${response.status}`);
         }
+
+        const data = await response.json();
+        console.log('OpenRouteService response:', data); // Log the entire response
+
+        if (!data.routes || !data.routes[0] || !data.routes[0].geometry || !data.routes[0].geometry.coordinates) {
+            throw new Error('Unexpected response structure from OpenRouteService');
+        }
+
+        const route = data.routes[0].geometry.coordinates.map(coord => ({
+            lat: coord[1],
+            lon: coord[0],
+            elevation: coord[2] || 0
+        }));
+        await localforage.setItem(cacheKey, route);
+        return route;
+    } catch (error) {
+        console.error('Error fetching route from OpenRoute:', error);
+        throw error;
+    }
+}
 
         async function throttleRequest() {
             const now = Date.now();
@@ -580,27 +584,37 @@
         }
 
         async function calculateCompleteRoute() {
-            let completeRoute = [];
-            let targetPoints = filteredCoordinates.filter(point => point.isTarget);
+    let completeRoute = [];
+    let targetPoints = filteredCoordinates.filter(point => point.isTarget);
 
+    try {
+        for (let i = 0; i < targetPoints.length - 1; i++) {
+            let start = targetPoints[i];
+            let end = targetPoints[i + 1];
             try {
-                for (let i = 0; i < targetPoints.length - 1; i++) {
-                    let start = targetPoints[i];
-                    let end = targetPoints[i + 1];
-                    let route = await getRouteFromOpenRoute([start, end]);
-                    completeRoute = completeRoute.concat(route);
-                }
-
-                document.getElementById('loadingModal').style.display = 'none';
-                animateVanAlongRoute(completeRoute, 0);
+                let route = await getRouteFromOpenRoute([start, end]);
+                completeRoute = completeRoute.concat(route);
             } catch (error) {
-                console.error('Error calculating route:', error);
-                alert('An error occurred while calculating the route. Please try again later.');
-                document.getElementById('loadingModal').style.display = 'none';
-                stopDriveRoute();
+                console.error(`Error calculating route segment ${i}:`, error);
+                // Optionally, you can try OSRM here as a fallback
+                // let route = await getRouteFromOSRM([start, end]);
+                // completeRoute = completeRoute.concat(route);
             }
         }
 
+        if (completeRoute.length === 0) {
+            throw new Error('Failed to calculate any route segments');
+        }
+
+        document.getElementById('loadingModal').style.display = 'none';
+        animateVanAlongRoute(completeRoute, 0);
+    } catch (error) {
+        console.error('Error calculating complete route:', error);
+        alert('An error occurred while calculating the route. Please try again later.');
+        document.getElementById('loadingModal').style.display = 'none';
+        stopDriveRoute();
+    }
+}
         function animateVanAlongRoute(route, step) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
