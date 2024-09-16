@@ -136,6 +136,16 @@
             text-align: center;
             line-height: 30px;
         }
+        #elevationGraph {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 100px;
+            background-color: rgba(255, 255, 255, 0.7);
+            border-radius: 5px;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
@@ -154,6 +164,7 @@
     </div>
 
     <div id="map"></div>
+    <canvas id="elevationGraph"></canvas>
     <div id="controls-overlay">
         <div id="controls-header" onclick="toggleControls()">
             <i class="fas fa-cog"></i>
@@ -248,13 +259,15 @@
                     iconAnchor: [15, 15]
                 })
             }).addTo(map);
+
+            initializeElevationGraph();
         }
 
-        function loadData() {
+        async function loadData() {
             Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
                 download: true,
                 header: true,
-                complete: function(results) {
+                complete: async function(results) {
                     routeCoordinates = results.data
                         .map(row => ({
                             lat: parseFloat(row.lat),
@@ -263,6 +276,13 @@
                         }))
                         .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
                         .sort((a, b) => a.time - b.time);
+
+                    // Fetch elevation data
+                    const elevationData = await fetchElevationData(routeCoordinates);
+                    routeCoordinates = routeCoordinates.map((point, index) => ({
+                        ...point,
+                        elevation: elevationData[index].elevation
+                    }));
 
                     identifyTargetPoints(routeCoordinates);
                     identifyStopPoints(routeCoordinates);
@@ -277,6 +297,29 @@
                     }
                 }
             });
+        }
+
+        async function fetchElevationData(coordinates) {
+            const BATCH_SIZE = 100; // Adjust based on API limitations
+            let allResults = [];
+
+            for (let i = 0; i < coordinates.length; i += BATCH_SIZE) {
+                const batch = coordinates.slice(i, i + BATCH_SIZE);
+                const url = 'https://api.open-elevation.com/api/v1/lookup';
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        locations: batch.map(coord => ({ latitude: coord.lat, longitude: coord.lon }))
+                    }),
+                });
+                const data = await response.json();
+                allResults = allResults.concat(data.results);
+            }
+
+            return allResults;
         }
 
         function toggleControls() {
@@ -310,6 +353,7 @@
                         lat: coordinates[i].lat,
                         lon: coordinates[i].lon,
                         time: coordinates[i].time,
+                        elevation: coordinates[i].elevation,
                         stopType: stopType
                     });
                 }
@@ -342,8 +386,7 @@
             clearMap();
 
             // Redraw points if they were visible
-            if (pointsVisible) {
-                showPoints();
+            if (pointsVisible) {showPoints();
             }
 
             // Redraw route if it was visible
@@ -448,6 +491,8 @@
                 if (stopPoint) {
                     addStopMarker(stopPoint);
                 }
+
+                updateElevationGraph(point);
 
                 animationTimeout = setTimeout(function() {
                     animateRoute(i + 1);
@@ -589,7 +634,6 @@
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
                 var nextPoint = route[step + 1] || route[step];
-                var angle = calculateAngle(point, nextPoint);
 
                 if (!vanMarker) {
                     vanMarker = L.marker(point, {
@@ -597,17 +641,11 @@
                             className: 'van-icon',
                             iconSize: [30, 30],
                             iconAnchor: [15, 15],
-                            html: '<i class="fas fa-shuttle-van" style="font-size: 30px; color: #4a4a4a; transform: rotate(' + angle + 'deg);"></i>'
+                            html: '<div style="background-color:#4a4a4a;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-shuttle-van"></i></div>'
                         })
                     }).addTo(map);
                 } else {
                     vanMarker.setLatLng(point);
-                    vanMarker.setIcon(L.divIcon({
-                        className: 'van-icon',
-                        iconSize: [30, 30],
-                        iconAnchor: [15, 15],
-                        html: '<i class="fas fa-shuttle-van" style="font-size: 30px; color: #4a4a4a; transform: rotate(' + angle + 'deg);"></i>'
-                    }));
                 }
                 routePath.addLatLng(point);
                 map.setView(point);
@@ -622,6 +660,8 @@
                     addStopMarker(stopPoint);
                 }
 
+                updateElevationGraph(interpolateElevation(point, route, step));
+
                 currentAnimationIndex = step;
                 var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint);
                 animationTimeout = setTimeout(function() {
@@ -630,6 +670,39 @@
             } else if (!driveRouteRunning) {
                 stopDriveRoute();
             }
+        }
+
+        function interpolateElevation(point, route, step) {
+            const prevWaypoint = findPreviousWaypoint(route, step);
+            const nextWaypoint = findNextWaypoint(route, step);
+
+            if (!prevWaypoint || !nextWaypoint) {
+                return prevWaypoint ? prevWaypoint.elevation : (nextWaypoint ? nextWaypoint.elevation : 0);
+            }
+
+            const totalDistance = distance(prevWaypoint, nextWaypoint);
+            const distanceToPoint = distance(prevWaypoint, point);
+            const ratio = distanceToPoint / totalDistance;
+
+            return prevWaypoint.elevation + (nextWaypoint.elevation - prevWaypoint.elevation) * ratio;
+        }
+
+        function findPreviousWaypoint(route, step) {
+            for (let i = step; i >= 0; i--) {
+                if (route[i].elevation !== undefined) {
+                    return route[i];
+                }
+            }
+            return null;
+        }
+
+        function findNextWaypoint(route, step) {
+            for (let i = step; i < route.length; i++) {
+                if (route[i].elevation !== undefined) {
+                    return route[i];
+                }
+            }
+            return null;
         }
 
         function addStopMarker(stopPoint) {
@@ -658,12 +731,6 @@
                 }).addTo(map);
                 stopMarkers.push(marker);
             }
-        }
-
-        function calculateAngle(point1, point2) {
-            var latDiff = point2[0] - point1[0];
-            var lngDiff = point2[1] - point1[1];
-            return (Math.atan2(lngDiff, latDiff) * 180 / Math.PI) - 90;
         }
 
         function calculateTimeToNextPoint(point1, point2) {
@@ -705,6 +772,59 @@
             var lon2 = point2.lon || point2[1];
             return Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lon2 - lon1, 2));
         }
+
+        // Elevation graph functions
+        let elevationGraphCtx;
+        let elevationData = [];
+        const GRAPH_WIDTH = 200;
+        const GRAPH_HEIGHT = 100;
+
+        function initializeElevationGraph() {
+            const canvas = document.getElementById('elevationGraph');
+            canvas.width = GRAPH_WIDTH;
+            canvas.height = GRAPH_HEIGHT;
+            elevationGraphCtx = canvas.getContext('2d');
+        }
+
+        function updateElevationGraph(currentElevation) {
+            elevationData.push(currentElevation);
+            if (elevationData.length > GRAPH_WIDTH) {
+                elevationData.shift();
+            }
+
+            elevationGraphCtx.clearRect(0, 0, GRAPH_WIDTH, GRAPH_HEIGHT);
+
+            // Draw background
+            elevationGraphCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            elevationGraphCtx.fillRect(0, 0, GRAPH_WIDTH, GRAPH_HEIGHT);
+
+            // Draw elevation line
+            elevationGraphCtx.beginPath();
+            elevationGraphCtx.moveTo(0, GRAPH_HEIGHT);
+
+            const maxElevation = Math.max(...elevationData, 3000);
+            const minElevation = Math.min(...elevationData, 0);
+
+            for (let i = 0; i < elevationData.length; i++) {
+                const x = i * (GRAPH_WIDTH / GRAPH_WIDTH);
+                const y = GRAPH_HEIGHT - ((elevationData[i] - minElevation) / (maxElevation - minElevation)) * GRAPH_HEIGHT;
+                elevationGraphCtx.lineTo(x, y);
+            }
+
+            elevationGraphCtx.strokeStyle = 'blue';
+            elevationGraphCtx.stroke();
+
+            // Draw Y-axis labels
+            elevationGraphCtx.fillStyle = 'black';
+            elevationGraphCtx.font = '10px Arial';
+            elevationGraphCtx.fillText(`${Math.round(maxElevation)}m`, 5, 15);
+            elevationGraphCtx.fillText(`${Math.round(minElevation)}m`, 5, GRAPH_HEIGHT - 5);
+
+            // Draw current elevation
+            elevationGraphCtx.fillStyle = 'red';
+            elevationGraphCtx.fillText(`Current: ${Math.round(currentElevation)}m`, GRAPH_WIDTH - 80, 15);
+        }
+
     </script>
 </body>
 </html>
