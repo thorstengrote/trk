@@ -263,6 +263,16 @@
             initializeElevationGraph();
         }
 
+        function toggleControls() {
+            var content = document.getElementById('controls-content');
+            content.classList.toggle('expanded');
+        }
+
+        function collapseControls() {
+            var content = document.getElementById('controls-content');
+            content.classList.remove('expanded');
+        }
+
         async function loadData() {
             Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
                 download: true,
@@ -320,16 +330,6 @@
             }
 
             return allResults;
-        }
-
-        function toggleControls() {
-            var content = document.getElementById('controls-content');
-            content.classList.toggle('expanded');
-        }
-
-        function collapseControls() {
-            var content = document.getElementById('controls-content');
-            content.classList.remove('expanded');
         }
 
         function identifyTargetPoints(coordinates) {
@@ -404,10 +404,21 @@
             stopMarkers = [];
         }
 
+        function formatPopupContent(point) {
+            const date = point.time.toLocaleDateString();
+            const time = point.time.toLocaleTimeString();
+            const elevation = point.elevation !== undefined ? `${Math.round(point.elevation)}m` : 'N/A';
+            return `Date: ${date}<br>Time: ${time}<br>Elevation: ${elevation}`;
+        }
+
         function togglePoints() {
             pointsVisible = !pointsVisible;
-            if (pointsVisible) showPoints();
-            else hidePoints();
+            if (pointsVisible) {
+                showPoints();
+                showStopPoints();
+            } else {
+                hidePoints();
+            }
             collapseControls();
         }
 
@@ -415,7 +426,7 @@
             hidePoints();
             filteredCoordinates.forEach(function(point) {
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""));
+                    .bindPopup(formatPopupContent(point));
                 markers.push(marker);
             });
             showStopPoints();
@@ -476,22 +487,12 @@
             if (i < filteredCoordinates.length && animationRunning) {
                 var point = filteredCoordinates[i];
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""))
+                    .bindPopup(formatPopupContent(point))
                     .openPopup();
                 markers.push(marker);
 
                 routePath.addLatLng([point.lat, point.lon]);
                 map.setView([point.lat, point.lon]);
-
-                // Check if we've reached a stop point
-                let stopPoint = stopPoints.find(stop => 
-                    Math.abs(stop.lat - point.lat) < 0.0001 && 
-                    Math.abs(stop.lon - point.lon) < 0.0001
-                );
-
-                if (stopPoint) {
-                    addStopMarker(stopPoint);
-                }
 
                 updateElevationGraph(point.elevation);
 
@@ -515,6 +516,7 @@
             routePath = L.polyline([], {color: 'blue'}).addTo(map);
             driveRouteRunning = true;
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
+            hidePoints(); // Hide all points when starting drive route
             calculateCompleteRoute();
         }
 
@@ -523,8 +525,10 @@
             clearTimeout(animationTimeout);
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Drive Route";
             if (vanMarker) map.removeLayer(vanMarker);
-            stopMarkers.forEach(marker => map.removeLayer(marker));
-            stopMarkers = [];
+            if (pointsVisible) {
+                showPoints();
+                showStopPoints();
+            }
         }
 
         async function getRouteFromOSRM(points) {
@@ -650,16 +654,6 @@
                 }
                 routePath.addLatLng(point);
                 map.setView(point);
-
-                // Check if we've reached a stop point
-                let stopPoint = stopPoints.find(stop => 
-                    Math.abs(stop.lat - point[0]) < 0.0001 && 
-                    Math.abs(stop.lon - point[1]) < 0.0001
-                );
-
-                if (stopPoint) {
-                    addStopMarker(stopPoint);
-                }
 
                 updateElevationGraph(interpolateElevation(point, route, step));
 
@@ -792,7 +786,6 @@
             if (elevationData.length > GRAPH_WIDTH) {
                 elevationData.shift();
             }
-
             elevationGraphCtx.clearRect(0, 0, GRAPH_WIDTH, GRAPH_HEIGHT);
 
             // Draw background
