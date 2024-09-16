@@ -197,7 +197,7 @@
     </div>
 
     <script>
-        var map;
+      var map;
         var routeCoordinates = [];
         var filteredCoordinates = [];
         var markers = [];
@@ -261,6 +261,17 @@
             }).addTo(map);
 
             initializeElevationGraph();
+        }
+
+        // Add the missing toggleControls function
+        function toggleControls() {
+            var content = document.getElementById('controls-content');
+            content.classList.toggle('expanded');
+        }
+
+        function collapseControls() {
+            var content = document.getElementById('controls-content');
+            content.classList.remove('expanded');
         }
 
         async function loadData() {
