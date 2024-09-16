@@ -522,7 +522,7 @@
             }
         }
 
-        async function getRouteFromOpenRoute(points) {
+    async function getRouteFromOpenRoute(points) {
     const cacheKey = `openroute_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
     const cachedRoute = await localforage.getItem(cacheKey);
     
@@ -552,17 +552,25 @@
         }
 
         const data = await response.json();
-        console.log('OpenRouteService response:', data); // Log the entire response
+        console.log('OpenRouteService response:', data); // Keep this log
 
-        if (!data.routes || !data.routes[0] || !data.routes[0].geometry || !data.routes[0].geometry.coordinates) {
+        if (!data.routes || !data.routes[0] || !data.routes[0].geometry) {
             throw new Error('Unexpected response structure from OpenRouteService');
         }
 
-        const route = data.routes[0].geometry.coordinates.map(coord => ({
-            lat: coord[1],
+        // Extract coordinates from the GeoJSON geometry
+        const coordinates = data.routes[0].geometry.coordinates;
+
+        if (!Array.isArray(coordinates) || coordinates.length === 0) {
+            throw new Error('No coordinates found in the route');
+        }
+
+        const route = coordinates.map(coord => ({
             lon: coord[0],
+            lat: coord[1],
             elevation: coord[2] || 0
         }));
+
         await localforage.setItem(cacheKey, route);
         return route;
     } catch (error) {
@@ -583,7 +591,7 @@
             lastRequestTime = Date.now();
         }
 
-        async function calculateCompleteRoute() {
+    async function calculateCompleteRoute() {
     let completeRoute = [];
     let targetPoints = filteredCoordinates.filter(point => point.isTarget);
 
@@ -597,8 +605,8 @@
             } catch (error) {
                 console.error(`Error calculating route segment ${i}:`, error);
                 // Optionally, you can try OSRM here as a fallback
-                // let route = await getRouteFromOSRM([start, end]);
-                // completeRoute = completeRoute.concat(route);
+                let route = await getRouteFromOSRM([start, end]);
+                completeRoute = completeRoute.concat(route);
             }
         }
 
