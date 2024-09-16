@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Map</title>
+    <title>Route Visualization</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
@@ -220,8 +220,6 @@
         var elevationChart;
 
         const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving/';
-        const OPENROUTE_URL = 'https://api.openrouteservice.org/v2/directions/driving-car';
-        const OPENROUTE_API_KEY = '5b3ce3597851110001cf6248c56af19b19b2427c9486702926df507d';
         const MAX_REQUESTS_PER_SECOND = 1;
         let lastRequestTime = 0;
 
@@ -492,6 +490,32 @@
             stopMarkers = [];
         }
 
+        async function calculateCompleteRoute() {
+            let completeRoute = [];
+            let targetPoints = filteredCoordinates.filter(point => point.isTarget);
+
+            try {
+                for (let i = 0; i < targetPoints.length - 1; i++) {
+                    let start = targetPoints[i];
+                    let end = targetPoints[i + 1];
+                    let route = await getRouteFromOSRM([start, end]);
+                    completeRoute = completeRoute.concat(route);
+                }
+
+                if (completeRoute.length === 0) {
+                    throw new Error('Failed to calculate any route segments');
+                }
+
+                document.getElementById('loadingModal').style.display = 'none';
+                animateVanAlongRoute(completeRoute, 0);
+            } catch (error) {
+                console.error('Error calculating complete route:', error);
+                alert('An error occurred while calculating the route. Please try again later.');
+                document.getElementById('loadingModal').style.display = 'none';
+                stopDriveRoute();
+            }
+        }
+
         async function getRouteFromOSRM(points) {
             const cacheKey = `route_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
             const cachedRoute = await localforage.getItem(cacheKey);
@@ -512,127 +536,19 @@
                 }
                 const data = await response.json();
                 if (data.routes && data.routes.length > 0) {
-                    const route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    const route = data.routes[0].geometry.coordinates.map(coord => ({
+                        lon: coord[0],
+                        lat: coord[1],
+                        elevation: estimateElevation(coord[1], coord[0], points[0], points[1])
+                    }));
                     await localforage.setItem(cacheKey, route);
                     return route;
                 }
             } catch (error) {
                 console.error('Error fetching route from OSRM:', error);
-                return getRouteFromOpenRoute(points);
+                throw error;
             }
         }
-
-    async function getRouteFromOpenRoute(points) {
-    const cacheKey = `openroute_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
-    const cachedRoute = await localforage.getItem(cacheKey);
-    
-    if (cachedRoute) {
-        return cachedRoute;
-    }
-
-    await throttleRequest();
-
-    const body = {
-        coordinates: points.map(p => [p.lon, p.lat]),
-        elevation: true
-    };
-
-    try {
-        const response = await fetch(OPENROUTE_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': OPENROUTE_API_KEY
-            },
-            body: JSON.stringify(body)
-        });
-
-        if (!response.ok) {
-            throw new Error(`OpenRoute request failed with status ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log('Full OpenRouteService response:', JSON.stringify(data, null, 2));
-
-        if (!data.routes || !data.routes[0] || !data.routes[0].geometry) {
-            throw new Error('Unexpected response structure from OpenRouteService');
-        }
-
-        let coordinates;
-        if (typeof data.routes[0].geometry === 'string') {
-            // If geometry is encoded polyline
-            coordinates = decodePolyline(data.routes[0].geometry).map(coord => ({
-                lon: coord[0],
-                lat: coord[1],
-                elevation: coord[2] || 0
-            }));
-        } else if (data.routes[0].geometry.coordinates) {
-            // If geometry is GeoJSON
-            coordinates = data.routes[0].geometry.coordinates.map(coord => ({
-                lon: coord[0],
-                lat: coord[1],
-                elevation: coord[2] || 0
-            }));
-        } else {
-            throw new Error('Unable to parse route geometry');
-        }
-
-        if (coordinates.length === 0) {
-            throw new Error('No coordinates found in the route');
-        }
-
-        await localforage.setItem(cacheKey, coordinates);
-        return coordinates;
-    } catch (error) {
-        console.error('Error fetching route from OpenRoute:', error);
-        throw error;
-    }
-}
-
-// Add this function to decode polyline if needed
-function decodePolyline(str, precision) {
-    var index = 0,
-        lat = 0,
-        lng = 0,
-        coordinates = [],
-        shift = 0,
-        result = 0,
-        byte = null,
-        latitude_change,
-        longitude_change,
-        factor = Math.pow(10, precision || 5);
-
-    while (index < str.length) {
-        byte = null;
-        shift = 0;
-        result = 0;
-
-        do {
-            byte = str.charCodeAt(index++) - 63;
-            result |= (byte & 0x1f) << shift;
-            shift += 5;
-        } while (byte >= 0x20);
-
-        latitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
-
-        shift = result = 0;
-
-        do {
-            byte = str.charCodeAt(index++) - 63;
-            result |= (byte & 0x1f) << shift;
-            shift += 5;
-        } while (byte >= 0x20);
-
-        longitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
-
-        lat += latitude_change;
-        lng += longitude_change;
-
-        coordinates.push([lng / factor, lat / factor]);
-    }
-
-    return coordinates;
-}
 
         async function throttleRequest() {
             const now = Date.now();
@@ -646,42 +562,14 @@ function decodePolyline(str, precision) {
             lastRequestTime = Date.now();
         }
 
-   async function calculateCompleteRoute() {
-    let completeRoute = [];
-    let targetPoints = filteredCoordinates.filter(point => point.isTarget);
-
-    try {
-        for (let i = 0; i < targetPoints.length - 1; i++) {
-            let start = targetPoints[i];
-            let end = targetPoints[i + 1];
-            try {
-                let route = await getRouteFromOpenRoute([start, end]);
-                completeRoute = completeRoute.concat(route);
-            } catch (error) {
-                console.error(`Error calculating route segment ${i} with OpenRouteService:`, error);
-                console.log('Falling back to OSRM for this segment');
-                let osrmRoute = await getRouteFromOSRM([start, end]);
-                completeRoute = completeRoute.concat(osrmRoute.map(coord => ({
-                    lat: coord[0],
-                    lon: coord[1],
-                    elevation: 0  // OSRM doesn't provide elevation data
-                })));
-            }
+        function estimateElevation(lat, lon, start, end) {
+            // Simple linear interpolation of elevation
+            const totalDist = distance({lat: start.lat, lon: start.lon}, {lat: end.lat, lon: end.lon});
+            const pointDist = distance({lat: start.lat, lon: start.lon}, {lat, lon});
+            const ratio = pointDist / totalDist;
+            return start.elevation + (end.elevation - start.elevation) * ratio;
         }
 
-        if (completeRoute.length === 0) {
-            throw new Error('Failed to calculate any route segments');
-        }
-
-        document.getElementById('loadingModal').style.display = 'none';
-        animateVanAlongRoute(completeRoute, 0);
-    } catch (error) {
-        console.error('Error calculating complete route:', error);
-        alert('An error occurred while calculating the route. Please try again later.');
-        document.getElementById('loadingModal').style.display = 'none';
-        stopDriveRoute();
-    }
-}
         function animateVanAlongRoute(route, step) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
@@ -699,13 +587,19 @@ function decodePolyline(str, precision) {
                 } else {
                     vanMarker.setLatLng([point.lat, point.lon]);
                 }
-                routePath.addLatLng([point.lat, point.lon]);
+
+                if (!routePath) {
+                    routePath = L.polyline([[point.lat, point.lon]], {color: 'blue'}).addTo(map);
+                } else {
+                    routePath.addLatLng([point.lat, point.lon]);
+                }
+
                 map.setView([point.lat, point.lon]);
 
-                // Check if we've reached a point of interest (pause/sleep/park)
-                let poi = findClosestPointOfInterest(point);
-                if (poi && !stopMarkers.some(m => m.getLatLng().equals([poi.lat, poi.lon]))) {
-                    addStopMarker(poi);
+                // Check if we've reached a stop point
+                let stopPoint = findClosestPointOfInterest(point);
+                if (stopPoint && !stopMarkers.some(m => m.getLatLng().equals([stopPoint.lat, stopPoint.lon]))) {
+                    addStopMarker(stopPoint);
                 }
 
                 updateElevationChart(point);
@@ -724,12 +618,20 @@ function decodePolyline(str, precision) {
             return stopPoints.reduce((closest, current) => {
                 const currentDistance = distance(point, current);
                 const closestDistance = closest ? distance(point, closest) : Infinity;
-                return currentDistance < closestDistance && currentDistance < 0.0001 ? current : closest;
+                return currentDistance < closestDistance && currentDistance < 0.001 ? current : closest;
             }, null);
         }
 
         function distance(point1, point2) {
-            return Math.sqrt(Math.pow(point2.lat - point1.lat, 2) + Math.pow(point2.lon - point1.lon, 2));
+            const R = 6371; // Radius of the Earth in km
+            const dLat = (point2.lat - point1.lat) * Math.PI / 180;
+            const dLon = (point2.lon - point1.lon) * Math.PI / 180;
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(point1.lat * Math.PI / 180) * Math.cos(point2.lat * Math.PI / 180) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c; // Distance in km
         }
 
         function addStopMarker(stopPoint) {
