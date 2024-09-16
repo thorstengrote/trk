@@ -636,7 +636,11 @@
                     addStopMarker(stopPoint);
                 }
 
-                updateElevationChart(point);
+                // Find the closest point in filteredCoordinates to get elevation data
+                let closestPoint = findClosestPoint(point, filteredCoordinates);
+                if (closestPoint) {
+                    updateElevationChart(closestPoint);
+                }
 
                 currentAnimationIndex = step;
                 var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint);
@@ -646,6 +650,20 @@
             } else if (!driveRouteRunning) {
                 stopDriveRoute();
             }
+        }
+
+        function findClosestPoint(point, points) {
+            return points.reduce((closest, current) => {
+                const currentDistance = distance(point, [current.lat, current.lon]);
+                const closestDistance = distance(point, [closest.lat, closest.lon]);
+                return currentDistance < closestDistance ? current : closest;
+            });
+        }
+
+        function distance(point1, point2) {
+            const [lat1, lon1] = point1;
+            const [lat2, lon2] = point2;
+            return Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lon2 - lon1, 2));
         }
 
         function addStopMarker(stopPoint) {
