@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Route Visualization</title>
+    <title>Map</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
@@ -9,7 +9,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
     <style>
         body { 
             font-family: Arial, sans-serif; 
@@ -137,17 +136,6 @@
             text-align: center;
             line-height: 30px;
         }
-        #elevationChart {
-            position: absolute;
-            bottom: 20px;
-            right: 10px;
-            background-color: rgba(255, 255, 255, 0.9);
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            z-index: 1000;
-            width: 300px;
-            height: 200px;
-        }
     </style>
 </head>
 <body>
@@ -196,9 +184,6 @@
             </div>
         </div>
     </div>
-    <div id="elevationChart">
-        <canvas id="elevationCanvas"></canvas>
-    </div>
 
     <script>
         var map;
@@ -217,9 +202,10 @@
         var stopMarkers = [];
         var homeMarker;
         var stopPoints = [];
-        var elevationChart;
 
         const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving/';
+        const OPENROUTE_URL = 'https://api.openrouteservice.org/v2/directions/driving-car';
+        const OPENROUTE_API_KEY = '5b3ce3597851110001cf6248c56af19b19b2427c9486702926df507d';
         const MAX_REQUESTS_PER_SECOND = 1;
         let lastRequestTime = 0;
 
@@ -234,8 +220,6 @@
 
             if (startDate) document.getElementById('startDate').value = startDate;
             if (endDate) document.getElementById('endDate').value = endDate;
-
-            initializeElevationChart();
         });
 
         function checkPassword() {
@@ -275,8 +259,7 @@
                         .map(row => ({
                             lat: parseFloat(row.lat),
                             lon: parseFloat(row.lon),
-                            time: new Date(row.time),
-                            elevation: parseFloat(row.elevation) || 0
+                            time: new Date(row.time)
                         }))
                         .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
                         .sort((a, b) => a.time - b.time);
@@ -388,7 +371,7 @@
             hidePoints();
             filteredCoordinates.forEach(function(point) {
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString());
+                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""));
                 markers.push(marker);
             });
             showStopPoints();
@@ -449,14 +432,22 @@
             if (i < filteredCoordinates.length && animationRunning) {
                 var point = filteredCoordinates[i];
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString())
+                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""))
                     .openPopup();
                 markers.push(marker);
 
                 routePath.addLatLng([point.lat, point.lon]);
                 map.setView([point.lat, point.lon]);
 
-                updateElevationChart(point);
+                // Check if we've reached a stop point
+                let stopPoint = stopPoints.find(stop => 
+                    Math.abs(stop.lat - point.lat) < 0.0001 && 
+                    Math.abs(stop.lon - point.lon) < 0.0001
+                );
+
+                if (stopPoint) {
+                    addStopMarker(stopPoint);
+                }
 
                 animationTimeout = setTimeout(function() {
                     animateRoute(i + 1);
@@ -490,146 +481,155 @@
             stopMarkers = [];
         }
 
-      async function calculateCompleteRoute() {
-    let completeRoute = [];
-    let targetPoints = filteredCoordinates.filter(point => point.isTarget);
-
-    try {
-        for (let i = 0; i < targetPoints.length - 1; i++) {
-            let start = targetPoints[i];
-            let end = targetPoints[i + 1];
-            let route = await getRouteFromOSRM([start, end]);
-            if (!route || route.length === 0) {
-                console.error(`No route found between points ${i} and ${i+1}`);
-                continue;
-            }
-            completeRoute = completeRoute.concat(route);
-        }
-
-        if (completeRoute.length === 0) {
-            throw new Error('Failed to calculate any route segments');
-        }
-
-        document.getElementById('loadingModal').style.display = 'none';
-        animateVanAlongRoute(completeRoute, 0);
-    } catch (error) {
-        console.error('Error calculating complete route:', error);
-        alert('An error occurred while calculating the route. Please try again later.');
-        document.getElementById('loadingModal').style.display = 'none';
-        stopDriveRoute();
-    }
-}
         async function getRouteFromOSRM(points) {
-    const cacheKey = `route_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
-    const cachedRoute = await localforage.getItem(cacheKey);
-    
-    if (cachedRoute) {
-        return cachedRoute;
-    }
+            const cacheKey = `route_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
+            const cachedRoute = await localforage.getItem(cacheKey);
+            
+            if (cachedRoute) {
+                return cachedRoute;
+            }
 
-    await throttleRequest();
+            await throttleRequest();
 
-    const coordinates = points.map(p => `${p.lon},${p.lat}`).join(';');
-    const url = `${OSRM_URL}${coordinates}?overview=full&geometries=geojson&continue_straight=true`;
+            const coordinates = points.map(p => `${p.lon},${p.lat}`).join(';');
+            const url = `${OSRM_URL}${coordinates}?overview=full&geometries=geojson&continue_straight=true`;
 
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error('OSRM request failed');
-        }
-        const data = await response.json();
-        if (data.routes && data.routes.length > 0) {
-            const route = data.routes[0].geometry.coordinates.map(coord => ({
-                lat: coord[1],
-                lon: coord[0],
-                elevation: estimateElevation(coord[1], coord[0], points[0], points[1])
-            }));
-            await localforage.setItem(cacheKey, route);
-            return route;
-        } else {
-            throw new Error('No route found in OSRM response');
-        }
-    } catch (error) {
-        console.error('Error fetching route from OSRM:', error);
-        throw error;
-    }
-}
-
-        function estimateElevation(lat, lon, start, end) {
-            // Simple linear interpolation of elevation
-            const totalDist = distance({lat: start.lat, lon: start.lon}, {lat: end.lat, lon: end.lon});
-            const pointDist = distance({lat: start.lat, lon: start.lon}, {lat, lon});
-            const ratio = pointDist / totalDist;
-            return start.elevation + (end.elevation - start.elevation) * ratio;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error('OSRM request failed');
+                }
+                const data = await response.json();
+                if (data.routes && data.routes.length > 0) {
+                    const route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    await localforage.setItem(cacheKey, route);
+                    return route;
+                }
+            } catch (error) {
+                console.error('Error fetching route from OSRM:', error);
+                return getRouteFromOpenRoute(points);
+            }
         }
 
-       function animateVanAlongRoute(route, step) {
-    if (step < route.length && driveRouteRunning) {
-        var point = route[step];
-        var nextPoint = route[step + 1] || route[step];
+        async function getRouteFromOpenRoute(points) {
+            const cacheKey = `openroute_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
+            const cachedRoute = await localforage.getItem(cacheKey);
+            
+            if (cachedRoute) {
+                return cachedRoute;
+            }
 
-        if (!point.lat || !point.lon) {
-            console.error('Invalid point:', point);
-            animateVanAlongRoute(route, step + 1);
-            return;
+            await throttleRequest();
+
+            const body = {
+                coordinates: points.map(p => [p.lon, p.lat])
+            };
+
+            try {
+                const response = await fetch(OPENROUTE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': OPENROUTE_API_KEY
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    throw new Error('OpenRoute request failed');
+                }
+
+                const data = await response.json();
+                if (data.routes && data.routes.length > 0) {
+                    const route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    await localforage.setItem(cacheKey, route);
+                    return route;
+                }
+            } catch (error) {
+                console.error('Error fetching route from OpenRoute:', error);
+                throw error;
+            }
         }
 
-        if (!vanMarker) {
-            vanMarker = L.marker([point.lat, point.lon], {
-                icon: L.divIcon({
-                    className: 'van-icon',
-                    iconSize: [30, 30],
-                    iconAnchor: [15, 15],
-                    html: '<div style="background-color:#4a4a4a;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-circle"></i></div>'
-                })
-            }).addTo(map);
-        } else {
-            vanMarker.setLatLng([point.lat, point.lon]);
+        async function throttleRequest() {
+            const now = Date.now();
+            const timeSinceLastRequest = now - lastRequestTime;
+            const timeToWait = Math.max(0, 1000 / MAX_REQUESTS_PER_SECOND - timeSinceLastRequest);
+            
+            if (timeToWait > 0) {
+                await new Promise(resolve => setTimeout(resolve, timeToWait));
+            }
+            
+            lastRequestTime = Date.now();
         }
 
-        if (!routePath) {
-            routePath = L.polyline([[point.lat, point.lon]], {color: 'blue'}).addTo(map);
-        } else {
-            routePath.addLatLng([point.lat, point.lon]);
+        async function calculateCompleteRoute() {
+            let completeRoute = [];
+            let targetPoints = filteredCoordinates.filter(point => point.isTarget);
+
+            try {
+                for (let i = 0; i < targetPoints.length - 1; i++) {
+                    let start = targetPoints[i];
+                    let end = targetPoints[i + 1];
+                    let route = await getRouteFromOSRM([start, end]);
+                    completeRoute = completeRoute.concat(route);
+                }
+
+                document.getElementById('loadingModal').style.display = 'none';
+                animateVanAlongRoute(completeRoute, 0);
+            } catch (error) {
+                console.error('Error calculating route:', error);
+                alert('An error occurred while calculating the route. Please try again later.');
+                document.getElementById('loadingModal').style.display = 'none';
+                stopDriveRoute();
+            }
         }
 
-        map.setView([point.lat, point.lon]);
+        function animateVanAlongRoute(route, step) {
+            if (step < route.length && driveRouteRunning) {
+                var point = route[step];
+                var nextPoint = route[step + 1] || route[step];
+                var angle = calculateAngle(point, nextPoint);
 
-        // Check if we've reached a stop point
-        let stopPoint = findClosestPointOfInterest(point);
-        if (stopPoint && !stopMarkers.some(m => m.getLatLng().equals([stopPoint.lat, stopPoint.lon]))) {
-            addStopMarker(stopPoint);
-        }
+                if (!vanMarker) {
+                    vanMarker = L.marker(point, {
+                        icon: L.divIcon({
+                            className: 'van-icon',
+                            iconSize: [30, 30],
+                            iconAnchor: [15, 15],
+                            html: '<i class="fas fa-shuttle-van" style="font-size: 30px; color: #4a4a4a; transform: rotate(' + angle + 'deg);"></i>'
+                        })
+                    }).addTo(map);
+                } else {
+                    vanMarker.setLatLng(point);
+                    vanMarker.setIcon(L.divIcon({
+                        className: 'van-icon',
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15],
+                        html: '<i class="fas fa-shuttle-van" style="font-size: 30px; color: #4a4a4a; transform: rotate(' + angle + 'deg);"></i>'
+                    }));
+                }
+                routePath.addLatLng(point);
+                map.setView(point);
 
-        updateElevationChart(point);
+                // Check if we've reached a stop point
+                let stopPoint = stopPoints.find(stop => 
+                    Math.abs(stop.lat - point[0]) < 0.0001 && 
+                    Math.abs(stop.lon - point[1]) < 0.0001
+                );
 
-        currentAnimationIndex = step;
-        var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint);
-        animationTimeout = setTimeout(function() {
-            animateVanAlongRoute(route, step + 1);
-        }, timeToNextPoint);
-    } else if (!driveRouteRunning) {
-        stopDriveRoute();
-    }
-}
-        function findClosestPointOfInterest(point) {
-            return stopPoints.reduce((closest, current) => {
-                const currentDistance = distance(point, current);
-                const closestDistance = closest ? distance(point, closest) : Infinity;
-                return currentDistance < closestDistance && currentDistance < 0.001 ? current : closest;
-            }, null);
-        }
+                if (stopPoint) {
+                    addStopMarker(stopPoint);
+                }
 
-        function distance(point1, point2) {
-            const R = 6371; // Radius of the Earth in km
-            const dLat = (point2.lat - point1.lat) * Math.PI / 180;
-            const dLon = (point2.lon - point1.lon) * Math.PI / 180;
-            const a = 
-                Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(point1.lat * Math.PI / 180) * Math.cos(point2.lat * Math.PI / 180) * 
-                Math.sin(dLon/2) * Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c; // Distance in km
+                currentAnimationIndex = step;
+                var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint);
+                animationTimeout = setTimeout(function() {
+                    animateVanAlongRoute(route, step + 1);
+                }, timeToNextPoint);
+            } else if (!driveRouteRunning) {
+                stopDriveRoute();
+            }
         }
 
         function addStopMarker(stopPoint) {
@@ -647,19 +647,27 @@
                     break;
             }
 
-            let marker = L.marker([stopPoint.lat, stopPoint.lon], {
-                icon: L.divIcon({
-                    className: 'custom-div-icon',
-                    html: markerIcon,
-                    iconSize: [30, 30],
-                    iconAnchor: [15, 15]
-                })
-            }).addTo(map);
-            stopMarkers.push(marker);
+            if (!stopMarkers.some(m => m.getLatLng().equals([stopPoint.lat, stopPoint.lon]))) {
+                let marker = L.marker([stopPoint.lat, stopPoint.lon], {
+                    icon: L.divIcon({
+                        className: 'custom-div-icon',
+                        html: markerIcon,
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    })
+                }).addTo(map);
+                stopMarkers.push(marker);
+            }
+        }
+
+        function calculateAngle(point1, point2) {
+            var latDiff = point2[0] - point1[0];
+            var lngDiff = point2[1] - point1[1];
+            return (Math.atan2(lngDiff, latDiff) * 180 / Math.PI) - 90;
         }
 
         function calculateTimeToNextPoint(point1, point2) {
-            var distance = map.distance([point1.lat, point1.lon], [point2.lat, point2.lon]);
+            var distance = map.distance(point1, point2);
             return (distance / (speed * 1000)) * 1000; // Convert to milliseconds
         }
 
@@ -690,57 +698,12 @@
             shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
         }
 
-        function initializeElevationChart() {
-            var ctx = document.getElementById('elevationCanvas').getContext('2d');
-            elevationChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Elevation (m)',
-                        data: [],
-                        borderColor: 'rgb(75, 192, 192)',
-                        tension: 0.1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            max: 2500,
-                            title: {
-                                display: true,
-                                text: 'Elevation (m)'
-                            }
-                        },
-                        x: {
-                            display: false
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    }
-                }
-            });
-        }
-
-        function updateElevationChart(point) {
-            const windowSize = 100; // Increased window size for a broader view
-            const currentData = elevationChart.data;
-            
-            currentData.labels.push('');
-            currentData.datasets[0].data.push(point.elevation);
-
-            if (currentData.labels.length > windowSize) {
-                currentData.labels.shift();
-                currentData.datasets[0].data.shift();
-            }
-
-            elevationChart.update();
+        function distance(point1, point2) {
+            var lat1 = point1.lat || point1[0];
+            var lon1 = point1.lon || point1[1];
+            var lat2 = point2.lat || point2[0];
+            var lon2 = point2.lon || point2[1];
+            return Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lon2 - lon1, 2));
         }
     </script>
 </body>
