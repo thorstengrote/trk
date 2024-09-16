@@ -458,16 +458,6 @@
                 routePath.addLatLng([point.lat, point.lon]);
                 map.setView([point.lat, point.lon]);
 
-                // Check if we've reached a stop point
-                let stopPoint = stopPoints.find(stop => 
-                    Math.abs(stop.lat - point.lat) < 0.0001 && 
-                    Math.abs(stop.lon - point.lon) < 0.0001
-                );
-
-                if (stopPoint) {
-                    addStopMarker(stopPoint);
-                }
-
                 updateElevationChart(point);
 
                 animationTimeout = setTimeout(function() {
@@ -543,7 +533,8 @@
             await throttleRequest();
 
             const body = {
-                coordinates: points.map(p => [p.lon, p.lat])
+                coordinates: points.map(p => [p.lon, p.lat]),
+                elevation: true
             };
 
             try {
@@ -562,7 +553,11 @@
 
                 const data = await response.json();
                 if (data.routes && data.routes.length > 0) {
-                    const route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    const route = data.routes[0].geometry.coordinates.map(coord => ({
+                        lat: coord[1],
+                        lon: coord[0],
+                        elevation: coord[2] || 0
+                    }));
                     await localforage.setItem(cacheKey, route);
                     return route;
                 }
@@ -592,7 +587,7 @@
                 for (let i = 0; i < targetPoints.length - 1; i++) {
                     let start = targetPoints[i];
                     let end = targetPoints[i + 1];
-                    let route = await getRouteFromOSRM([start, end]);
+                    let route = await getRouteFromOpenRoute([start, end]);
                     completeRoute = completeRoute.concat(route);
                 }
 
@@ -612,7 +607,7 @@
                 var nextPoint = route[step + 1] || route[step];
 
                 if (!vanMarker) {
-                    vanMarker = L.marker(point, {
+                    vanMarker = L.marker([point.lat, point.lon], {
                         icon: L.divIcon({
                             className: 'van-icon',
                             iconSize: [30, 30],
@@ -621,10 +616,10 @@
                         })
                     }).addTo(map);
                 } else {
-                    vanMarker.setLatLng(point);
+                    vanMarker.setLatLng([point.lat, point.lon]);
                 }
-                routePath.addLatLng(point);
-                map.setView(point);
+                routePath.addLatLng([point.lat, point.lon]);
+                map.setView([point.lat, point.lon]);
 
                 // Check if we've reached a point of interest (pause/sleep/park)
                 let poi = findClosestPointOfInterest(point);
@@ -632,11 +627,7 @@
                     addStopMarker(poi);
                 }
 
-                // Find the closest point in filteredCoordinates to get elevation data
-                let closestPoint = findClosestPoint(point, filteredCoordinates);
-                if (closestPoint) {
-                    updateElevationChart(closestPoint);
-                }
+                updateElevationChart(point);
 
                 currentAnimationIndex = step;
                 var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint);
@@ -650,24 +641,14 @@
 
         function findClosestPointOfInterest(point) {
             return stopPoints.reduce((closest, current) => {
-                const currentDistance = distance(point, [current.lat, current.lon]);
-                const closestDistance = closest ? distance(point, [closest.lat, closest.lon]) : Infinity;
+                const currentDistance = distance(point, current);
+                const closestDistance = closest ? distance(point, closest) : Infinity;
                 return currentDistance < closestDistance && currentDistance < 0.0001 ? current : closest;
             }, null);
         }
 
-        function findClosestPoint(point, points) {
-            return points.reduce((closest, current) => {
-                const currentDistance = distance(point, [current.lat, current.lon]);
-                const closestDistance = distance(point, [closest.lat, closest.lon]);
-                return currentDistance < closestDistance ? current : closest;
-            });
-        }
-
         function distance(point1, point2) {
-            const [lat1, lon1] = point1;
-            const [lat2, lon2] = point2;
-            return Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lon2 - lon1, 2));
+            return Math.sqrt(Math.pow(point2.lat - point1.lat, 2) + Math.pow(point2.lon - point1.lon, 2));
         }
 
         function addStopMarker(stopPoint) {
@@ -697,7 +678,7 @@
         }
 
         function calculateTimeToNextPoint(point1, point2) {
-            var distance = map.distance(point1, point2);
+            var distance = map.distance([point1.lat, point1.lon], [point2.lat, point2.lon]);
             return (distance / (speed * 1000)) * 1000; // Convert to milliseconds
         }
 
