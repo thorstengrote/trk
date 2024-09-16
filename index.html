@@ -552,31 +552,86 @@
         }
 
         const data = await response.json();
-        console.log('OpenRouteService response:', data); // Keep this log
+        console.log('Full OpenRouteService response:', JSON.stringify(data, null, 2));
 
         if (!data.routes || !data.routes[0] || !data.routes[0].geometry) {
             throw new Error('Unexpected response structure from OpenRouteService');
         }
 
-        // Extract coordinates from the GeoJSON geometry
-        const coordinates = data.routes[0].geometry.coordinates;
+        let coordinates;
+        if (typeof data.routes[0].geometry === 'string') {
+            // If geometry is encoded polyline
+            coordinates = decodePolyline(data.routes[0].geometry).map(coord => ({
+                lon: coord[0],
+                lat: coord[1],
+                elevation: coord[2] || 0
+            }));
+        } else if (data.routes[0].geometry.coordinates) {
+            // If geometry is GeoJSON
+            coordinates = data.routes[0].geometry.coordinates.map(coord => ({
+                lon: coord[0],
+                lat: coord[1],
+                elevation: coord[2] || 0
+            }));
+        } else {
+            throw new Error('Unable to parse route geometry');
+        }
 
-        if (!Array.isArray(coordinates) || coordinates.length === 0) {
+        if (coordinates.length === 0) {
             throw new Error('No coordinates found in the route');
         }
 
-        const route = coordinates.map(coord => ({
-            lon: coord[0],
-            lat: coord[1],
-            elevation: coord[2] || 0
-        }));
-
-        await localforage.setItem(cacheKey, route);
-        return route;
+        await localforage.setItem(cacheKey, coordinates);
+        return coordinates;
     } catch (error) {
         console.error('Error fetching route from OpenRoute:', error);
         throw error;
     }
+}
+
+// Add this function to decode polyline if needed
+function decodePolyline(str, precision) {
+    var index = 0,
+        lat = 0,
+        lng = 0,
+        coordinates = [],
+        shift = 0,
+        result = 0,
+        byte = null,
+        latitude_change,
+        longitude_change,
+        factor = Math.pow(10, precision || 5);
+
+    while (index < str.length) {
+        byte = null;
+        shift = 0;
+        result = 0;
+
+        do {
+            byte = str.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20);
+
+        latitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+
+        shift = result = 0;
+
+        do {
+            byte = str.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20);
+
+        longitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+
+        lat += latitude_change;
+        lng += longitude_change;
+
+        coordinates.push([lng / factor, lat / factor]);
+    }
+
+    return coordinates;
 }
 
         async function throttleRequest() {
@@ -591,7 +646,7 @@
             lastRequestTime = Date.now();
         }
 
-    async function calculateCompleteRoute() {
+   async function calculateCompleteRoute() {
     let completeRoute = [];
     let targetPoints = filteredCoordinates.filter(point => point.isTarget);
 
@@ -603,10 +658,14 @@
                 let route = await getRouteFromOpenRoute([start, end]);
                 completeRoute = completeRoute.concat(route);
             } catch (error) {
-                console.error(`Error calculating route segment ${i}:`, error);
-                // Optionally, you can try OSRM here as a fallback
-                let route = await getRouteFromOSRM([start, end]);
-                completeRoute = completeRoute.concat(route);
+                console.error(`Error calculating route segment ${i} with OpenRouteService:`, error);
+                console.log('Falling back to OSRM for this segment');
+                let osrmRoute = await getRouteFromOSRM([start, end]);
+                completeRoute = completeRoute.concat(osrmRoute.map(coord => ({
+                    lat: coord[0],
+                    lon: coord[1],
+                    elevation: 0  // OSRM doesn't provide elevation data
+                })));
             }
         }
 
