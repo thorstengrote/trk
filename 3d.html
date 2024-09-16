@@ -283,6 +283,7 @@
                         .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
                         .sort((a, b) => a.time - b.time);
 
+                    identifyTargetPoints(routeCoordinates);
                     identifyStopPoints(routeCoordinates);
                     updateDateRange();
 
@@ -305,6 +306,17 @@
         function collapseControls() {
             var content = document.getElementById('controls-content');
             content.classList.remove('expanded');
+        }
+
+        function identifyTargetPoints(coordinates) {
+            for (let i = 0; i < coordinates.length; i++) {
+                if (i === 0) {
+                    coordinates[i].isTarget = true;
+                } else {
+                    const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
+                    coordinates[i].isTarget = timeDiff > 30;
+                }
+            }
         }
 
         function identifyStopPoints(coordinates) {
@@ -574,11 +586,12 @@
 
         async function calculateCompleteRoute() {
             let completeRoute = [];
+            let targetPoints = filteredCoordinates.filter(point => point.isTarget);
 
             try {
-                for (let i = 0; i < filteredCoordinates.length - 1; i++) {
-                    let start = filteredCoordinates[i];
-                    let end = filteredCoordinates[i + 1];
+                for (let i = 0; i < targetPoints.length - 1; i++) {
+                    let start = targetPoints[i];
+                    let end = targetPoints[i + 1];
                     let route = await getRouteFromOSRM([start, end]);
                     completeRoute = completeRoute.concat(route);
                 }
