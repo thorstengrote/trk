@@ -386,7 +386,8 @@
             clearMap();
 
             // Redraw points if they were visible
-            if (pointsVisible) {showPoints();
+            if (pointsVisible) {
+                showPoints();
             }
 
             // Redraw route if it was visible
@@ -492,7 +493,7 @@
                     addStopMarker(stopPoint);
                 }
 
-                updateElevationGraph(point);
+                updateElevationGraph(point.elevation);
 
                 animationTimeout = setTimeout(function() {
                     animateRoute(i + 1);
@@ -824,7 +825,6 @@
             elevationGraphCtx.fillStyle = 'red';
             elevationGraphCtx.fillText(`Current: ${Math.round(currentElevation)}m`, GRAPH_WIDTH - 80, 15);
         }
-
     </script>
 </body>
 </html>
