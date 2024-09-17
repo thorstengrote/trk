@@ -1,3 +1,6 @@
+// This should be at the top of the file, outside of any function
+let lastRequestTime = 0;
+
 /**
  * Calculate the distance between two geographic points.
  * @param {Object} point1 - The first point with lat and lon properties.
@@ -119,3 +122,5 @@ window.throttleRequest = throttleRequest;
 window.formatDate = formatDate;
 window.formatTime = formatTime;
 window.createCustomIcon = createCustomIcon;
+// Make sure this is included in the exports at the bottom of the file
+window.throttleRequest = throttleRequest;
