@@ -1,17 +1,161 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPS Tracker</title>
+    <title>Map</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
-    <link rel="stylesheet" href="styles.css">
-    <link rel="icon" type="image/x-icon" href="https://thorstengrote.github.io/trk/favicon.ico">
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 0; 
+        }
+        #map { 
+            height: 100vh; 
+            width: 100%; 
+        }
+        #controls-overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+            max-width: 300px;
+            transition: all 0.3s ease;
+        }
+        #controls-header {
+            padding: 10px;
+            cursor: pointer;
+            background-color: #4a4a4a;
+            color: white;
+            border-radius: 5px 5px 0 0;
+            text-align: center;
+        }
+        #controls-content {
+            padding: 10px;
+            display: none;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        #controls-content.expanded {
+            display: block;
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        button {
+            width: 100%;
+            padding: 5px;
+            margin-top: 5px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+
+        #passwordOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        #passwordForm {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        #passwordInput {
+            width: 100%;
+            padding: 5px;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        #loadingModal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 300px;
+            text-align: center;
+            border-radius: 5px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .leaflet-div-icon {
+            background: none;
+            border: none;
+        }
+        .van-icon {
+            background: none;
+            border: none;
+        }
+        .van-icon i {
+            display: block;
+            text-align: center;
+            line-height: 30px;
+        }
+        #elevation-chart {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 100px;
+            background-color: rgba(255, 255, 255, 0.7);
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            z-index: 1000;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
 </head>
+
 <body>
     <div id="passwordOverlay">
         <div id="passwordForm">
@@ -28,7 +172,6 @@
     </div>
 
     <div id="map"></div>
-    <canvas id="elevationGraph"></canvas>
     <div id="controls-overlay">
         <div id="controls-header" onclick="toggleControls()">
             <i class="fas fa-cog"></i>
@@ -59,24 +202,190 @@
             </div>
         </div>
     </div>
+    
+    <div id="elevation-chart">
+        <canvas id="elevationCanvas"></canvas>
+    </div>
 
-    <script src="utils.js"></script>
-    <script src="elevation.js"></script>
-    <script src="map.js"></script>
     <script>
-        // Debug logging
-        console.log("Available functions:");
-        console.log("toggleAnimation:", typeof window.toggleAnimation);
-        console.log("togglePoints:", typeof window.togglePoints);
-        console.log("toggleRoute:", typeof window.toggleRoute);
-        console.log("toggleDriveRoute:", typeof window.toggleDriveRoute);
-        console.log("startAnimation:", typeof window.startAnimation);
-        console.log("stopAnimation:", typeof window.stopAnimation);
-        console.log("checkPassword:", typeof window.checkPassword);
-        console.log("toggleControls:", typeof window.toggleControls);
-        console.log("updateSpeed:", typeof window.updateSpeed);
-        console.log("updateDateRange:", typeof window.updateDateRange);
-        console.log("generateShareLink:", typeof window.generateShareLink);
+        var map;
+        var routeCoordinates = [];
+        var filteredCoordinates = [];
+        var markers = [];
+        var speed = 20; // km/s
+        var routePath;
+        var routeVisible = false;
+        var pointsVisible = false;
+        var animationRunning = false;
+        var currentAnimationIndex = 0;
+        var animationTimeout;
+        var driveRouteRunning = false;
+        var vanMarker;
+        var stopMarkers = [];
+        var homeMarker;
+        var stopPoints = [];
+        var poiMarkers = [];
+        var elevationData = []; // Array to store elevation data
+
+        const HOME_COORDINATES = [50.7852, 7.0141]; // Coordinates for Altmühlstr., 53332 Bornheim, Germany
+
+        // Canvas setup for elevation chart
+        const canvas = document.getElementById('elevationCanvas');
+        const ctx = canvas.getContext('2d');
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('passwordOverlay').style.display = 'flex';
+        });
+
+        function checkPassword() {
+            var password = document.getElementById('passwordInput').value;
+            if (password === 'thorsten') {
+                document.getElementById('passwordOverlay').style.display = 'none';
+                initializeMap();
+                loadData();
+            } else {
+                alert('Incorrect password');
+            }
+        }
+
+        function initializeMap() {
+            map = L.map('map').setView(HOME_COORDINATES, 10);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            homeMarker = L.marker(HOME_COORDINATES, {
+                icon: L.divIcon({
+                    className: 'custom-div-icon',
+                    html: '<div style="background-color:#FF5733;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-home"></i></div>',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            }).addTo(map);
+        }
+
+        function loadData() {
+            Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
+                download: true,
+                header: true,
+                complete: function(results) {
+                    routeCoordinates = results.data
+                        .map(row => ({
+                            lat: parseFloat(row.lat),
+                            lon: parseFloat(row.lon),
+                            elevation: parseFloat(row.elevation), // Get elevation data
+                            time: new Date(row.time)
+                        }))
+                        .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
+                        .sort((a, b) => a.time - b.time);
+
+                    updateDateRange();
+                }
+            });
+        }
+
+        function updateDateRange() {
+            let startDate = document.getElementById('startDate').value;
+            let endDate = document.getElementById('endDate').value;
+            filteredCoordinates = filterRouteByDateRange(startDate, endDate);
+
+            clearMap();
+            if (pointsVisible) showPoints();
+            if (routeVisible) showRoute();
+        }
+
+        function clearMap() {
+            if (routePath) map.removeLayer(routePath);
+            markers.forEach(marker => map.removeLayer(marker));
+            stopMarkers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+            stopMarkers = [];
+        }
+
+        function toggleDriveRoute() {
+            if (driveRouteRunning) stopDriveRoute();
+            else startDriveRoute();
+        }
+
+        function startDriveRoute() {
+            driveRouteRunning = true;
+            calculateCompleteRoute();
+        }
+
+        function stopDriveRoute() {
+            driveRouteRunning = false;
+            if (vanMarker) map.removeLayer(vanMarker);
+            stopMarkers.forEach(marker => map.removeLayer(marker));
+            stopMarkers = [];
+        }
+
+        function calculateCompleteRoute() {
+            let completeRoute = [];
+            let pointsOfInterest = filteredCoordinates.filter(point => point.isTarget); // Points of interest
+
+            completeRoute = pointsOfInterest.map(point => [point.lat, point.lon]);
+            animateVanAlongRoute(completeRoute, 0);
+        }
+
+        function animateVanAlongRoute(route, step) {
+            if (step < route.length && driveRouteRunning) {
+                var point = route[step];
+                var nextPoint = route[step + 1] || route[step];
+                updateElevationChart(step);
+
+                if (!vanMarker) {
+                    vanMarker = L.marker(point, {
+                        icon: L.divIcon({
+                            className: 'van-icon',
+                            iconSize: [30, 30],
+                            iconAnchor: [15, 15],
+                            html: '<i class="fas fa-circle"></i>' // Non-turning circle icon
+                        })
+                    }).addTo(map);
+                } else {
+                    vanMarker.setLatLng(point);
+                }
+
+                map.setView(point);
+
+                currentAnimationIndex = step;
+                animationTimeout = setTimeout(function() {
+                    animateVanAlongRoute(route, step + 1);
+                }, 1000);
+            } else if (!driveRouteRunning) {
+                stopDriveRoute();
+            }
+        }
+
+        function updateElevationChart(step) {
+            const point = filteredCoordinates[step];
+            if (point && !isNaN(point.elevation)) {
+                elevationData.push(point.elevation);
+                if (elevationData.length > 50) elevationData.shift(); // Keep last 50 data points
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                ctx.beginPath();
+                ctx.moveTo(0, canvas.height - elevationData[0] / 3000 * canvas.height);
+                for (let i = 1; i < elevationData.length; i++) {
+                    ctx.lineTo(i / elevationData.length * canvas.width, canvas.height - elevationData[i] / 3000 * canvas.height);
+                }
+                ctx.strokeStyle = 'blue';
+                ctx.stroke();
+            }
+        }
+
+        function filterRouteByDateRange(startDate, endDate) {
+            if (!startDate || !endDate) return routeCoordinates;
+            return routeCoordinates.filter(point => {
+                return point.time >= new Date(startDate) && point.time <= new Date(endDate);
+            });
+        }
     </script>
 </body>
 </html>
+
+function toggleControls() {
+    var content = document.getElementById('controls-content');
+    content.classList.toggle('expanded');
+}
