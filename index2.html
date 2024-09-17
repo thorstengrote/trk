@@ -1,0 +1,178 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Improved Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 5px;
+            padding: 10px;
+            max-width: 300px;
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        button {
+            padding: 5px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="controls">
+        <div class="control-group">
+            <label for="speedRange">Playback Speed (km/s):</label>
+            <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
+            <span id="speedValue">20</span> km/s
+        </div>
+        <div class="control-group">
+            <button onclick="togglePoints()">Show Points</button>
+            <button onclick="startAnimation()">Start Animation</button>
+            <button onclick="showRoute()">Show Route</button>
+        </div>
+    </div>
+
+    <script>
+        var map;
+        var routeCoordinates = [];
+        var markers = [];
+        var routePath;
+        var animationIndex = 0;
+        var animationTimeout;
+        var speed = 20;
+        var stopMarkers = [];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeMap();
+            loadData();
+        });
+
+        function initializeMap() {
+            map = L.map('map').setView([50.7852, 7.0141], 10);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+        }
+
+        function loadData() {
+            // Assuming data is loaded from a CSV or API (for simplicity, using hardcoded values)
+            routeCoordinates = [
+                { lat: 50.785249, lon: 7.014122, time: '2024-09-04T06:00:03Z' },
+                { lat: 50.761792, lon: 7.030375, time: '2024-09-07T05:30:06Z' },
+                { lat: 50.759415, lon: 7.037266, time: '2024-09-07T05:45:04Z' },
+                // Add more points as needed
+            ];
+            identifyStops(routeCoordinates);
+        }
+
+        function identifyStops(coordinates) {
+            const stopPoints = [];
+            const sleepThreshold = 480; // 8 hours
+            const parkingThreshold = 120; // 2 hours
+            const coffeeBreakThreshold = 25; // 25 minutes
+
+            for (let i = 1; i < coordinates.length; i++) {
+                const timeDiff = (new Date(coordinates[i].time) - new Date(coordinates[i - 1].time)) / (1000 * 60); // Time diff in minutes
+                let stopType = '';
+
+                if (timeDiff >= sleepThreshold) {
+                    stopType = 'Sleeping';
+                } else if (timeDiff >= parkingThreshold) {
+                    stopType = 'Parking';
+                } else if (timeDiff >= coffeeBreakThreshold) {
+                    stopType = 'Coffee Break';
+                } else {
+                    stopType = 'Moving';
+                }
+
+                stopPoints.push({ lat: coordinates[i - 1].lat, lon: coordinates[i - 1].lon, stopType: stopType });
+            }
+
+            // Display stops on the map
+            stopPoints.forEach(point => {
+                const icon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style="background-color:#3498db;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;">${point.stopType.charAt(0)}</div>`,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                });
+
+                const marker = L.marker([point.lat, point.lon], { icon: icon }).addTo(map);
+                marker.bindPopup(`Stop Type: ${point.stopType}`).openPopup();
+                stopMarkers.push(marker);
+            });
+        }
+
+        function updateSpeed(value) {
+            speed = parseInt(value);
+            document.getElementById('speedValue').textContent = value;
+        }
+
+        function startAnimation() {
+            animationIndex = 0;
+            animateRoute();
+        }
+
+        function animateRoute() {
+            if (animationIndex < routeCoordinates.length) {
+                const point = routeCoordinates[animationIndex];
+                const marker = L.marker([point.lat, point.lon]).addTo(map)
+                    .bindPopup(point.time)
+                    .openPopup();
+                markers.push(marker);
+
+                if (!routePath) {
+                    routePath = L.polyline([], { color: 'blue' }).addTo(map);
+                }
+                routePath.addLatLng([point.lat, point.lon]);
+
+                animationIndex++;
+                animationTimeout = setTimeout(animateRoute, 1000 / speed);
+            }
+        }
+
+        function showRoute() {
+            if (!routePath) {
+                routePath = L.polyline(routeCoordinates.map(p => [p.lat, p.lon]), { color: 'blue' }).addTo(map);
+            }
+        }
+
+        function togglePoints() {
+            if (markers.length > 0) {
+                markers.forEach(marker => map.removeLayer(marker));
+                markers = [];
+            } else {
+                routeCoordinates.forEach(point => {
+                    const marker = L.marker([point.lat, point.lon]).addTo(map)
+                        .bindPopup(point.time);
+                    markers.push(marker);
+                });
+            }
+        }
+    </script>
+</body>
+</html>
