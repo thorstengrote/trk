@@ -23,9 +23,8 @@ let vanMarker;
 let homeMarker;
 
 // Initialization
-document.addEventListener('DOMContentLoaded', initializeApp);
-
 function initializeApp() {
+    console.log("Initializing app");
     document.getElementById('passwordOverlay').style.display = 'flex';
     
     const urlParams = new URLSearchParams(window.location.search);
@@ -41,6 +40,7 @@ function initializeApp() {
 }
 
 function checkPassword() {
+    console.log("Checking password");
     const password = document.getElementById('passwordInput').value;
     if (password === 'thorsten') {
         document.getElementById('passwordOverlay').style.display = 'none';
@@ -52,6 +52,7 @@ function checkPassword() {
 }
 
 function initializeMap() {
+    console.log("Initializing map");
     map = L.map('map').setView(HOME_COORDINATES, 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -71,6 +72,7 @@ function initializeMap() {
 
 // Data loading and processing
 async function loadData() {
+    console.log("Loading data");
     Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
         download: true,
         header: true,
@@ -110,6 +112,7 @@ async function loadData() {
 }
 
 function processRouteData(rawData) {
+    console.log("Processing route data");
     let processedData = [];
     let currentPoint = null;
     let lastSignificantPoint = null;
@@ -158,6 +161,7 @@ function processRouteData(rawData) {
 
 // Map interaction functions
 function updateDateRange() {
+    console.log("Updating date range");
     let startDate = document.getElementById('startDate').value;
     let endDate = document.getElementById('endDate').value;
     routeCoordinates = filterRouteByDateRange(routeCoordinates, startDate, endDate);
@@ -174,20 +178,31 @@ function updateDateRange() {
 }
 
 function clearMap() {
+    console.log("Clearing map");
     if (routePath) map.removeLayer(routePath);
     markers.forEach(marker => map.removeLayer(marker));
     markers = [];
 }
 
 function showPoints() {
+    console.log("Showing points");
     clearMap();
-    routeCoordinates.forEach(function(point) {
+    console.log("Number of points to show:", routeCoordinates.length);
+    routeCoordinates.forEach(function(point, index) {
         let markerIcon = point.isPOI ? createPOIIcon(point) : L.divIcon({className: 'custom-div-icon'});
         var marker = L.marker([point.lat, point.lon], {icon: markerIcon}).addTo(map)
             .bindPopup(formatPopupContent(point));
         markers.push(marker);
+        if (index === 0 || index === routeCoordinates.length - 1) {
+            console.log("Point added:", point);
+        }
     });
-    map.fitBounds(L.latLngBounds(routeCoordinates.map(point => [point.lat, point.lon])));
+    console.log("Total markers added:", markers.length);
+    if (routeCoordinates.length > 0) {
+        map.fitBounds(L.latLngBounds(routeCoordinates.map(point => [point.lat, point.lon])));
+    } else {
+        console.log("No coordinates to show");
+    }
 }
 
 function createPOIIcon(point) {
@@ -214,26 +229,34 @@ function formatPopupContent(point) {
 }
 
 function togglePoints() {
+    console.log("Toggling points");
     pointsVisible = !pointsVisible;
-    if (pointsVisible) showPoints();
-    else clearMap();
+    if (pointsVisible) {
+        showPoints();
+    } else {
+        clearMap();
+    }
 }
 
 function toggleRoute() {
+    console.log("Toggling route");
     routeVisible = !routeVisible;
-    if (routeVisible) showRoute();
-    else if (routePath) {
+    if (routeVisible) {
+        showRoute();
+    } else if (routePath) {
         map.removeLayer(routePath);
     }
 }
 
 function showRoute() {
+    console.log("Showing route");
     if (routePath) map.removeLayer(routePath);
     calculateCompleteRoute();
 }
 
 // Animation and route functions
 function toggleAnimation() {
+    console.log("Toggling animation");
     if (animationRunning) {
         stopAnimation();
     } else {
@@ -242,6 +265,7 @@ function toggleAnimation() {
 }
 
 function startAnimation() {
+    console.log("Starting animation");
     if (routePath) map.removeLayer(routePath);
     routePath = L.polyline([], {color: 'blue'}).addTo(map);
     animationRunning = true;
@@ -251,6 +275,7 @@ function startAnimation() {
 }
 
 function stopAnimation() {
+    console.log("Stopping animation");
     animationRunning = false;
     clearTimeout(animationTimeout);
     document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Start Animation";
@@ -278,11 +303,16 @@ function animateRoute(i) {
 }
 
 function toggleDriveRoute() {
-    if (driveRouteRunning) stopDriveRoute();
-    else startDriveRoute();
+    console.log("Toggling drive route");
+    if (driveRouteRunning) {
+        stopDriveRoute();
+    } else {
+        startDriveRoute();
+    }
 }
 
 function startDriveRoute() {
+    console.log("Starting drive route");
     document.getElementById('loadingModal').style.display = 'block';
     if (routePath) map.removeLayer(routePath);
     routePath = L.polyline([], {color: 'blue'}).addTo(map);
@@ -292,6 +322,7 @@ function startDriveRoute() {
 }
 
 function stopDriveRoute() {
+    console.log("Stopping drive route");
     driveRouteRunning = false;
     clearTimeout(animationTimeout);
     document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Drive Route";
@@ -299,19 +330,31 @@ function stopDriveRoute() {
 }
 
 async function calculateCompleteRoute() {
+    console.log("Calculating complete route");
     let completeRoute = [];
     let poiPoints = routeCoordinates.filter(point => point.isPOI);
+    console.log("Number of POI points:", poiPoints.length);
 
     try {
         for (let i = 0; i < poiPoints.length - 1; i++) {
             let start = poiPoints[i];
             let end = poiPoints[i + 1];
+            console.log(`Calculating route from ${start.lat},${start.lon} to ${end.lat},${end.lon}`);
             let route = await getRouteFromOSRM([start, end]);
             completeRoute = completeRoute.concat(route);
         }
 
+        console.log("Complete route calculated, points:", completeRoute.length);
         document.getElementById('loadingModal').style.display = 'none';
-        animateVanAlongRoute(completeRoute, 0);
+        if (completeRoute.length > 0) {
+            routePath = L.polyline(completeRoute, {color: 'blue'}).addTo(map);
+            map.fitBounds(L.latLngBounds(completeRoute));
+            if (driveRouteRunning) {
+                animateVanAlongRoute(completeRoute, 0);
+            }
+        } else {
+            console.log("No route to display");
+        }
     } catch (error) {
         console.error('Error calculating route:', error);
         alert('An error occurred while calculating the route. Please try again later.');
@@ -321,6 +364,7 @@ async function calculateCompleteRoute() {
 }
 
 function animateVanAlongRoute(route, step) {
+    console.log("Animating van along route, step:", step);
     if (step < route.length && driveRouteRunning) {
         var point = route[step];
         var nextPoint = route[step + 1] || route[step];
@@ -337,7 +381,6 @@ function animateVanAlongRoute(route, step) {
         } else {
             vanMarker.setLatLng(point);
         }
-        routePath.addLatLng(point);
         map.setView(point);
 
         const elevation = interpolateElevation(point, route, step);
@@ -350,15 +393,20 @@ function animateVanAlongRoute(route, step) {
         }, timeToNextPoint);
     } else if (!driveRouteRunning) {
         stopDriveRoute();
+    } else {
+        console.log("Drive route animation complete");
+        stopDriveRoute();
     }
 }
 
 // API-related functions
 async function getRouteFromOSRM(points) {
+    console.log("Getting route from OSRM");
     const cacheKey = `route_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
     const cachedRoute = await localforage.getItem(cacheKey);
     
     if (cachedRoute) {
+        console.log("Using cached route");
         return cachedRoute;
     }
 
@@ -385,10 +433,12 @@ async function getRouteFromOSRM(points) {
 }
 
 async function getRouteFromOpenRoute(points) {
+    console.log("Getting route from OpenRoute");
     const cacheKey = `openroute_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
     const cachedRoute = await localforage.getItem(cacheKey);
     
     if (cachedRoute) {
+        console.log("Using cached route");
         return cachedRoute;
     }
 
@@ -426,17 +476,20 @@ async function getRouteFromOpenRoute(points) {
 
 // Utility functions
 function updateSpeed(value) {
+    console.log("Updating speed to:", value);
     document.getElementById('speedValue').textContent = value;
     speed = parseInt(value);
 }
 
 function toggleControls() {
+    console.log("Toggling controls");
     const controlsContent = document.getElementById('controls-content');
     controlsContent.classList.toggle('expanded');
 }
 
 // Elevation-related functions
 async function fetchElevationData(coordinates) {
+    console.log("Fetching elevation data");
     const BATCH_SIZE = 100; // Adjust based on API limitations
     let allResults = [];
 
@@ -456,11 +509,13 @@ async function fetchElevationData(coordinates) {
         allResults = allResults.concat(data.results);
     }
 
+    console.log("Elevation data fetched for", allResults.length, "points");
     return allResults;
 }
 
 // Share link generation
 function generateShareLink() {
+    console.log("Generating share link");
     var startDate = document.getElementById('startDate').value;
     var endDate = document.getElementById('endDate').value;
     if (!startDate || !endDate) {
@@ -471,6 +526,7 @@ function generateShareLink() {
     var shareUrl = `${currentUrl}?start=${startDate}&end=${endDate}&autoplay=true`;
     var shareLinkElement = document.getElementById('shareLink');
     shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
+    console.log("Share link generated:", shareUrl);
 }
 
 // Export functions for use in HTML and other modules
