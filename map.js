@@ -104,12 +104,12 @@ async function loadData() {
             console.log("Processed coordinates:", routeCoordinates.length);
 
             const elevationData = await fetchElevationData(routeCoordinates);
-            routeCoordinates = routeCoordinates.map((point, index) => ({
-                ...point,
-                elevation: elevationData[index].elevation
-            }));
+               routeCoordinates = routeCoordinates.map((point, index) => ({
+        ...point,
+        elevation: elevationData[index].elevation
+    }));
 
-            checkElevationData();
+            checkElevationData(routeCoordinates);
             updateDateRange();
 
             document.getElementById('speedRange').value = speed;
