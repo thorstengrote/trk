@@ -67,7 +67,6 @@ function generateShareLink(startDate, endDate) {
  * @param {number} maxRequestsPerSecond - The maximum number of requests allowed per second.
  * @returns {Promise} A promise that resolves when it's safe to make the next request.
  */
-let lastRequestTime = 0;
 async function throttleRequest(maxRequestsPerSecond) {
     const now = Date.now();
     const timeSinceLastRequest = now - lastRequestTime;
