@@ -123,39 +123,47 @@ function processRouteData(rawData) {
         if (!currentPoint) {
             currentPoint = { ...point, startTime: point.time, duration: 0 };
             lastSignificantPoint = currentPoint;
+            processedData.push({ ...currentPoint, isPOI: true });
             continue;
         }
 
         let distance = calculateDistance(lastSignificantPoint, point);
+        let timeDiff = (point.time - currentPoint.startTime) / (1000 * 60); // in minutes
 
-        if (distance >= MIN_DISTANCE) {
-            if (currentPoint.duration >= MIN_STOP_DURATION) {
+        if (distance >= MIN_DISTANCE || timeDiff >= MIN_STOP_DURATION) {
+            if (timeDiff >= MIN_STOP_DURATION) {
                 processedData.push({ 
                     ...currentPoint, 
                     isPOI: true, 
                     startTime: currentPoint.startTime,
                     endTime: point.time,
-                    time: point.time
+                    time: point.time,
+                    duration: timeDiff
                 });
+            } else {
+                processedData.push({ ...currentPoint, isPOI: false });
             }
-            processedData.push({ ...point, isPOI: false });
             lastSignificantPoint = point;
             currentPoint = { ...point, startTime: point.time, duration: 0 };
         } else {
-            currentPoint.duration = (point.time - currentPoint.startTime) / (1000 * 60);
+            currentPoint.duration = timeDiff;
             currentPoint.time = point.time;
         }
     }
 
-    if (currentPoint.duration >= MIN_STOP_DURATION) {
+    // Add the last point
+    if (currentPoint) {
         processedData.push({ 
             ...currentPoint, 
             isPOI: true,
             startTime: currentPoint.startTime,
-            endTime: currentPoint.time
+            endTime: currentPoint.time,
+            duration: (currentPoint.time - currentPoint.startTime) / (1000 * 60)
         });
     }
 
+    console.log("Processed data:", processedData.length, "points");
+    console.log("POI points:", processedData.filter(p => p.isPOI).length);
     return processedData;
 }
 
@@ -184,17 +192,22 @@ function clearMap() {
     markers = [];
 }
 
-function showPoints() {
+unction showPoints() {
     console.log("Showing points");
     clearMap();
     console.log("Number of points to show:", routeCoordinates.length);
     routeCoordinates.forEach(function(point, index) {
-        let markerIcon = point.isPOI ? createPOIIcon(point) : L.divIcon({className: 'custom-div-icon'});
+        let markerIcon = point.isPOI ? createPOIIcon(point) : L.divIcon({
+            className: 'custom-div-icon',
+            html: '<div style="background-color:#2196F3;width:10px;height:10px;border-radius:50%;"></div>',
+            iconSize: [10, 10],
+            iconAnchor: [5, 5]
+        });
         var marker = L.marker([point.lat, point.lon], {icon: markerIcon}).addTo(map)
             .bindPopup(formatPopupContent(point));
         markers.push(marker);
-        if (index === 0 || index === routeCoordinates.length - 1) {
-            console.log("Point added:", point);
+        if (index === 0 || index === routeCoordinates.length - 1 || point.isPOI) {
+            console.log("Significant point added:", point);
         }
     });
     console.log("Total markers added:", markers.length);
@@ -335,13 +348,22 @@ async function calculateCompleteRoute() {
     let poiPoints = routeCoordinates.filter(point => point.isPOI);
     console.log("Number of POI points:", poiPoints.length);
 
+    if (poiPoints.length === 0) {
+        console.log("No POI points found, using all points");
+        poiPoints = routeCoordinates;
+    }
+
     try {
-        for (let i = 0; i < poiPoints.length - 1; i++) {
-            let start = poiPoints[i];
-            let end = poiPoints[i + 1];
-            console.log(`Calculating route from ${start.lat},${start.lon} to ${end.lat},${end.lon}`);
-            let route = await getRouteFromOSRM([start, end]);
-            completeRoute = completeRoute.concat(route);
+        if (poiPoints.length === 1) {
+            completeRoute = [poiPoints[0]];
+        } else {
+            for (let i = 0; i < poiPoints.length - 1; i++) {
+                let start = poiPoints[i];
+                let end = poiPoints[i + 1];
+                console.log(`Calculating route from ${start.lat},${start.lon} to ${end.lat},${end.lon}`);
+                let route = await getRouteFromOSRM([start, end]);
+                completeRoute = completeRoute.concat(route);
+            }
         }
 
         console.log("Complete route calculated, points:", completeRoute.length);
