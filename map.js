@@ -76,12 +76,13 @@ async function loadData() {
     Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
         download: true,
         header: true,
-        complete: async function(results) {
+        complete: function(results) {
             let rawCoordinates = results.data
                 .map(row => ({
                     lat: parseFloat(row.lat),
                     lon: parseFloat(row.lon),
-                    time: new Date(row.time)
+                    time: new Date(row.time),
+                    elevation: row.elevation !== "N/A" ? parseFloat(row.elevation) : null
                 }))
                 .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
                 .sort((a, b) => a.time - b.time);
@@ -91,13 +92,6 @@ async function loadData() {
             routeCoordinates = processRouteData(rawCoordinates);
             console.log("Processed coordinates:", routeCoordinates.length);
 
-            const elevationData = await fetchElevationData(routeCoordinates);
-            routeCoordinates = routeCoordinates.map((point, index) => ({
-                ...point,
-                elevation: elevationData[index].elevation
-            }));
-
-            checkElevationData(routeCoordinates);
             updateDateRange();
 
             document.getElementById('speedRange').value = speed;
