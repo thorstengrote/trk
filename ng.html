@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Tracker</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/x-icon" href="https://thorstengrote.github.io/trk/favicon.ico">
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+</head>
+<body>
+    <div id="passwordOverlay">
+        <div id="passwordForm">
+            <h2>Enter Password</h2>
+            <input type="password" id="passwordInput">
+            <button onclick="checkPassword()">Submit</button>
+        </div>
+    </div>
+    <div id="loadingModal">
+        <div class="modal-content">
+            <h2>Calculating Route</h2>
+            <div class="spinner"></div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+    <canvas id="elevationGraph"></canvas>
+    <div id="controls-overlay">
+        <div id="controls-header" onclick="toggleControls()">
+            <i class="fas fa-cog"></i>
+        </div>
+        <div id="controls-content">
+            <div class="control-group">
+                <label for="speedRange">Playback Speed (km/s): </label>
+                <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
+                <span id="speedValue">20</span> km/s
+            </div>
+            <div class="control-group">
+                <button onclick="togglePoints()">Show Points</button>
+                <button onclick="toggleAnimation()">Start Animation</button>
+                <button onclick="toggleRoute()">Show Route</button>
+                <button onclick="toggleDriveRoute()">Drive Route</button>
+            </div>
+            <div class="control-group">
+                <label for="startDate">Start Date: </label>
+                <input type="date" id="startDate" onchange="updateDateRange()">
+            </div>
+            <div class="control-group">
+                <label for="endDate">End Date: </label>
+                <input type="date" id="endDate" onchange="updateDateRange()">
+            </div>
+            <div class="control-group">
+                <button onclick="generateShareLink()">Generate Share Link</button>
+                <div id="shareLink"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="utils.js"></script>
+    <script src="elevation.js"></script>
+    <script src="map.js"></script>
+    <script>
+        // Debug logging
+        console.log("Available functions:");
+        console.log("toggleAnimation:", typeof window.toggleAnimation);
+        console.log("togglePoints:", typeof window.togglePoints);
+        console.log("toggleRoute:", typeof window.toggleRoute);
+        console.log("toggleDriveRoute:", typeof window.toggleDriveRoute);
+        console.log("startAnimation:", typeof window.startAnimation);
+        console.log("stopAnimation:", typeof window.stopAnimation);
+        console.log("checkPassword:", typeof window.checkPassword);
+        console.log("toggleControls:", typeof window.toggleControls);
+        console.log("updateSpeed:", typeof window.updateSpeed);
+        console.log("updateDateRange:", typeof window.updateDateRange);
+        console.log("generateShareLink:", typeof window.generateShareLink);
+    </script>
+</body>
+</html>
