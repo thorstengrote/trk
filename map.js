@@ -390,8 +390,8 @@ function animateVanAlongRoute(route, step) {
             addPOIMarker(poiPoint);
         }
 
-        currentAnimationIndex = step;
-        var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint, speed);
+                currentAnimationIndex = step;
+        var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint, speed); // Pass the speed variable
         animationTimeout = setTimeout(function() {
             animateVanAlongRoute(route, step + 1);
         }, timeToNextPoint);
