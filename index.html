@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/x-icon" href="https://thorstengrote.github.io/trk/favicon.ico">
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
@@ -62,5 +63,20 @@
     <script src="utils.js"></script>
     <script src="elevation.js"></script>
     <script src="map.js"></script>
+    <script>
+        // Debug logging
+        console.log("Available functions:");
+        console.log("toggleAnimation:", typeof window.toggleAnimation);
+        console.log("togglePoints:", typeof window.togglePoints);
+        console.log("toggleRoute:", typeof window.toggleRoute);
+        console.log("toggleDriveRoute:", typeof window.toggleDriveRoute);
+        console.log("startAnimation:", typeof window.startAnimation);
+        console.log("stopAnimation:", typeof window.stopAnimation);
+        console.log("checkPassword:", typeof window.checkPassword);
+        console.log("toggleControls:", typeof window.toggleControls);
+        console.log("updateSpeed:", typeof window.updateSpeed);
+        console.log("updateDateRange:", typeof window.updateDateRange);
+        console.log("generateShareLink:", typeof window.generateShareLink);
+    </script>
 </body>
 </html>
