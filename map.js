@@ -21,7 +21,6 @@ let animationTimeout;
 let driveRouteRunning = false;
 let vanMarker;
 let homeMarker;
-let lastRequestTime = 0;
 
 // Initialization
 document.addEventListener('DOMContentLoaded', initializeApp);
@@ -384,7 +383,7 @@ async function getRouteFromOSRM(points) {
         return cachedRoute;
     }
 
-    await throttleRequest();
+    await throttleRequest(MAX_REQUESTS_PER_SECOND);
 
     const coordinates = points.map(p => `${p.lon},${p.lat}`).join(';');
     const url = `${OSRM_URL}${coordinates}?overview=full&geometries=geojson&continue_straight=true`;
@@ -414,7 +413,7 @@ async function getRouteFromOpenRoute(points) {
         return cachedRoute;
     }
 
-    await throttleRequest();
+    await throttleRequest(MAX_REQUESTS_PER_SECOND);
 
     const body = {
         coordinates: points.map(p => [p.lon, p.lat])
@@ -444,18 +443,6 @@ async function getRouteFromOpenRoute(points) {
         console.error('Error fetching route from OpenRoute:', error);
         throw error;
     }
-}
-
-async function throttleRequest() {
-    const now = Date.now();
-    const timeSinceLastRequest = now - lastRequestTime;
-    const timeToWait = Math.max(0, 1000 / MAX_REQUESTS_PER_SECOND - timeSinceLastRequest);
-    
-    if (timeToWait > 0) {
-        await new Promise(resolve => setTimeout(resolve, timeToWait));
-    }
-    
-    lastRequestTime = Date.now();
 }
 
 // Elevation-related functions
