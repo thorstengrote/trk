@@ -116,6 +116,8 @@ function processRouteData(rawData) {
     let processedData = [];
     let currentPoint = null;
     let lastSignificantPoint = null;
+    const MIN_DISTANCE = 0.1; // km
+    const MIN_STOP_DURATION = 25; // minutes
 
     for (let i = 0; i < rawData.length; i++) {
         let point = rawData[i];
@@ -153,12 +155,13 @@ function processRouteData(rawData) {
 
     // Add the last point
     if (currentPoint) {
+        let finalTimeDiff = (currentPoint.time - currentPoint.startTime) / (1000 * 60);
         processedData.push({ 
             ...currentPoint, 
-            isPOI: true,
+            isPOI: finalTimeDiff >= MIN_STOP_DURATION,
             startTime: currentPoint.startTime,
             endTime: currentPoint.time,
-            duration: (currentPoint.time - currentPoint.startTime) / (1000 * 60)
+            duration: finalTimeDiff
         });
     }
 
@@ -403,7 +406,21 @@ function animateVanAlongRoute(route, step) {
         } else {
             vanMarker.setLatLng(point);
         }
+
+        // Draw route progressively
+        if (!routePath) {
+            routePath = L.polyline([point], {color: 'blue'}).addTo(map);
+        } else {
+            routePath.addLatLng(point);
+        }
+
         map.setView(point);
+
+        // Check if this point is a POI and add marker if so
+        let poiPoint = routeCoordinates.find(p => p.isPOI && Math.abs(p.lat - point[0]) < 0.0001 && Math.abs(p.lon - point[1]) < 0.0001);
+        if (poiPoint) {
+            addPOIMarker(poiPoint);
+        }
 
         const elevation = interpolateElevation(point, route, step);
         updateElevationGraph(elevation);
@@ -419,6 +436,13 @@ function animateVanAlongRoute(route, step) {
         console.log("Drive route animation complete");
         stopDriveRoute();
     }
+}
+
+function addPOIMarker(point) {
+    let markerIcon = createPOIIcon(point);
+    L.marker([point.lat, point.lon], {icon: markerIcon})
+        .addTo(map)
+        .bindPopup(formatPopupContent(point));
 }
 
 // API-related functions
