@@ -1,212 +1,709 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Van Tracking Map</title>
+    <title>Map</title>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
     <style>
-        #map {
-            height: 600px;
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 0; 
+        }
+        #map { 
+            height: 100vh; 
+            width: 100%; 
+        }
+        #controls-overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+            max-width: 300px;
+            transition: all 0.3s ease;
+        }
+        #controls-header {
+            padding: 10px;
+            cursor: pointer;
+            background-color: #4a4a4a;
+            color: white;
+            border-radius: 5px 5px 0 0;
+            text-align: center;
+        }
+        #controls-content {
+            padding: 10px;
+            display: none;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        #controls-content.expanded {
+            display: block;
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        input[type="range"] {
             width: 100%;
         }
-        #controls {
-            margin: 20px;
+        button {
+            width: 100%;
+            padding: 5px;
+            margin-top: 5px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #passwordOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        #passwordForm {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        #passwordInput {
+            width: 100%;
+            padding: 5px;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        #loadingModal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 300px;
+            text-align: center;
+            border-radius: 5px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .leaflet-div-icon {
+            background: none;
+            border: none;
+        }
+        .van-icon {
+            background: none;
+            border: none;
+        }
+        .van-icon i {
+            display: block;
+            text-align: center;
+            line-height: 30px;
         }
     </style>
 </head>
 <body>
-    <h3>Van Tracking Map</h3>
-    <div id="controls">
-        <label for="speedRange">Abspielgeschwindigkeit (sek): </label>
-        <input type="range" id="speedRange" min="10" max="120" value="60" oninput="updateSpeed(this.value)">
-        <span id="speedValue">60</span> Sekunden
-        <button onclick="togglePoints()">Punkte anzeigen</button>
-        <button onclick="toggleAnimation()">Animation starten</button>
-        <br><br>
-        <label for="zoomIntensity">Zoom-Intensität: </label>
-        <input type="range" id="zoomIntensity" min="0" max="10" value="0" oninput="updateZoomIntensity(this.value)">
-        <span id="zoomValue">0</span>
-        <br><br>
-        <label for="startDate">Startdatum: </label>
-        <input type="date" id="startDate">
-        <label for="endDate">Enddatum: </label>
-        <input type="date" id="endDate">
+    <div id="passwordOverlay">
+        <div id="passwordForm">
+            <h2>Enter Password</h2>
+            <input type="password" id="passwordInput">
+            <button onclick="checkPassword()">Submit</button>
+        </div>
     </div>
+    <div id="loadingModal">
+        <div class="modal-content">
+            <h2>Calculating Route</h2>
+            <div class="spinner"></div>
+        </div>
+    </div>
+
     <div id="map"></div>
+    <div id="controls-overlay">
+        <div id="controls-header" onclick="toggleControls()">
+            <i class="fas fa-cog"></i>
+        </div>
+        <div id="controls-content">
+            <div class="control-group">
+                <label for="speedRange">Playback Speed (km/s): </label>
+                <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
+                <span id="speedValue">20</span> km/s
+            </div>
+            <div class="control-group">
+                <button onclick="togglePoints()">Show Points</button>
+                <button onclick="toggleAnimation()">Start Animation</button>
+                <button onclick="toggleRoute()">Show Route</button>
+                <button onclick="toggleDriveRoute()">Drive Route</button>
+            </div>
+            <div class="control-group">
+                <label for="startDate">Start Date: </label>
+                <input type="date" id="startDate" onchange="updateDateRange()">
+            </div>
+            <div class="control-group">
+                <label for="endDate">End Date: </label>
+                <input type="date" id="endDate" onchange="updateDateRange()">
+            </div>
+            <div class="control-group">
+                <button onclick="generateShareLink()">Generate Share Link</button>
+                <div id="shareLink"></div>
+            </div>
+        </div>
+    </div>
 
     <script>
-        var map = L.map('map').setView([50.9375, 6.9603], 10);  // Startansicht auf Köln/Bonn
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
-
+        var map;
         var routeCoordinates = [];
+        var filteredCoordinates = [];
         var markers = [];
-        var totalDuration = 60000;  // Default-Wert für 60 Sekunden
-        var pointDuration;
+        var speed = 20; // km/s
         var routePath;
+        var routeVisible = false;
         var pointsVisible = false;
         var animationRunning = false;
         var currentAnimationIndex = 0;
         var animationTimeout;
-        var zoomIntensity = 0;  // Default-Wert für die Zoom-Intensität
+        var driveRouteRunning = false;
+        var vanMarker;
+        var stopMarkers = [];
+        var homeMarker;
+        var stopPoints = [];
 
-        Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
-            download: true,
-            header: true,
-            complete: function(results) {
-                var data = results.data;
+        const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving/';
+        const OPENROUTE_URL = 'https://api.openrouteservice.org/v2/directions/driving-car';
+        const OPENROUTE_API_KEY = '5b3ce3597851110001cf6248c56af19b19b2427c9486702926df507d';
+        const MAX_REQUESTS_PER_SECOND = 1;
+        let lastRequestTime = 0;
 
-                data.forEach(function(row) {
-                    var lat = parseFloat(row.lat);  // Keine Umrechnung
-                    var lon = parseFloat(row.lon);  // Keine Umrechnung
-                    var time = row.time;
+        const HOME_COORDINATES = [50.7852, 7.0141]; // Coordinates for Altmühlstr., 53332 Bornheim, Germany
 
-                    if (!isNaN(lat) && !isNaN(lon)) {
-                        routeCoordinates.push({lat: lat, lon: lon, time: time});
-                    }
-                });
-            }
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('passwordOverlay').style.display = 'flex';
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const startDate = urlParams.get('start');
+            const endDate = urlParams.get('end');
+
+            if (startDate) document.getElementById('startDate').value = startDate;
+            if (endDate) document.getElementById('endDate').value = endDate;
         });
+
+        function checkPassword() {
+            var password = document.getElementById('passwordInput').value;
+            if (password === 'thorsten') {
+                document.getElementById('passwordOverlay').style.display = 'none';
+                initializeMap();
+                loadData();
+            } else {
+                alert('Incorrect password');
+            }
+        }
+
+        function initializeMap() {
+            map = L.map('map').setView(HOME_COORDINATES, 10);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Add home marker
+            homeMarker = L.marker(HOME_COORDINATES, {
+                icon: L.divIcon({
+                    className: 'custom-div-icon',
+                    html: '<div style="background-color:#FF5733;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-home"></i></div>',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            }).addTo(map);
+        }
+
+        function loadData() {
+            Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
+                download: true,
+                header: true,
+                complete: function(results) {
+                    routeCoordinates = results.data
+                        .map(row => ({
+                            lat: parseFloat(row.lat),
+                            lon: parseFloat(row.lon),
+                            time: new Date(row.time)
+                        }))
+                        .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
+                        .sort((a, b) => a.time - b.time);
+
+                    identifyTargetPoints(routeCoordinates);
+                    identifyStopPoints(routeCoordinates);
+                    updateDateRange();
+
+                    document.getElementById('speedRange').value = speed;
+                    document.getElementById('speedValue').textContent = speed;
+
+                    const urlParams = new URLSearchParams(window.location.search);
+                    if (urlParams.get('autoplay') === 'true') {
+                        startDriveRoute();
+                    }
+                }
+            });
+        }
+
+        function toggleControls() {
+            var content = document.getElementById('controls-content');
+            content.classList.toggle('expanded');
+        }
+
+        function collapseControls() {
+            var content = document.getElementById('controls-content');
+            content.classList.remove('expanded');
+        }
+
+        function identifyTargetPoints(coordinates) {
+            for (let i = 0; i < coordinates.length; i++) {
+                if (i === 0) {
+                    coordinates[i].isTarget = true;
+                } else {
+                    const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
+                    coordinates[i].isTarget = timeDiff > 30;
+                }
+            }
+        }
+
+        function identifyStopPoints(coordinates) {
+            stopPoints = [];
+            for (let i = 1; i < coordinates.length; i++) {
+                const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
+                if (timeDiff > 25) {
+                    let stopType = getStopType(coordinates[i-1].time, coordinates[i].time);
+                    stopPoints.push({
+                        lat: coordinates[i].lat,
+                        lon: coordinates[i].lon,
+                        time: coordinates[i].time,
+                        stopType: stopType
+                    });
+                }
+            }
+        }
+
+        function getStopType(startTime, endTime) {
+            const timeDiff = (endTime - startTime) / (1000 * 60); // difference in minutes
+            if (timeDiff > 24 * 60) { // More than a day
+                return 'camp';
+            } else if (timeDiff > 240) { // More than 4 hours
+                return 'parking';
+            } else {
+                return 'pause';
+            }
+        }
 
         function updateSpeed(value) {
             document.getElementById('speedValue').textContent = value;
-            totalDuration = value * 1000;  // Setze die Gesamtdauer basierend auf dem Slider-Wert
+            speed = parseInt(value);
         }
 
-        function updateZoomIntensity(value) {
-            document.getElementById('zoomValue').textContent = value;
-            zoomIntensity = value;
+        function updateDateRange() {
+            let startDate = document.getElementById('startDate').value;
+            let endDate = document.getElementById('endDate').value;
+            filteredCoordinates = filterRouteByDateRange(startDate, endDate);
+            stopPoints = filterStopPointsByDateRange(startDate, endDate);
+            
+            // Clear existing markers and path
+            clearMap();
+
+            // Redraw points if they were visible
+            if (pointsVisible) {
+                showPoints();
+            }
+
+            // Redraw route if it was visible
+            if (routeVisible) {
+                showRoute();
+            }
+        }
+
+        function clearMap() {
+            if (routePath) map.removeLayer(routePath);
+            markers.forEach(marker => map.removeLayer(marker));
+            stopMarkers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+            stopMarkers = [];
         }
 
         function togglePoints() {
             pointsVisible = !pointsVisible;
-
-            if (pointsVisible) {
-                showPoints();
-            } else {
-                hidePoints();
-            }
+            if (pointsVisible) showPoints();
+            else hidePoints();
+            collapseControls();
         }
 
         function showPoints() {
-            if (routePath) {
-                map.removeLayer(routePath);
-            }
-            routePath = L.polyline([], {color: 'red'}).addTo(map);
-            markers = [];
-
-            var startDate = new Date(document.getElementById('startDate').value);
-            var endDate = new Date(document.getElementById('endDate').value);
-
-            routeCoordinates.forEach(function(point) {
-                var pointDate = new Date(point.time);
-
-                if ((!isNaN(startDate) && pointDate < startDate) || (!isNaN(endDate) && pointDate > endDate)) {
-                    return;
-                }
-
+            hidePoints();
+            filteredCoordinates.forEach(function(point) {
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time);
+                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""));
                 markers.push(marker);
-
-                routePath.addLatLng([point.lat, point.lon]);
             });
-
-            map.fitBounds(routePath.getBounds());
+            showStopPoints();
+            map.fitBounds(L.latLngBounds(filteredCoordinates.map(point => [point.lat, point.lon])));
         }
 
         function hidePoints() {
-            markers.forEach(function(marker) {
-                map.removeLayer(marker);
-            });
+            markers.forEach(marker => map.removeLayer(marker));
+            stopMarkers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+            stopMarkers = [];
+        }
 
-            if (routePath) {
-                map.removeLayer(routePath);
-            }
+        function showStopPoints() {
+            stopPoints.forEach(function(stopPoint) {
+                addStopMarker(stopPoint);
+            });
         }
 
         function toggleAnimation() {
-            if (animationRunning) {
-                stopAnimation();
-            } else {
-                startAnimation();
-            }
+            if (animationRunning) stopAnimation();
+            else startAnimation();
+            collapseControls();
         }
 
         function startAnimation() {
-            hidePoints();
-            routePath = L.polyline([], {color: 'red'}).addTo(map);
-            pointDuration = totalDuration / routeCoordinates.length;
+            if (routePath) map.removeLayer(routePath);
+            routePath = L.polyline([], {color: 'blue'}).addTo(map);
             animationRunning = true;
             currentAnimationIndex = 0;
-            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Animation stoppen";
+            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Stop Animation";
             animateRoute(currentAnimationIndex);
         }
 
         function stopAnimation() {
             animationRunning = false;
             clearTimeout(animationTimeout);
-            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Animation starten";
+            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Start Animation";
+        }
+
+        function toggleRoute() {
+            routeVisible = !routeVisible;
+            if (routeVisible) showRoute();
+            else if (routePath) {
+                map.removeLayer(routePath);
+                stopMarkers.forEach(marker => map.removeLayer(marker));
+                stopMarkers = [];
+            }
+            collapseControls();
+        }
+
+        function showRoute() {
+            if (routePath) map.removeLayer(routePath);
+            calculateCompleteRoute();
         }
 
         function animateRoute(i) {
-            if (i < routeCoordinates.length && animationRunning) {
-                var point = routeCoordinates[i];
-                var pointDate = new Date(point.time);
-
-                var startDate = new Date(document.getElementById('startDate').value);
-                var endDate = new Date(document.getElementById('endDate').value);
-
-                if ((!isNaN(startDate) && pointDate < startDate) || (!isNaN(endDate) && pointDate > endDate)) {
-                    animationTimeout = setTimeout(function() {
-                        animateRoute(i + 1);
-                    }, pointDuration);
-                    return;
-                }
-
+            if (i < filteredCoordinates.length && animationRunning) {
+                var point = filteredCoordinates[i];
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time)
+                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""))
                     .openPopup();
+                markers.push(marker);
 
-                if (i > 0) {
-                    routePath.addLatLng([point.lat, point.lon]);
+                routePath.addLatLng([point.lat, point.lon]);
+                map.setView([point.lat, point.lon]);
+
+                // Check if we've reached a stop point
+                let stopPoint = stopPoints.find(stop => 
+                    Math.abs(stop.lat - point.lat) < 0.0001 && 
+                    Math.abs(stop.lon - point.lon) < 0.0001
+                );
+
+                if (stopPoint) {
+                    addStopMarker(stopPoint);
                 }
 
-                if (zoomIntensity > 0) {
-                    map.setView([point.lat, point.lon], calculateZoom(i));
-                }
-
-                currentAnimationIndex = i + 1;
                 animationTimeout = setTimeout(function() {
-                    animateRoute(currentAnimationIndex);
-                }, pointDuration);
-            } else if (i >= routeCoordinates.length) {
+                    animateRoute(i + 1);
+                }, 1000);
+            } else if (i >= filteredCoordinates.length) {
                 stopAnimation();
-                map.fitBounds(routePath.getBounds());
             }
         }
 
-        function calculateZoom(index) {
-            if (zoomIntensity === 0) {
-                return map.getZoom();  // Kein dynamischer Zoom bei Zoom-Intensität 0
-            }
-            if (index === 0 || index >= routeCoordinates.length - 1) {
-                return map.getZoom();  // Kein Zoom-Wechsel beim ersten oder letzten Punkt
-            }
-            var prevPoint = routeCoordinates[index - 1];
-            var nextPoint = routeCoordinates[index];
-            var distance = map.distance([prevPoint.lat, prevPoint.lon], [nextPoint.lat, nextPoint.lon]);
+        function toggleDriveRoute() {
+            if (driveRouteRunning) stopDriveRoute();
+            else startDriveRoute();
+            collapseControls();
+        }
 
-            // Anpassung des Zoom-Levels basierend auf der Entfernung und der Zoom-Intensität
-            var baseZoom = 13;  // Standardzoom-Level
-            var zoomAdjustment = (10 - zoomIntensity) * (distance / 200000);  // Reduzierte Zoom-Intensität
+        function startDriveRoute() {
+            document.getElementById('loadingModal').style.display = 'block';
+            if (routePath) map.removeLayer(routePath);
+            routePath = L.polyline([], {color: 'blue'}).addTo(map);
+            driveRouteRunning = true;
+            document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
+            calculateCompleteRoute();
+        }
 
-            return Math.max(baseZoom - zoomAdjustment, 5);  // Setzt einen Mindestzoom-Level von 5
+        function stopDriveRoute() {
+            driveRouteRunning = false;
+            clearTimeout(animationTimeout);
+            document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Drive Route";
+            if (vanMarker) map.removeLayer(vanMarker);
+            stopMarkers.forEach(marker => map.removeLayer(marker));
+            stopMarkers = [];
+        }
+
+        async function getRouteFromOSRM(points) {
+            const cacheKey = `route_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
+            const cachedRoute = await localforage.getItem(cacheKey);
+            
+            if (cachedRoute) {
+                return cachedRoute;
+            }
+
+            await throttleRequest();
+
+            const coordinates = points.map(p => `${p.lon},${p.lat}`).join(';');
+            const url = `${OSRM_URL}${coordinates}?overview=full&geometries=geojson&continue_straight=true`;
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error('OSRM request failed');
+                }
+                const data = await response.json();
+                if (data.routes && data.routes.length > 0) {
+                    const route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    await localforage.setItem(cacheKey, route);
+                    return route;
+                }
+            } catch (error) {
+                console.error('Error fetching route from OSRM:', error);
+                return getRouteFromOpenRoute(points);
+            }
+        }
+
+        async function getRouteFromOpenRoute(points) {
+            const cacheKey = `openroute_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
+            const cachedRoute = await localforage.getItem(cacheKey);
+            
+            if (cachedRoute) {
+                return cachedRoute;
+            }
+
+            await throttleRequest();
+
+            const body = {
+                coordinates: points.map(p => [p.lon, p.lat])
+            };
+
+            try {
+                const response = await fetch(OPENROUTE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': OPENROUTE_API_KEY
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    throw new Error('OpenRoute request failed');
+                }
+
+                const data = await response.json();
+                if (data.routes && data.routes.length > 0) {
+                    const route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    await localforage.setItem(cacheKey, route);
+                    return route;
+                }
+            } catch (error) {
+                console.error('Error fetching route from OpenRoute:', error);
+                throw error;
+            }
+        }
+
+        async function throttleRequest() {
+            const now = Date.now();
+            const timeSinceLastRequest = now - lastRequestTime;
+            const timeToWait = Math.max(0, 1000 / MAX_REQUESTS_PER_SECOND - timeSinceLastRequest);
+            
+            if (timeToWait > 0) {
+                await new Promise(resolve => setTimeout(resolve, timeToWait));
+            }
+            
+            lastRequestTime = Date.now();
+        }
+
+        async function calculateCompleteRoute() {
+            let completeRoute = [];
+            let targetPoints = filteredCoordinates.filter(point => point.isTarget);
+
+            try {
+                for (let i = 0; i < targetPoints.length - 1; i++) {
+                    let start = targetPoints[i];
+                    let end = targetPoints[i + 1];
+                    let route = await getRouteFromOSRM([start, end]);
+                    completeRoute = completeRoute.concat(route);
+                }
+
+                document.getElementById('loadingModal').style.display = 'none';
+                animateVanAlongRoute(completeRoute, 0);
+            } catch (error) {
+                console.error('Error calculating route:', error);
+                alert('An error occurred while calculating the route. Please try again later.');
+                document.getElementById('loadingModal').style.display = 'none';
+                stopDriveRoute();
+            }
+        }
+
+        function animateVanAlongRoute(route, step) {
+            if (step < route.length && driveRouteRunning) {
+                var point = route[step];
+                var nextPoint = route[step + 1] || route[step];
+                var angle = calculateAngle(point, nextPoint);
+
+                if (!vanMarker) {
+                    vanMarker = L.marker(point, {
+                        icon: L.divIcon({
+                            className: 'van-icon',
+                            iconSize: [30, 30],
+                            iconAnchor: [15, 15],
+                            html: '<i class="fas fa-shuttle-van" style="font-size: 30px; color: #4a4a4a; transform: rotate(' + angle + 'deg);"></i>'
+                        })
+                    }).addTo(map);
+                } else {
+                    vanMarker.setLatLng(point);
+                    vanMarker.setIcon(L.divIcon({
+                        className: 'van-icon',
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15],
+                        html: '<i class="fas fa-shuttle-van" style="font-size: 30px; color: #4a4a4a; transform: rotate(' + angle + 'deg);"></i>'
+                    }));
+                }
+                routePath.addLatLng(point);
+                map.setView(point);
+
+                // Check if we've reached a stop point
+                let stopPoint = stopPoints.find(stop => 
+                    Math.abs(stop.lat - point[0]) < 0.0001 && 
+                    Math.abs(stop.lon - point[1]) < 0.0001
+                );
+
+                if (stopPoint) {
+                    addStopMarker(stopPoint);
+                }
+
+                currentAnimationIndex = step;
+                var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint);
+                animationTimeout = setTimeout(function() {
+                    animateVanAlongRoute(route, step + 1);
+                }, timeToNextPoint);
+            } else if (!driveRouteRunning) {
+                stopDriveRoute();
+            }
+        }
+
+        function addStopMarker(stopPoint) {
+            let markerIcon;
+
+            switch (stopPoint.stopType) {
+                case 'pause':
+                    markerIcon = '<div style="background-color:#c30b82;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-coffee"></i></div>';
+                    break;
+                case 'parking':
+                    markerIcon = '<div style="background-color:#3498db;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-parking"></i></div>';
+                    break;
+                case 'camp':
+                    markerIcon = '<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-campground"></i></div>';
+                    break;
+            }
+
+            if (!stopMarkers.some(m => m.getLatLng().equals([stopPoint.lat, stopPoint.lon]))) {
+                let marker = L.marker([stopPoint.lat, stopPoint.lon], {
+                    icon: L.divIcon({
+                        className: 'custom-div-icon',
+                        html: markerIcon,
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    })
+                }).addTo(map);
+                stopMarkers.push(marker);
+            }
+        }
+
+        function calculateAngle(point1, point2) {
+            var latDiff = point2[0] - point1[0];
+            var lngDiff = point2[1] - point1[1];
+            return (Math.atan2(lngDiff, latDiff) * 180 / Math.PI) - 90;
+        }
+
+        function calculateTimeToNextPoint(point1, point2) {
+            var distance = map.distance(point1, point2);
+            return (distance / (speed * 1000)) * 1000; // Convert to milliseconds
+        }
+
+        function filterRouteByDateRange(startDate, endDate) {
+            if (!startDate || !endDate) return routeCoordinates;
+            return routeCoordinates.filter(point => {
+                return point.time >= new Date(startDate) && point.time <= new Date(endDate);
+            });
+        }
+
+        function filterStopPointsByDateRange(startDate, endDate) {
+            if (!startDate || !endDate) return stopPoints;
+            return stopPoints.filter(point => {
+                return point.time >= new Date(startDate) && point.time <= new Date(endDate);
+            });
+        }
+
+        function generateShareLink() {
+            var startDate = document.getElementById('startDate').value;
+            var endDate = document.getElementById('endDate').value;
+            if (!startDate || !endDate) {
+                alert('Please select both start and end dates.');
+                return;
+            }
+            var currentUrl = window.location.href.split('?')[0]; // Remove any existing query parameters
+            var shareUrl = `${currentUrl}?start=${startDate}&end=${endDate}&autoplay=true`;
+            var shareLinkElement = document.getElementById('shareLink');
+            shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
+        }
+
+        function distance(point1, point2) {
+            var lat1 = point1.lat || point1[0];
+            var lon1 = point1.lon || point1[1];
+            var lat2 = point2.lat || point2[0];
+            var lon2 = point2.lon || point2[1];
+            return Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lon2 - lon1, 2));
         }
     </script>
 </body>
