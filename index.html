@@ -1,391 +1,213 @@
-
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Map</title>
+    <title>Van Tracking Map</title>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            margin: 0; 
-            padding: 0; 
-        }
-        #map { 
-            height: 100vh; 
-            width: 100%; 
-        }
-        #controls-overlay {
-            position: absolute;
-            bottom: 20px;
-            left: 10px;
-            background-color: rgba(255, 255, 255, 0.9);
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            z-index: 1000;
-            max-width: 300px;
-            transition: all 0.3s ease;
-        }
-        #controls-header {
-            padding: 10px;
-            cursor: pointer;
-            background-color: #4a4a4a;
-            color: white;
-            border-radius: 5px 5px 0 0;
-            text-align: center;
-        }
-        #controls-content {
-            padding: 10px;
-            display: none;
-            max-height: 60vh;
-            overflow-y: auto;
-        }
-        #controls-content.expanded {
-            display: block;
-        }
-        .control-group {
-            margin-bottom: 10px;
-        }
-        input[type="range"] {
+        #map {
+            height: 600px;
             width: 100%;
         }
-        button {
-            width: 100%;
-            padding: 5px;
-            margin-top: 5px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-
-        #passwordOverlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-        }
-        #passwordForm {
-            background-color: white;
-            padding: 20px;
-            border-radius: 5px;
-            text-align: center;
-        }
-        #passwordInput {
-            width: 100%;
-            padding: 5px;
-            margin: 10px 0;
-            font-size: 16px;
-        }
-        #loadingModal {
-            display: none;
-            position: fixed;
-            z-index: 2000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.4);
-        }
-        .modal-content {
-            background-color: #fefefe;
-            margin: 15% auto;
-            padding: 20px;
-            border: 1px solid #888;
-            width: 80%;
-            max-width: 300px;
-            text-align: center;
-            border-radius: 5px;
-        }
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .leaflet-div-icon {
-            background: none;
-            border: none;
-        }
-        .van-icon {
-            background: none;
-            border: none;
-        }
-        .van-icon i {
-            display: block;
-            text-align: center;
-            line-height: 30px;
-        }
-        #elevation-chart {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 200px;
-            height: 100px;
-            background-color: rgba(255, 255, 255, 0.7);
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            z-index: 1000;
-        }
-        canvas {
-            width: 100%;
-            height: 100%;
+        #controls {
+            margin: 20px;
         }
     </style>
 </head>
-
 <body>
-    <div id="passwordOverlay">
-        <div id="passwordForm">
-            <h2>Enter Password</h2>
-            <input type="password" id="passwordInput">
-            <button onclick="checkPassword()">Submit</button>
-        </div>
+    <h3>Van Tracking Map</h3>
+    <div id="controls">
+        <label for="speedRange">Abspielgeschwindigkeit (sek): </label>
+        <input type="range" id="speedRange" min="10" max="120" value="60" oninput="updateSpeed(this.value)">
+        <span id="speedValue">60</span> Sekunden
+        <button onclick="togglePoints()">Punkte anzeigen</button>
+        <button onclick="toggleAnimation()">Animation starten</button>
+        <br><br>
+        <label for="zoomIntensity">Zoom-Intensität: </label>
+        <input type="range" id="zoomIntensity" min="0" max="10" value="0" oninput="updateZoomIntensity(this.value)">
+        <span id="zoomValue">0</span>
+        <br><br>
+        <label for="startDate">Startdatum: </label>
+        <input type="date" id="startDate">
+        <label for="endDate">Enddatum: </label>
+        <input type="date" id="endDate">
     </div>
-    <div id="loadingModal">
-        <div class="modal-content">
-            <h2>Calculating Route</h2>
-            <div class="spinner"></div>
-        </div>
-    </div>
-
     <div id="map"></div>
-    <div id="controls-overlay">
-        <div id="controls-header" onclick="toggleControls()">
-            <i class="fas fa-cog"></i>
-        </div>
-        <div id="controls-content">
-            <div class="control-group">
-                <label for="speedRange">Playback Speed (km/s): </label>
-                <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
-                <span id="speedValue">20</span> km/s
-            </div>
-            <div class="control-group">
-                <button onclick="togglePoints()">Show Points</button>
-                <button onclick="toggleAnimation()">Start Animation</button>
-                <button onclick="toggleRoute()">Show Route</button>
-                <button onclick="toggleDriveRoute()">Drive Route</button>
-            </div>
-            <div class="control-group">
-                <label for="startDate">Start Date: </label>
-                <input type="date" id="startDate" onchange="updateDateRange()">
-            </div>
-            <div class="control-group">
-                <label for="endDate">End Date: </label>
-                <input type="date" id="endDate" onchange="updateDateRange()">
-            </div>
-            <div class="control-group">
-                <button onclick="generateShareLink()">Generate Share Link</button>
-                <div id="shareLink"></div>
-            </div>
-        </div>
-    </div>
-    
-    <div id="elevation-chart">
-        <canvas id="elevationCanvas"></canvas>
-    </div>
 
     <script>
-        var map;
+        var map = L.map('map').setView([50.9375, 6.9603], 10);  // Startansicht auf Köln/Bonn
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
         var routeCoordinates = [];
-        var filteredCoordinates = [];
         var markers = [];
-        var speed = 20; // km/s
+        var totalDuration = 60000;  // Default-Wert für 60 Sekunden
+        var pointDuration;
         var routePath;
-        var routeVisible = false;
         var pointsVisible = false;
         var animationRunning = false;
         var currentAnimationIndex = 0;
         var animationTimeout;
-        var driveRouteRunning = false;
-        var vanMarker;
-        var stopMarkers = [];
-        var homeMarker;
-        var stopPoints = [];
-        var poiMarkers = [];
-        var elevationData = []; // Array to store elevation data
+        var zoomIntensity = 0;  // Default-Wert für die Zoom-Intensität
 
-        const HOME_COORDINATES = [50.7852, 7.0141]; // Coordinates for Altmühlstr., 53332 Bornheim, Germany
+        Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
+            download: true,
+            header: true,
+            complete: function(results) {
+                var data = results.data;
 
-        // Canvas setup for elevation chart
-        const canvas = document.getElementById('elevationCanvas');
-        const ctx = canvas.getContext('2d');
+                data.forEach(function(row) {
+                    var lat = parseFloat(row.lat);  // Keine Umrechnung
+                    var lon = parseFloat(row.lon);  // Keine Umrechnung
+                    var time = row.time;
 
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('passwordOverlay').style.display = 'flex';
+                    if (!isNaN(lat) && !isNaN(lon)) {
+                        routeCoordinates.push({lat: lat, lon: lon, time: time});
+                    }
+                });
+            }
         });
 
-        function checkPassword() {
-            var password = document.getElementById('passwordInput').value;
-            if (password === 'thorsten') {
-                document.getElementById('passwordOverlay').style.display = 'none';
-                initializeMap();
-                loadData();
+        function updateSpeed(value) {
+            document.getElementById('speedValue').textContent = value;
+            totalDuration = value * 1000;  // Setze die Gesamtdauer basierend auf dem Slider-Wert
+        }
+
+        function updateZoomIntensity(value) {
+            document.getElementById('zoomValue').textContent = value;
+            zoomIntensity = value;
+        }
+
+        function togglePoints() {
+            pointsVisible = !pointsVisible;
+
+            if (pointsVisible) {
+                showPoints();
             } else {
-                alert('Incorrect password');
+                hidePoints();
             }
         }
 
-        function initializeMap() {
-            map = L.map('map').setView(HOME_COORDINATES, 10);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(map);
-
-            homeMarker = L.marker(HOME_COORDINATES, {
-                icon: L.divIcon({
-                    className: 'custom-div-icon',
-                    html: '<div style="background-color:#FF5733;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-home"></i></div>',
-                    iconSize: [30, 30],
-                    iconAnchor: [15, 15]
-                })
-            }).addTo(map);
-        }
-
-        function loadData() {
-            Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
-                download: true,
-                header: true,
-                complete: function(results) {
-                    routeCoordinates = results.data
-                        .map(row => ({
-                            lat: parseFloat(row.lat),
-                            lon: parseFloat(row.lon),
-                            elevation: parseFloat(row.elevation), // Get elevation data
-                            time: new Date(row.time)
-                        }))
-                        .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
-                        .sort((a, b) => a.time - b.time);
-
-                    updateDateRange();
-                }
-            });
-        }
-
-        function updateDateRange() {
-            let startDate = document.getElementById('startDate').value;
-            let endDate = document.getElementById('endDate').value;
-            filteredCoordinates = filterRouteByDateRange(startDate, endDate);
-
-            clearMap();
-            if (pointsVisible) showPoints();
-            if (routeVisible) showRoute();
-        }
-
-        function clearMap() {
-            if (routePath) map.removeLayer(routePath);
-            markers.forEach(marker => map.removeLayer(marker));
-            stopMarkers.forEach(marker => map.removeLayer(marker));
+        function showPoints() {
+            if (routePath) {
+                map.removeLayer(routePath);
+            }
+            routePath = L.polyline([], {color: 'red'}).addTo(map);
             markers = [];
-            stopMarkers = [];
-        }
 
-        function toggleDriveRoute() {
-            if (driveRouteRunning) stopDriveRoute();
-            else startDriveRoute();
-        }
+            var startDate = new Date(document.getElementById('startDate').value);
+            var endDate = new Date(document.getElementById('endDate').value);
 
-        function startDriveRoute() {
-            driveRouteRunning = true;
-            calculateCompleteRoute();
-        }
+            routeCoordinates.forEach(function(point) {
+                var pointDate = new Date(point.time);
 
-        function stopDriveRoute() {
-            driveRouteRunning = false;
-            if (vanMarker) map.removeLayer(vanMarker);
-            stopMarkers.forEach(marker => map.removeLayer(marker));
-            stopMarkers = [];
-        }
-
-        function calculateCompleteRoute() {
-            let completeRoute = [];
-            let pointsOfInterest = filteredCoordinates.filter(point => point.isTarget); // Points of interest
-
-            completeRoute = pointsOfInterest.map(point => [point.lat, point.lon]);
-            animateVanAlongRoute(completeRoute, 0);
-        }
-
-        function animateVanAlongRoute(route, step) {
-            if (step < route.length && driveRouteRunning) {
-                var point = route[step];
-                var nextPoint = route[step + 1] || route[step];
-                updateElevationChart(step);
-
-                if (!vanMarker) {
-                    vanMarker = L.marker(point, {
-                        icon: L.divIcon({
-                            className: 'van-icon',
-                            iconSize: [30, 30],
-                            iconAnchor: [15, 15],
-                            html: '<i class="fas fa-circle"></i>' // Non-turning circle icon
-                        })
-                    }).addTo(map);
-                } else {
-                    vanMarker.setLatLng(point);
+                if ((!isNaN(startDate) && pointDate < startDate) || (!isNaN(endDate) && pointDate > endDate)) {
+                    return;
                 }
 
-                map.setView(point);
+                var marker = L.marker([point.lat, point.lon]).addTo(map)
+                    .bindPopup(point.time);
+                markers.push(marker);
 
-                currentAnimationIndex = step;
-                animationTimeout = setTimeout(function() {
-                    animateVanAlongRoute(route, step + 1);
-                }, 1000);
-            } else if (!driveRouteRunning) {
-                stopDriveRoute();
-            }
-        }
-
-        function updateElevationChart(step) {
-            const point = filteredCoordinates[step];
-            if (point && !isNaN(point.elevation)) {
-                elevationData.push(point.elevation);
-                if (elevationData.length > 50) elevationData.shift(); // Keep last 50 data points
-
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                ctx.beginPath();
-                ctx.moveTo(0, canvas.height - elevationData[0] / 3000 * canvas.height);
-                for (let i = 1; i < elevationData.length; i++) {
-                    ctx.lineTo(i / elevationData.length * canvas.width, canvas.height - elevationData[i] / 3000 * canvas.height);
-                }
-                ctx.strokeStyle = 'blue';
-                ctx.stroke();
-            }
-        }
-
-        function filterRouteByDateRange(startDate, endDate) {
-            if (!startDate || !endDate) return routeCoordinates;
-            return routeCoordinates.filter(point => {
-                return point.time >= new Date(startDate) && point.time <= new Date(endDate);
+                routePath.addLatLng([point.lat, point.lon]);
             });
+
+            map.fitBounds(routePath.getBounds());
+        }
+
+        function hidePoints() {
+            markers.forEach(function(marker) {
+                map.removeLayer(marker);
+            });
+
+            if (routePath) {
+                map.removeLayer(routePath);
+            }
+        }
+
+        function toggleAnimation() {
+            if (animationRunning) {
+                stopAnimation();
+            } else {
+                startAnimation();
+            }
+        }
+
+        function startAnimation() {
+            hidePoints();
+            routePath = L.polyline([], {color: 'red'}).addTo(map);
+            pointDuration = totalDuration / routeCoordinates.length;
+            animationRunning = true;
+            currentAnimationIndex = 0;
+            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Animation stoppen";
+            animateRoute(currentAnimationIndex);
+        }
+
+        function stopAnimation() {
+            animationRunning = false;
+            clearTimeout(animationTimeout);
+            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Animation starten";
+        }
+
+        function animateRoute(i) {
+            if (i < routeCoordinates.length && animationRunning) {
+                var point = routeCoordinates[i];
+                var pointDate = new Date(point.time);
+
+                var startDate = new Date(document.getElementById('startDate').value);
+                var endDate = new Date(document.getElementById('endDate').value);
+
+                if ((!isNaN(startDate) && pointDate < startDate) || (!isNaN(endDate) && pointDate > endDate)) {
+                    animationTimeout = setTimeout(function() {
+                        animateRoute(i + 1);
+                    }, pointDuration);
+                    return;
+                }
+
+                var marker = L.marker([point.lat, point.lon]).addTo(map)
+                    .bindPopup(point.time)
+                    .openPopup();
+
+                if (i > 0) {
+                    routePath.addLatLng([point.lat, point.lon]);
+                }
+
+                if (zoomIntensity > 0) {
+                    map.setView([point.lat, point.lon], calculateZoom(i));
+                }
+
+                currentAnimationIndex = i + 1;
+                animationTimeout = setTimeout(function() {
+                    animateRoute(currentAnimationIndex);
+                }, pointDuration);
+            } else if (i >= routeCoordinates.length) {
+                stopAnimation();
+                map.fitBounds(routePath.getBounds());
+            }
+        }
+
+        function calculateZoom(index) {
+            if (zoomIntensity === 0) {
+                return map.getZoom();  // Kein dynamischer Zoom bei Zoom-Intensität 0
+            }
+            if (index === 0 || index >= routeCoordinates.length - 1) {
+                return map.getZoom();  // Kein Zoom-Wechsel beim ersten oder letzten Punkt
+            }
+            var prevPoint = routeCoordinates[index - 1];
+            var nextPoint = routeCoordinates[index];
+            var distance = map.distance([prevPoint.lat, prevPoint.lon], [nextPoint.lat, nextPoint.lon]);
+
+            // Anpassung des Zoom-Levels basierend auf der Entfernung und der Zoom-Intensität
+            var baseZoom = 13;  // Standardzoom-Level
+            var zoomAdjustment = (10 - zoomIntensity) * (distance / 200000);  // Reduzierte Zoom-Intensität
+
+            return Math.max(baseZoom - zoomAdjustment, 5);  // Setzt einen Mindestzoom-Level von 5
         }
     </script>
 </body>
 </html>
-
-function toggleControls() {
-    var content = document.getElementById('controls-content');
-    content.classList.toggle('expanded');
-}
