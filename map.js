@@ -109,53 +109,45 @@ function processRouteData(rawData) {
     console.log("Processing route data");
     let processedData = [];
     let currentPoint = null;
-    let lastSignificantPoint = null;
     const MIN_DISTANCE = 0.1; // km
     const MIN_STOP_DURATION = 25; // minutes
+    const MAX_STOP_DURATION = 12 * 60; // 12 hours
 
     for (let i = 0; i < rawData.length; i++) {
         let point = rawData[i];
         
         if (!currentPoint) {
             currentPoint = { ...point, startTime: point.time, duration: 0 };
-            lastSignificantPoint = currentPoint;
             processedData.push({ ...currentPoint, isPOI: true });
             continue;
         }
 
-        let distance = calculateDistance(lastSignificantPoint, point);
-        let timeDiff = (point.time - currentPoint.startTime) / (1000 * 60); // in minutes
+        let distance = calculateDistance(currentPoint, point);
+        let timeDiff = (point.time - currentPoint.time) / (1000 * 60); // in minutes
 
-        if (distance >= MIN_DISTANCE || timeDiff >= MIN_STOP_DURATION) {
-            if (timeDiff >= MIN_STOP_DURATION) {
-                processedData.push({ 
-                    ...currentPoint, 
-                    isPOI: true, 
-                    startTime: currentPoint.startTime,
-                    endTime: point.time,
-                    time: point.time,
-                    duration: timeDiff
-                });
-            } else {
-                processedData.push({ ...currentPoint, isPOI: false });
-            }
-            lastSignificantPoint = point;
+        if (distance >= MIN_DISTANCE || timeDiff >= MAX_STOP_DURATION) {
+            // End the current point and start a new one
+            processedData.push({
+                ...currentPoint,
+                isPOI: true,
+                endTime: point.time,
+                duration: timeDiff
+            });
             currentPoint = { ...point, startTime: point.time, duration: 0 };
-        } else {
-            currentPoint.duration = timeDiff;
+        } else if (timeDiff >= MIN_STOP_DURATION) {
+            // Update the current point
             currentPoint.time = point.time;
+            currentPoint.duration = timeDiff;
         }
     }
 
     // Add the last point
     if (currentPoint) {
-        let finalTimeDiff = (currentPoint.time - currentPoint.startTime) / (1000 * 60);
-        processedData.push({ 
-            ...currentPoint, 
-            isPOI: finalTimeDiff >= MIN_STOP_DURATION,
-            startTime: currentPoint.startTime,
+        processedData.push({
+            ...currentPoint,
+            isPOI: true,
             endTime: currentPoint.time,
-            duration: finalTimeDiff
+            duration: (currentPoint.time - currentPoint.startTime) / (1000 * 60)
         });
     }
 
@@ -194,17 +186,12 @@ function showPoints() {
     clearMap();
     console.log("Number of points to show:", routeCoordinates.length);
     routeCoordinates.forEach(function(point, index) {
-        let markerIcon = point.isPOI ? createPOIIcon(point) : L.divIcon({
-            className: 'custom-div-icon',
-            html: '<div style="background-color:#2196F3;width:10px;height:10px;border-radius:50%;"></div>',
-            iconSize: [10, 10],
-            iconAnchor: [5, 5]
-        });
-        var marker = L.marker([point.lat, point.lon], {icon: markerIcon}).addTo(map)
-            .bindPopup(formatPopupContent(point));
-        markers.push(marker);
-        if (index === 0 || index === routeCoordinates.length - 1 || point.isPOI) {
-            console.log("Significant point added:", point);
+        if (point.isPOI) {
+            let markerIcon = createPOIIcon(point);
+            var marker = L.marker([point.lat, point.lon], {icon: markerIcon}).addTo(map)
+                .bindPopup(formatPopupContent(point));
+            markers.push(marker);
+            console.log("POI added:", point);
         }
     });
     console.log("Total markers added:", markers.length);
@@ -324,8 +311,9 @@ function toggleDriveRoute() {
 function startDriveRoute() {
     console.log("Starting drive route");
     document.getElementById('loadingModal').style.display = 'block';
-    if (routePath) map.removeLayer(routePath);
-    routePath = L.polyline([], {color: 'blue'}).addTo(map);
+    clearMap();
+    routePath = null;
+    vanMarker = null;
     driveRouteRunning = true;
     document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
     calculateCompleteRoute();
@@ -345,32 +333,19 @@ async function calculateCompleteRoute() {
     let poiPoints = routeCoordinates.filter(point => point.isPOI);
     console.log("Number of POI points:", poiPoints.length);
 
-    if (poiPoints.length === 0) {
-        console.log("No POI points found, using all points");
-        poiPoints = routeCoordinates;
-    }
-
     try {
-        if (poiPoints.length === 1) {
-            completeRoute = [poiPoints[0]];
-        } else {
-            for (let i = 0; i < poiPoints.length - 1; i++) {
-                let start = poiPoints[i];
-                let end = poiPoints[i + 1];
-                console.log(`Calculating route from ${start.lat},${start.lon} to ${end.lat},${end.lon}`);
-                let route = await getRouteFromOSRM([start, end]);
-                completeRoute = completeRoute.concat(route);
-            }
+        for (let i = 0; i < poiPoints.length - 1; i++) {
+            let start = poiPoints[i];
+            let end = poiPoints[i + 1];
+            console.log(`Calculating route from ${start.lat},${start.lon} to ${end.lat},${end.lon}`);
+            let route = await getRouteFromOSRM([start, end]);
+            completeRoute = completeRoute.concat(route);
         }
 
         console.log("Complete route calculated, points:", completeRoute.length);
         document.getElementById('loadingModal').style.display = 'none';
         if (completeRoute.length > 0) {
-            routePath = L.polyline(completeRoute, {color: 'blue'}).addTo(map);
-            map.fitBounds(L.latLngBounds(completeRoute));
-            if (driveRouteRunning) {
-                animateVanAlongRoute(completeRoute, 0);
-            }
+            animateVanAlongRoute(completeRoute, 0);
         } else {
             console.log("No route to display");
         }
@@ -401,7 +376,6 @@ function animateVanAlongRoute(route, step) {
             vanMarker.setLatLng(point);
         }
 
-        // Draw route progressively
         if (!routePath) {
             routePath = L.polyline([point], {color: 'blue'}).addTo(map);
         } else {
@@ -416,9 +390,6 @@ function animateVanAlongRoute(route, step) {
             addPOIMarker(poiPoint);
         }
 
-        const elevation = interpolateElevation(point, route, step);
-        updateElevationGraph(elevation);
-
         currentAnimationIndex = step;
         var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint, speed);
         animationTimeout = setTimeout(function() {
@@ -430,13 +401,6 @@ function animateVanAlongRoute(route, step) {
         console.log("Drive route animation complete");
         stopDriveRoute();
     }
-}
-
-function addPOIMarker(point) {
-    let markerIcon = createPOIIcon(point);
-    L.marker([point.lat, point.lon], {icon: markerIcon})
-        .addTo(map)
-        .bindPopup(formatPopupContent(point));
 }
 
 // API-related functions
