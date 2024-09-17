@@ -23,6 +23,49 @@ let vanMarker;
 let homeMarker;
 
 // Initialization
+function consolidateWaypoints(rawData) {
+    const MAX_DISTANCE = 0.3; // km
+    let virtualWaypoints = [];
+    let currentGroup = [];
+
+    for (let i = 0; i < rawData.length; i++) {
+        if (currentGroup.length === 0) {
+            currentGroup.push(rawData[i]);
+        } else {
+            const lastPoint = currentGroup[currentGroup.length - 1];
+            const distance = calculateDistance(lastPoint, rawData[i]);
+            
+            if (distance <= MAX_DISTANCE) {
+                currentGroup.push(rawData[i]);
+            } else {
+                // Create virtual waypoint from the current group
+                virtualWaypoints.push(createVirtualWaypoint(currentGroup));
+                currentGroup = [rawData[i]];
+            }
+        }
+    }
+
+    // Add the last group if it exists
+    if (currentGroup.length > 0) {
+        virtualWaypoints.push(createVirtualWaypoint(currentGroup));
+    }
+
+    return virtualWaypoints;
+}
+
+function createVirtualWaypoint(group) {
+    const firstPoint = group[0];
+    const lastPoint = group[group.length - 1];
+    const duration = (lastPoint.time - firstPoint.time) / (1000 * 60); // in minutes
+
+    return {
+        lat: firstPoint.lat,
+        lon: firstPoint.lon,
+        time: firstPoint.time,
+        duration: duration,
+        elevation: firstPoint.elevation
+    };
+}
 function initializeApp() {
     console.log("Initializing app");
     document.getElementById('passwordOverlay').style.display = 'flex';
@@ -114,40 +157,24 @@ async function loadData() {
 
 function processRouteData(rawData) {
     console.log("Processing route data");
-    let processedData = [];
-    let currentPoint = null;
-    const MIN_DISTANCE = 0.1; // km
-    const MIN_STOP_DURATION = 25; // minutes
-    const OVERNIGHT_DURATION = 6 * 60; // 6 hours
-
-    for (let i = 0; i < rawData.length; i++) {
-        let point = rawData[i];
-        
-        if (!currentPoint) {
-            currentPoint = { ...point, startTime: point.time, duration: 0 };
-            processedData.push({ ...currentPoint, isPOI: true });
-            continue;
+    let virtualWaypoints = consolidateWaypoints(rawData);
+    
+    let processedData = virtualWaypoints.map(point => {
+        let poiType = 'waypoint';
+        if (point.duration >= 25 && point.duration < 240) {
+            poiType = 'coffee';
+        } else if (point.duration >= 240 && point.duration < 1440) {
+            poiType = 'parking';
+        } else if (point.duration >= 1440) {
+            poiType = 'campground';
         }
+        return { ...point, poiType };
+    });
 
-        let distance = calculateDistance(currentPoint, point);
-        let timeDiff = (point.time - currentPoint.time) / (1000 * 60); // in minutes
-
-        if (distance >= MIN_DISTANCE || timeDiff >= MIN_STOP_DURATION) {
-            // End the current point and start a new one
-            processedData.push({
-                ...currentPoint,
-                isPOI: true,
-                endTime: point.time,
-                duration: timeDiff,
-                isOvernightStay: timeDiff >= OVERNIGHT_DURATION
-            });
-            currentPoint = { ...point, startTime: point.time, duration: 0 };
-        } else {
-            // Update the current point
-            currentPoint.time = point.time;
-            currentPoint.duration = timeDiff;
-        }
-    }
+    console.log("Processed data:", processedData.length, "points");
+    console.log("POI points:", processedData.filter(p => p.poiType !== 'waypoint').length);
+    return processedData;
+}
 
     // Add the last point
     if (currentPoint) {
@@ -196,16 +223,29 @@ function showPoints() {
     clearMap();
     console.log("Number of points to show:", routeCoordinates.length);
     routeCoordinates.forEach(function(point, index) {
-        let markerIcon = point.isPOI ? createPOIIcon(point) : L.divIcon({
-            className: 'custom-div-icon',
-            html: '<div style="background-color:#2196F3;width:10px;height:10px;border-radius:50%;"></div>',
-            iconSize: [10, 10],
-            iconAnchor: [5, 5]
-        });
+        let markerIcon;
+        switch (point.poiType) {
+            case 'coffee':
+                markerIcon = createCustomIcon('fas fa-coffee', '#c30b82');
+                break;
+            case 'parking':
+                markerIcon = createCustomIcon('fas fa-parking', '#3498db');
+                break;
+            case 'campground':
+                markerIcon = createCustomIcon('fas fa-campground', '#4CAF50');
+                break;
+            default:
+                markerIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: '<div style="background-color:#2196F3;width:10px;height:10px;border-radius:50%;"></div>',
+                    iconSize: [10, 10],
+                    iconAnchor: [5, 5]
+                });
+        }
         var marker = L.marker([point.lat, point.lon], {icon: markerIcon}).addTo(map)
             .bindPopup(formatPopupContent(point));
         markers.push(marker);
-        if (point.isPOI) {
+        if (point.poiType !== 'waypoint') {
             console.log("POI added:", point);
         }
     });
@@ -234,11 +274,9 @@ function formatPopupContent(point) {
     const time = formatTime(point.time);
     const elevation = point.elevation !== null ? `${Math.round(point.elevation)}m` : 'N/A';
     let content = `Date: ${date}<br>Time: ${time}<br>Elevation: ${elevation}`;
-    if (point.isPOI) {
+    if (point.poiType !== 'waypoint') {
         content += `<br>Stop Duration: ${Math.round(point.duration)} minutes`;
-        if (point.isOvernightStay) {
-            content += " (Overnight Stay)";
-        }
+        content += `<br>Type: ${point.poiType.charAt(0).toUpperCase() + point.poiType.slice(1)}`;
     }
     return content;
 }
@@ -348,7 +386,7 @@ function stopDriveRoute() {
 async function calculateCompleteRoute() {
     console.log("Calculating complete route");
     let completeRoute = [];
-    let poiPoints = routeCoordinates.filter(point => point.isPOI);
+    let poiPoints = routeCoordinates.filter(point => point.poiType !== 'waypoint');
     console.log("Number of POI points:", poiPoints.length);
 
     try {
