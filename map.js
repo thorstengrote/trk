@@ -24,7 +24,20 @@ let homeMarker;
 
 // Initialization
 document.addEventListener('DOMContentLoaded', initializeApp);
+// Add these functions to map.js
 
+function toggleAnimation() {
+    if (animationRunning) {
+        stopAnimation();
+    } else {
+        startAnimation();
+    }
+}
+
+function toggleControls() {
+    const controlsContent = document.getElementById('controls-content');
+    controlsContent.classList.toggle('expanded');
+}
 function initializeApp() {
     document.getElementById('passwordOverlay').style.display = 'flex';
     
@@ -479,3 +492,5 @@ window.updateDateRange = updateDateRange;
 window.generateShareLink = generateShareLink;
 window.checkElevationData = checkElevationData;
 window.testElevationGraph = testElevationGraph;
+window.toggleControls = toggleControls;
+
