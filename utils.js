@@ -27,8 +27,8 @@ function calculateDistance(point1, point2) {
  * @returns {number} The time in milliseconds.
  */
 function calculateTimeToNextPoint(point1, point2, speed) {
-    const distance = calculateDistance(point1, point2);
-    return (distance / speed) * 1000; // Convert to milliseconds
+    var distance = calculateDistance(point1, point2);
+    return (distance / speed) * 3600000; // Convert to milliseconds (3600000 ms in an hour)
 }
 
 /**
