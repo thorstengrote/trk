@@ -192,7 +192,7 @@ function clearMap() {
     markers = [];
 }
 
-unction showPoints() {
+function showPoints() {
     console.log("Showing points");
     clearMap();
     console.log("Number of points to show:", routeCoordinates.length);
