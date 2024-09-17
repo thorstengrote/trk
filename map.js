@@ -76,6 +76,7 @@ function addPOIMarker(point) {
         .addTo(map)
         .bindPopup(formatPopupContent(point));
 }
+
 // Data loading and processing
 async function loadData() {
     console.log("Loading data");
@@ -117,7 +118,7 @@ function processRouteData(rawData) {
     let currentPoint = null;
     const MIN_DISTANCE = 0.1; // km
     const MIN_STOP_DURATION = 25; // minutes
-    const MAX_STOP_DURATION = 12 * 60; // 12 hours
+    const OVERNIGHT_DURATION = 6 * 60; // 6 hours
 
     for (let i = 0; i < rawData.length; i++) {
         let point = rawData[i];
@@ -131,16 +132,17 @@ function processRouteData(rawData) {
         let distance = calculateDistance(currentPoint, point);
         let timeDiff = (point.time - currentPoint.time) / (1000 * 60); // in minutes
 
-        if (distance >= MIN_DISTANCE || timeDiff >= MAX_STOP_DURATION) {
+        if (distance >= MIN_DISTANCE || timeDiff >= MIN_STOP_DURATION) {
             // End the current point and start a new one
             processedData.push({
                 ...currentPoint,
                 isPOI: true,
                 endTime: point.time,
-                duration: timeDiff
+                duration: timeDiff,
+                isOvernightStay: timeDiff >= OVERNIGHT_DURATION
             });
             currentPoint = { ...point, startTime: point.time, duration: 0 };
-        } else if (timeDiff >= MIN_STOP_DURATION) {
+        } else {
             // Update the current point
             currentPoint.time = point.time;
             currentPoint.duration = timeDiff;
@@ -149,11 +151,13 @@ function processRouteData(rawData) {
 
     // Add the last point
     if (currentPoint) {
+        let finalTimeDiff = (currentPoint.time - currentPoint.startTime) / (1000 * 60);
         processedData.push({
             ...currentPoint,
             isPOI: true,
             endTime: currentPoint.time,
-            duration: (currentPoint.time - currentPoint.startTime) / (1000 * 60)
+            duration: finalTimeDiff,
+            isOvernightStay: finalTimeDiff >= OVERNIGHT_DURATION
         });
     }
 
@@ -192,11 +196,16 @@ function showPoints() {
     clearMap();
     console.log("Number of points to show:", routeCoordinates.length);
     routeCoordinates.forEach(function(point, index) {
+        let markerIcon = point.isPOI ? createPOIIcon(point) : L.divIcon({
+            className: 'custom-div-icon',
+            html: '<div style="background-color:#2196F3;width:10px;height:10px;border-radius:50%;"></div>',
+            iconSize: [10, 10],
+            iconAnchor: [5, 5]
+        });
+        var marker = L.marker([point.lat, point.lon], {icon: markerIcon}).addTo(map)
+            .bindPopup(formatPopupContent(point));
+        markers.push(marker);
         if (point.isPOI) {
-            let markerIcon = createPOIIcon(point);
-            var marker = L.marker([point.lat, point.lon], {icon: markerIcon}).addTo(map)
-                .bindPopup(formatPopupContent(point));
-            markers.push(marker);
             console.log("POI added:", point);
         }
     });
@@ -223,10 +232,13 @@ function createPOIIcon(point) {
 function formatPopupContent(point) {
     const date = formatDate(point.time);
     const time = formatTime(point.time);
-    const elevation = point.elevation !== undefined ? `${Math.round(point.elevation)}m` : 'N/A';
+    const elevation = point.elevation !== null ? `${Math.round(point.elevation)}m` : 'N/A';
     let content = `Date: ${date}<br>Time: ${time}<br>Elevation: ${elevation}`;
     if (point.isPOI) {
         content += `<br>Stop Duration: ${Math.round(point.duration)} minutes`;
+        if (point.isOvernightStay) {
+            content += " (Overnight Stay)";
+        }
     }
     return content;
 }
