@@ -70,6 +70,12 @@ function initializeMap() {
     initializeElevationGraph();
 }
 
+function addPOIMarker(point) {
+    let markerIcon = createPOIIcon(point);
+    L.marker([point.lat, point.lon], {icon: markerIcon})
+        .addTo(map)
+        .bindPopup(formatPopupContent(point));
+}
 // Data loading and processing
 async function loadData() {
     console.log("Loading data");
