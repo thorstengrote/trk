@@ -1,101 +1,17 @@
+// Global variables
+let map, routeCoordinates = [], markers = [], speed = 20, routePath, routeVisible = false, 
+    pointsVisible = false, animationRunning = false, currentAnimationIndex = 0, 
+    animationTimeout, driveRouteRunning = false, vanMarker, homeMarker, stopPoints = [];
+
 // Constants
 const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving/';
 const OPENROUTE_URL = 'https://api.openrouteservice.org/v2/directions/driving-car';
 const OPENROUTE_API_KEY = '5b3ce3597851110001cf6248c56af19b19b2427c9486702926df507d';
 const MAX_REQUESTS_PER_SECOND = 1;
-const HOME_COORDINATES = [50.7852, 7.0141]; // Coordinates for Altmühlstr., 53332 Bornheim, Germany
-const MIN_DISTANCE = 0.1; // Minimum distance in kilometers for a real movement
-const MIN_STOP_DURATION = 25; // Minimum stop duration in minutes for a POI
-
-// Global variables
-let map;
-let routeCoordinates = [];
-let markers = [];
-let speed = 20; // km/s
-let routePath;
-let routeVisible = false;
-let pointsVisible = false;
-let animationRunning = false;
-let currentAnimationIndex = 0;
-let animationTimeout;
-let driveRouteRunning = false;
-let vanMarker;
-let homeMarker;
-
-// Initialization
-function consolidateWaypoints(rawData) {
-    const MAX_DISTANCE = 0.3; // km
-    let virtualWaypoints = [];
-    let currentGroup = [];
-
-    for (let i = 0; i < rawData.length; i++) {
-        if (currentGroup.length === 0) {
-            currentGroup.push(rawData[i]);
-        } else {
-            const lastPoint = currentGroup[currentGroup.length - 1];
-            const distance = calculateDistance(lastPoint, rawData[i]);
-            
-            if (distance <= MAX_DISTANCE) {
-                currentGroup.push(rawData[i]);
-            } else {
-                // Create virtual waypoint from the current group
-                virtualWaypoints.push(createVirtualWaypoint(currentGroup));
-                currentGroup = [rawData[i]];
-            }
-        }
-    }
-
-    // Add the last group if it exists
-    if (currentGroup.length > 0) {
-        virtualWaypoints.push(createVirtualWaypoint(currentGroup));
-    }
-
-    return virtualWaypoints;
-}
-
-function createVirtualWaypoint(group) {
-    const firstPoint = group[0];
-    const lastPoint = group[group.length - 1];
-    const duration = (lastPoint.time - firstPoint.time) / (1000 * 60); // in minutes
-
-    return {
-        lat: firstPoint.lat,
-        lon: firstPoint.lon,
-        time: firstPoint.time,
-        duration: duration,
-        elevation: firstPoint.elevation
-    };
-}
-function initializeApp() {
-    console.log("Initializing app");
-    document.getElementById('passwordOverlay').style.display = 'flex';
-    
-    const urlParams = new URLSearchParams(window.location.search);
-    const startDate = urlParams.get('start');
-    const endDate = urlParams.get('end');
-
-    if (startDate) document.getElementById('startDate').value = startDate;
-    if (endDate) document.getElementById('endDate').value = endDate;
-
-    document.getElementById('speedRange').addEventListener('input', function() {
-        updateSpeed(this.value);
-    });
-}
-
-function checkPassword() {
-    console.log("Checking password");
-    const password = document.getElementById('passwordInput').value;
-    if (password === 'thorsten') {
-        document.getElementById('passwordOverlay').style.display = 'none';
-        initializeMap();
-        loadData();
-    } else {
-        alert('Incorrect password');
-    }
-}
+const HOME_COORDINATES = [50.7852, 7.0141];
+const MAX_DISTANCE = 0.3; // km
 
 function initializeMap() {
-    console.log("Initializing map");
     map = L.map('map').setView(HOME_COORDINATES, 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -113,15 +29,7 @@ function initializeMap() {
     initializeElevationGraph();
 }
 
-function addPOIMarker(point) {
-    let markerIcon = createPOIIcon(point);
-    L.marker([point.lat, point.lon], {icon: markerIcon})
-        .addTo(map)
-        .bindPopup(formatPopupContent(point));
-}
-
-// Data loading and processing
-async function loadData() {
+function loadData() {
     console.log("Loading data");
     Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
         download: true,
@@ -176,46 +84,45 @@ function processRouteData(rawData) {
     return processedData;
 }
 
-    // Add the last point
-    if (currentPoint) {
-        let finalTimeDiff = (currentPoint.time - currentPoint.startTime) / (1000 * 60);
-        processedData.push({
-            ...currentPoint,
-            isPOI: true,
-            endTime: currentPoint.time,
-            duration: finalTimeDiff,
-            isOvernightStay: finalTimeDiff >= OVERNIGHT_DURATION
-        });
+function consolidateWaypoints(rawData) {
+    let virtualWaypoints = [];
+    let currentGroup = [];
+
+    for (let i = 0; i < rawData.length; i++) {
+        if (currentGroup.length === 0) {
+            currentGroup.push(rawData[i]);
+        } else {
+            const lastPoint = currentGroup[currentGroup.length - 1];
+            const distance = calculateDistance(lastPoint, rawData[i]);
+            
+            if (distance <= MAX_DISTANCE) {
+                currentGroup.push(rawData[i]);
+            } else {
+                virtualWaypoints.push(createVirtualWaypoint(currentGroup));
+                currentGroup = [rawData[i]];
+            }
+        }
     }
 
-    console.log("Processed data:", processedData.length, "points");
-    console.log("POI points:", processedData.filter(p => p.isPOI).length);
-    return processedData;
+    if (currentGroup.length > 0) {
+        virtualWaypoints.push(createVirtualWaypoint(currentGroup));
+    }
+
+    return virtualWaypoints;
 }
 
-// Map interaction functions
-function updateDateRange() {
-    console.log("Updating date range");
-    let startDate = document.getElementById('startDate').value;
-    let endDate = document.getElementById('endDate').value;
-    routeCoordinates = filterRouteByDateRange(routeCoordinates, startDate, endDate);
-    
-    clearMap();
+function createVirtualWaypoint(group) {
+    const firstPoint = group[0];
+    const lastPoint = group[group.length - 1];
+    const duration = (lastPoint.time - firstPoint.time) / (1000 * 60); // in minutes
 
-    if (pointsVisible) {
-        showPoints();
-    }
-
-    if (routeVisible) {
-        showRoute();
-    }
-}
-
-function clearMap() {
-    console.log("Clearing map");
-    if (routePath) map.removeLayer(routePath);
-    markers.forEach(marker => map.removeLayer(marker));
-    markers = [];
+    return {
+        lat: firstPoint.lat,
+        lon: firstPoint.lon,
+        time: firstPoint.time,
+        duration: duration,
+        elevation: firstPoint.elevation
+    };
 }
 
 function showPoints() {
@@ -257,32 +164,7 @@ function showPoints() {
     }
 }
 
-function createPOIIcon(point) {
-    let iconClass, backgroundColor;
-    if (point.duration > 24 * 60) {
-        [iconClass, backgroundColor] = ['fas fa-campground', '#4CAF50'];
-    } else if (point.duration > 4 * 60) {
-        [iconClass, backgroundColor] = ['fas fa-parking', '#3498db'];
-    } else {
-        [iconClass, backgroundColor] = ['fas fa-coffee', '#c30b82'];
-    }
-    return createCustomIcon(iconClass, backgroundColor);
-}
-
-function formatPopupContent(point) {
-    const date = formatDate(point.time);
-    const time = formatTime(point.time);
-    const elevation = point.elevation !== null ? `${Math.round(point.elevation)}m` : 'N/A';
-    let content = `Date: ${date}<br>Time: ${time}<br>Elevation: ${elevation}`;
-    if (point.poiType !== 'waypoint') {
-        content += `<br>Stop Duration: ${Math.round(point.duration)} minutes`;
-        content += `<br>Type: ${point.poiType.charAt(0).toUpperCase() + point.poiType.slice(1)}`;
-    }
-    return content;
-}
-
 function togglePoints() {
-    console.log("Toggling points");
     pointsVisible = !pointsVisible;
     if (pointsVisible) {
         showPoints();
@@ -291,8 +173,15 @@ function togglePoints() {
     }
 }
 
+function toggleAnimation() {
+    if (animationRunning) {
+        stopAnimation();
+    } else {
+        startAnimation();
+    }
+}
+
 function toggleRoute() {
-    console.log("Toggling route");
     routeVisible = !routeVisible;
     if (routeVisible) {
         showRoute();
@@ -301,24 +190,15 @@ function toggleRoute() {
     }
 }
 
-function showRoute() {
-    console.log("Showing route");
-    if (routePath) map.removeLayer(routePath);
-    calculateCompleteRoute();
-}
-
-// Animation and route functions
-function toggleAnimation() {
-    console.log("Toggling animation");
-    if (animationRunning) {
-        stopAnimation();
+function toggleDriveRoute() {
+    if (driveRouteRunning) {
+        stopDriveRoute();
     } else {
-        startAnimation();
+        startDriveRoute();
     }
 }
 
 function startAnimation() {
-    console.log("Starting animation");
     if (routePath) map.removeLayer(routePath);
     routePath = L.polyline([], {color: 'blue'}).addTo(map);
     animationRunning = true;
@@ -328,40 +208,9 @@ function startAnimation() {
 }
 
 function stopAnimation() {
-    console.log("Stopping animation");
     animationRunning = false;
     clearTimeout(animationTimeout);
     document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Start Animation";
-}
-
-function animateRoute(i) {
-    if (i < routeCoordinates.length && animationRunning) {
-        var point = routeCoordinates[i];
-        var marker = L.marker([point.lat, point.lon]).addTo(map)
-            .bindPopup(formatPopupContent(point))
-            .openPopup();
-        markers.push(marker);
-
-        routePath.addLatLng([point.lat, point.lon]);
-        map.setView([point.lat, point.lon]);
-
-        updateElevationGraph(point.elevation);
-
-        animationTimeout = setTimeout(function() {
-            animateRoute(i + 1);
-        }, 1000);
-    } else if (i >= routeCoordinates.length) {
-        stopAnimation();
-    }
-}
-
-function toggleDriveRoute() {
-    console.log("Toggling drive route");
-    if (driveRouteRunning) {
-        stopDriveRoute();
-    } else {
-        startDriveRoute();
-    }
 }
 
 function startDriveRoute() {
@@ -376,11 +225,72 @@ function startDriveRoute() {
 }
 
 function stopDriveRoute() {
-    console.log("Stopping drive route");
     driveRouteRunning = false;
     clearTimeout(animationTimeout);
     document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Drive Route";
     if (vanMarker) map.removeLayer(vanMarker);
+}
+
+function updateSpeed(value) {
+    console.log("Updating speed to:", value);
+    document.getElementById('speedValue').textContent = value;
+    speed = parseInt(value);
+}
+
+function updateDateRange() {
+    let startDate = document.getElementById('startDate').value;
+    let endDate = document.getElementById('endDate').value;
+    routeCoordinates = filterRouteByDateRange(routeCoordinates, startDate, endDate);
+    
+    clearMap();
+
+    if (pointsVisible) {
+        showPoints();
+    }
+
+    if (routeVisible) {
+        showRoute();
+    }
+}
+
+function generateShareLink() {
+    var startDate = document.getElementById('startDate').value;
+    var endDate = document.getElementById('endDate').value;
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates.');
+        return;
+    }
+    var currentUrl = window.location.href.split('?')[0]; // Remove existing query parameters
+    var shareUrl = `${currentUrl}?start=${startDate}&end=${endDate}&autoplay=true`;
+    var shareLinkElement = document.getElementById('shareLink');
+    shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
+}
+
+function clearMap() {
+    if (routePath) map.removeLayer(routePath);
+    markers.forEach(marker => map.removeLayer(marker));
+    markers = [];
+}
+
+function createCustomIcon(iconClass, backgroundColor) {
+    return L.divIcon({
+        className: 'custom-div-icon',
+        html: `<div style="background-color:${backgroundColor};color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="${iconClass}"></i></div>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 15]
+    });
+}
+
+function formatPopupContent(point) {
+    const date = formatDate(point.time);
+    const time = formatTime(point.time);
+    const elevation = point.elevation !== null ? `${Math.round(point.elevation)}m` : 'N/A';
+    let content = `Date: ${date}<br>Time: ${time}<br>Elevation: ${elevation}`;
+    if (point.poiType !== 'waypoint') {
+        content += `<br>Stop Duration: ${Math.round(point.duration)} minutes`;
+        content += `<br>Type: ${point.poiType.charAt(0).toUpperCase() + point.poiType.slice(1)}`;
+    }
+    return content;
 }
 
 async function calculateCompleteRoute() {
@@ -441,13 +351,15 @@ function animateVanAlongRoute(route, step) {
         map.setView(point);
 
         // Check if this point is a POI and add marker if so
-        let poiPoint = routeCoordinates.find(p => p.isPOI && Math.abs(p.lat - point[0]) < 0.0001 && Math.abs(p.lon - point[1]) < 0.0001);
+        let poiPoint = routeCoordinates.find(p => p.poiType !== 'waypoint' && Math.abs(p.lat - point[0]) < 0.0001 && Math.abs(p.lon - point[1]) < 0.0001);
         if (poiPoint) {
             addPOIMarker(poiPoint);
         }
 
-                currentAnimationIndex = step;
-        var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint, speed); // Pass the speed variable
+        updateElevationGraph(interpolateElevation(point, route, step));
+
+        currentAnimationIndex = step;
+        var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint, speed);
         animationTimeout = setTimeout(function() {
             animateVanAlongRoute(route, step + 1);
         }, timeToNextPoint);
@@ -459,137 +371,99 @@ function animateVanAlongRoute(route, step) {
     }
 }
 
-// API-related functions
-async function getRouteFromOSRM(points) {
-    console.log("Getting route from OSRM");
-    const cacheKey = `route_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
-    const cachedRoute = await localforage.getItem(cacheKey);
+function addPOIMarker(point) {
+    let markerIcon = createCustomIcon(getPOIIconClass(point.poiType), getPOIColor(point.poiType));
+    L.marker([point.lat, point.lon], {icon: markerIcon})
+        .addTo(map)
+        .bindPopup(formatPopupContent(point));
+}
+
+function getPOIIconClass(poiType) {
+    switch (poiType) {
+        case 'coffee': return 'fas fa-coffee';
+        case 'parking': return 'fas fa-parking';
+        case 'campground': return 'fas fa-campground';
+        default: return 'fas fa-map-marker';
+    }
+}
+
+function getPOIColor(poiType) {
+    switch (poiType) {
+        case 'coffee': return '#c30b82';
+        case 'parking': return '#3498db';
+        case 'campground': return '#4CAF50';
+        default: return '#2196F3';
+    }
+}
+
+function interpolateElevation(point, route, step) {
+    const prevWaypoint = findPreviousWaypoint(route, step);
+    const nextWaypoint = findNextWaypoint(route, step);
+
+    if (!prevWaypoint && !nextWaypoint) {
+        console.log("No elevation data available for interpolation");
+        return null;
+    }
+
+    if (!prevWaypoint) return nextWaypoint.elevation;
+    if (!nextWaypoint) return prevWaypoint.elevation;
+
+    if (prevWaypoint.elevation === null || nextWaypoint.elevation === null) {
+        return prevWaypoint.elevation !== null ? prevWaypoint.elevation : nextWaypoint.elevation;
+    }
+
+    const totalDistance = calculateDistance(prevWaypoint, nextWaypoint);
+    const distanceToPoint = calculateDistance(prevWaypoint, point);
+    const ratio = distanceToPoint / totalDistance;
+
+    const interpolatedElevation = prevWaypoint.elevation + (nextWaypoint.elevation - prevWaypoint.elevation) * ratio;
+    console.log("Interpolated elevation:", interpolatedElevation);
+    return interpolatedElevation;
+}
+
+function findPreviousWaypoint(route, step) {
+    for (let i = step; i >= 0; i--) {
+        if (route[i].elevation !== null) {
+            return route[i];
+        }
+    }
+    return null;
+}
+
+function findNextWaypoint(route, step) {
+    for (let i = step; i < route.length; i++) {
+        if (route[i].elevation !== null) {
+            return route[i];
+        }
+    }
+    return null;
+}
+
+function filterRouteByDateRange(coordinates, startDate, endDate) {
+    if (!startDate || !endDate) return coordinates;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    return coordinates.filter(point => point.time >= start && point.time <= end);
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('passwordOverlay').style.display = 'flex';
     
-    if (cachedRoute) {
-        console.log("Using cached route");
-        return cachedRoute;
-    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const startDate = urlParams.get('start');
+    const endDate = urlParams.get('end');
 
-    await throttleRequest(MAX_REQUESTS_PER_SECOND);
+    if (startDate) document.getElementById('startDate').value = startDate;
+    if (endDate) document.getElementById('endDate').value = endDate;
 
-    const coordinates = points.map(p => `${p.lon},${p.lat}`).join(';');
-    const url = `${OSRM_URL}${coordinates}?overview=full&geometries=geojson&continue_straight=true`;
+    // Add other necessary event listeners here
+    document.getElementById('speedRange').addEventListener('input', function() {
+        updateSpeed(this.value);
+    });
+});
 
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error('OSRM request failed');
-        }
-        const data = await response.json();
-        if (data.routes && data.routes.length > 0) {
-            const route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
-            await localforage.setItem(cacheKey, route);
-            return route;
-        }
-    } catch (error) {
-        console.error('Error fetching route from OSRM:', error);
-        return getRouteFromOpenRoute(points);
-    }
-}
-
-async function getRouteFromOpenRoute(points) {
-    console.log("Getting route from OpenRoute");
-    const cacheKey = `openroute_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
-    const cachedRoute = await localforage.getItem(cacheKey);
-    
-    if (cachedRoute) {
-        console.log("Using cached route");
-        return cachedRoute;
-    }
-
-    await throttleRequest(MAX_REQUESTS_PER_SECOND);
-
-    const body = {
-        coordinates: points.map(p => [p.lon, p.lat])
-    };
-
-    try {
-        const response = await fetch(OPENROUTE_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': OPENROUTE_API_KEY
-            },
-            body: JSON.stringify(body)
-        });
-
-        if (!response.ok) {
-            throw new Error('OpenRoute request failed');
-        }
-
-        const data = await response.json();
-        if (data.routes && data.routes.length > 0) {
-            const route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
-            await localforage.setItem(cacheKey, route);
-            return route;
-        }
-    } catch (error) {
-        console.error('Error fetching route from OpenRoute:', error);
-        throw error;
-    }
-}
-
-// Utility functions
-function updateSpeed(value) {
-    console.log("Updating speed to:", value);
-    document.getElementById('speedValue').textContent = value;
-    speed = parseInt(value);
-}
-
-function toggleControls() {
-    console.log("Toggling controls");
-    const controlsContent = document.getElementById('controls-content');
-    controlsContent.classList.toggle('expanded');
-}
-
-// Elevation-related functions
-async function fetchElevationData(coordinates) {
-    console.log("Fetching elevation data");
-    const BATCH_SIZE = 100; // Adjust based on API limitations
-    let allResults = [];
-
-    for (let i = 0; i < coordinates.length; i += BATCH_SIZE) {
-        const batch = coordinates.slice(i, i + BATCH_SIZE);
-        const url = 'https://api.open-elevation.com/api/v1/lookup';
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                locations: batch.map(coord => ({ latitude: coord.lat, longitude: coord.lon }))
-            }),
-        });
-        const data = await response.json();
-        allResults = allResults.concat(data.results);
-    }
-
-    console.log("Elevation data fetched for", allResults.length, "points");
-    return allResults;
-}
-
-// Share link generation
-function generateShareLink() {
-    console.log("Generating share link");
-    var startDate = document.getElementById('startDate').value;
-    var endDate = document.getElementById('endDate').value;
-    if (!startDate || !endDate) {
-        alert('Please select both start and end dates.');
-        return;
-    }
-    var currentUrl = window.location.href.split('?')[0]; // Remove existing query parameters
-    var shareUrl = `${currentUrl}?start=${startDate}&end=${endDate}&autoplay=true`;
-    var shareLinkElement = document.getElementById('shareLink');
-    shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
-    console.log("Share link generated:", shareUrl);
-}
-
-// Export functions for use in HTML and other modules
+// Export functions to global scope
 window.checkPassword = checkPassword;
 window.toggleControls = toggleControls;
 window.updateSpeed = updateSpeed;
@@ -601,17 +475,7 @@ window.updateDateRange = updateDateRange;
 window.generateShareLink = generateShareLink;
 
 // Initialize the application
-initializeApp();
+initializeMap();
+loadData();
 
-// Debug logging
 console.log("map.js loaded");
-console.log("Available functions:");
-console.log("checkPassword:", typeof window.checkPassword);
-console.log("toggleControls:", typeof window.toggleControls);
-console.log("updateSpeed:", typeof window.updateSpeed);
-console.log("togglePoints:", typeof window.togglePoints);
-console.log("toggleAnimation:", typeof window.toggleAnimation);
-console.log("toggleRoute:", typeof window.toggleRoute);
-console.log("toggleDriveRoute:", typeof window.toggleDriveRoute);
-console.log("updateDateRange:", typeof window.updateDateRange);
-console.log("generateShareLink:", typeof window.generateShareLink);
