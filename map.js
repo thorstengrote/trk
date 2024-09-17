@@ -439,11 +439,27 @@ function findNextWaypoint(route, step) {
     return null;
 }
 
+function checkPassword() {
+    const password = document.getElementById('passwordInput').value;
+    if (password === 'thorsten') {
+        document.getElementById('passwordOverlay').style.display = 'none';
+        initializeMap();
+        loadData();
+    } else {
+        alert('Incorrect password');
+    }
+}
+
 function filterRouteByDateRange(coordinates, startDate, endDate) {
     if (!startDate || !endDate) return coordinates;
     const start = new Date(startDate);
     const end = new Date(endDate);
     return coordinates.filter(point => point.time >= start && point.time <= end);
+}
+
+function toggleControls() {
+    const controlsContent = document.getElementById('controls-content');
+    controlsContent.classList.toggle('expanded');
 }
 
 // Event listeners
@@ -473,6 +489,8 @@ window.toggleRoute = toggleRoute;
 window.toggleDriveRoute = toggleDriveRoute;
 window.updateDateRange = updateDateRange;
 window.generateShareLink = generateShareLink;
+window.startAnimation = startAnimation;
+window.stopAnimation = stopAnimation;
 
 // Initialize the application
 initializeMap();
