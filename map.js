@@ -24,20 +24,7 @@ let homeMarker;
 
 // Initialization
 document.addEventListener('DOMContentLoaded', initializeApp);
-// Add these functions to map.js
 
-function toggleAnimation() {
-    if (animationRunning) {
-        stopAnimation();
-    } else {
-        startAnimation();
-    }
-}
-
-function toggleControls() {
-    const controlsContent = document.getElementById('controls-content');
-    controlsContent.classList.toggle('expanded');
-}
 function initializeApp() {
     document.getElementById('passwordOverlay').style.display = 'flex';
     
@@ -80,10 +67,9 @@ function initializeMap() {
     }).addTo(map);
 
     initializeElevationGraph();
-    initializeDebugControls();
 }
 
-// Data processing
+// Data loading and processing
 async function loadData() {
     Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
         download: true,
@@ -104,10 +90,10 @@ async function loadData() {
             console.log("Processed coordinates:", routeCoordinates.length);
 
             const elevationData = await fetchElevationData(routeCoordinates);
-               routeCoordinates = routeCoordinates.map((point, index) => ({
-        ...point,
-        elevation: elevationData[index].elevation
-    }));
+            routeCoordinates = routeCoordinates.map((point, index) => ({
+                ...point,
+                elevation: elevationData[index].elevation
+            }));
 
             checkElevationData(routeCoordinates);
             updateDateRange();
@@ -174,7 +160,7 @@ function processRouteData(rawData) {
 function updateDateRange() {
     let startDate = document.getElementById('startDate').value;
     let endDate = document.getElementById('endDate').value;
-    routeCoordinates = filterRouteByDateRange(startDate, endDate);
+    routeCoordinates = filterRouteByDateRange(routeCoordinates, startDate, endDate);
     
     clearMap();
 
@@ -216,18 +202,9 @@ function createPOIIcon(point) {
     return createCustomIcon(iconClass, backgroundColor);
 }
 
-function createCustomIcon(iconClass, backgroundColor) {
-    return L.divIcon({
-        className: 'custom-div-icon',
-        html: `<div style="background-color:${backgroundColor};color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="${iconClass}"></i></div>`,
-        iconSize: [30, 30],
-        iconAnchor: [15, 15]
-    });
-}
-
 function formatPopupContent(point) {
-    const date = point.time.toLocaleDateString();
-    const time = point.time.toLocaleTimeString();
+    const date = formatDate(point.time);
+    const time = formatTime(point.time);
     const elevation = point.elevation !== undefined ? `${Math.round(point.elevation)}m` : 'N/A';
     let content = `Date: ${date}<br>Time: ${time}<br>Elevation: ${elevation}`;
     if (point.isPOI) {
@@ -255,7 +232,72 @@ function showRoute() {
     calculateCompleteRoute();
 }
 
-// Route calculation and animation
+// Animation and route functions
+function toggleAnimation() {
+    if (animationRunning) {
+        stopAnimation();
+    } else {
+        startAnimation();
+    }
+}
+
+function startAnimation() {
+    if (routePath) map.removeLayer(routePath);
+    routePath = L.polyline([], {color: 'blue'}).addTo(map);
+    animationRunning = true;
+    currentAnimationIndex = 0;
+    document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Stop Animation";
+    animateRoute(currentAnimationIndex);
+}
+
+function stopAnimation() {
+    animationRunning = false;
+    clearTimeout(animationTimeout);
+    document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Start Animation";
+}
+
+function animateRoute(i) {
+    if (i < routeCoordinates.length && animationRunning) {
+        var point = routeCoordinates[i];
+        var marker = L.marker([point.lat, point.lon]).addTo(map)
+            .bindPopup(formatPopupContent(point))
+            .openPopup();
+        markers.push(marker);
+
+        routePath.addLatLng([point.lat, point.lon]);
+        map.setView([point.lat, point.lon]);
+
+        updateElevationGraph(point.elevation);
+
+        animationTimeout = setTimeout(function() {
+            animateRoute(i + 1);
+        }, 1000);
+    } else if (i >= routeCoordinates.length) {
+        stopAnimation();
+    }
+}
+
+function toggleDriveRoute() {
+    if (driveRouteRunning) stopDriveRoute();
+    else startDriveRoute();
+}
+
+function startDriveRoute() {
+    document.getElementById('loadingModal').style.display = 'block';
+    if (routePath) map.removeLayer(routePath);
+    routePath = L.polyline([], {color: 'blue'}).addTo(map);
+    driveRouteRunning = true;
+    document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
+    calculateCompleteRoute();
+}
+
+function stopDriveRoute() {
+    driveRouteRunning = false;
+    clearTimeout(animationTimeout);
+    document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Drive Route";
+    if (vanMarker) map.removeLayer(vanMarker);
+}
+
 async function calculateCompleteRoute() {
     let completeRoute = [];
     let poiPoints = routeCoordinates.filter(point => point.isPOI);
@@ -301,90 +343,14 @@ function animateVanAlongRoute(route, step) {
         const elevation = interpolateElevation(point, route, step);
         updateElevationGraph(elevation);
 
-        console.log("Current point:", point);
-        console.log("Interpolated elevation:", elevation);
-
         currentAnimationIndex = step;
-        var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint);
+        var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint, speed);
         animationTimeout = setTimeout(function() {
             animateVanAlongRoute(route, step + 1);
         }, timeToNextPoint);
     } else if (!driveRouteRunning) {
         stopDriveRoute();
     }
-}
-
-function toggleDriveRoute() {
-    if (driveRouteRunning) stopDriveRoute();
-    else startDriveRoute();
-}
-
-function startDriveRoute() {
-    document.getElementById('loadingModal').style.display = 'block';
-    if (routePath) map.removeLayer(routePath);
-    routePath = L.polyline([], {color: 'blue'}).addTo(map);
-    driveRouteRunning = true;
-    document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
-    calculateCompleteRoute();
-}
-
-function stopDriveRoute() {
-    driveRouteRunning = false;
-    clearTimeout(animationTimeout);
-    document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Drive Route";
-    if (vanMarker) map.removeLayer(vanMarker);
-}
-
-// Utility functions
-function calculateDistance(point1, point2) {
-    const R = 6371; // Earth's radius in km
-    const dLat = (point2.lat - point1.lat) * Math.PI / 180;
-    const dLon = (point2.lon - point1.lon) * Math.PI / 180;
-    const a = 
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(point1.lat * Math.PI / 180) * Math.cos(point2.lat * Math.PI / 180) * 
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-}
-
-function calculateTimeToNextPoint(point1, point2) {
-    var distance = calculateDistance(point1, point2);
-    return (distance / (speed * 1000)) * 1000; // Convert to milliseconds
-}
-
-function filterRouteByDateRange(startDate, endDate) {
-    if (!startDate || !endDate) return routeCoordinates;
-    return routeCoordinates.filter(point => {
-        return point.time >= new Date(startDate) && point.time <= new Date(endDate);
-    });
-}
-
-function updateSpeed(value) {
-    document.getElementById('speedValue').textContent = value;
-    speed = parseInt(value);
-}
-
-function generateShareLink() {
-    var startDate = document.getElementById('startDate').value;
-    var endDate = document.getElementById('endDate').value;
-    if (!startDate || !endDate) {
-        alert('Please select both start and end dates.');
-        return;
-    }
-    var currentUrl = window.location.href.split('?')[0];
-    var shareUrl = `${currentUrl}?start=${startDate}&end=${endDate}&autoplay=true`;
-    var shareLinkElement = document.getElementById('shareLink');
-    shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
-}
-
-function initializeDebugControls() {
-    let debugDiv = document.createElement('div');
-    debugDiv.innerHTML = `
-        <button onclick="checkElevationData()">Check Elevation Data</button>
-        <button onclick="testElevationGraph()">Test Elevation Graph</button>
-    `;
-    document.body.appendChild(debugDiv);
 }
 
 // API-related functions
@@ -458,6 +424,17 @@ async function getRouteFromOpenRoute(points) {
     }
 }
 
+// Utility functions
+function updateSpeed(value) {
+    document.getElementById('speedValue').textContent = value;
+    speed = parseInt(value);
+}
+
+function toggleControls() {
+    const controlsContent = document.getElementById('controls-content');
+    controlsContent.classList.toggle('expanded');
+}
+
 // Elevation-related functions
 async function fetchElevationData(coordinates) {
     const BATCH_SIZE = 100; // Adjust based on API limitations
@@ -482,15 +459,43 @@ async function fetchElevationData(coordinates) {
     return allResults;
 }
 
-// Export functions for use in other modules
+// Share link generation
+function generateShareLink() {
+    var startDate = document.getElementById('startDate').value;
+    var endDate = document.getElementById('endDate').value;
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates.');
+        return;
+    }
+    var currentUrl = window.location.href.split('?')[0]; // Remove existing query parameters
+    var shareUrl = `${currentUrl}?start=${startDate}&end=${endDate}&autoplay=true`;
+    var shareLinkElement = document.getElementById('shareLink');
+    shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
+}
+
+// Export functions for use in HTML and other modules
 window.checkPassword = checkPassword;
+window.toggleControls = toggleControls;
+window.updateSpeed = updateSpeed;
 window.togglePoints = togglePoints;
 window.toggleAnimation = toggleAnimation;
 window.toggleRoute = toggleRoute;
 window.toggleDriveRoute = toggleDriveRoute;
 window.updateDateRange = updateDateRange;
 window.generateShareLink = generateShareLink;
-window.checkElevationData = checkElevationData;
-window.testElevationGraph = testElevationGraph;
-window.toggleControls = toggleControls;
 
+// Initialize the application
+initializeApp();
+
+// Debug logging
+console.log("map.js loaded");
+console.log("Available functions:");
+console.log("checkPassword:", typeof window.checkPassword);
+console.log("toggleControls:", typeof window.toggleControls);
+console.log("updateSpeed:", typeof window.updateSpeed);
+console.log("togglePoints:", typeof window.togglePoints);
+console.log("toggleAnimation:", typeof window.toggleAnimation);
+console.log("toggleRoute:", typeof window.toggleRoute);
+console.log("toggleDriveRoute:", typeof window.toggleDriveRoute);
+console.log("updateDateRange:", typeof window.updateDateRange);
+console.log("generateShareLink:", typeof window.generateShareLink);
