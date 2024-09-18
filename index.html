@@ -579,7 +579,7 @@
             }
         }
 
-       function animateVanAlongRoute(route, step) {
+function animateVanAlongRoute(route, step) {
     if (step < route.length && driveRouteRunning) {
         var point = route[step];
         var time = interpolateTime(step, route.length);
@@ -629,15 +629,6 @@ function interpolateTime(step, totalSteps) {
     return new Date(startTime.getTime() + (totalDuration * step / totalSteps));
 }
 
-        currentAnimationIndex = step;
-        var timeToNextPoint = calculateTimeToNextPoint(point, route[step + 1] || point);
-        animationTimeout = setTimeout(function() {
-            animateVanAlongRoute(route, step + 1);
-        }, timeToNextPoint);
-    } else if (!driveRouteRunning) {
-        stopDriveRoute();
-    }
-}
         function addStopMarker(stopPoint) {
             let markerIcon;
             let visitCount = stopPoint.visitCount || 1;
