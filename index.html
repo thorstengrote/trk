@@ -699,7 +699,7 @@
         }
 
         // Function to classify stops (sleeping, parking, coffee break)
-        function classifyStop(timeDiff, sleepingThreshold = 360, parkingThreshold = 60, coffeeBreakThreshold = 20) {
+        function classifyStop(timeDiff, sleepingThreshold = 360, parkingThreshold = 90, coffeeBreakThreshold = 35) {
     console.log(`Classifying stop with duration: ${timeDiff.toFixed(2)} minutes`);
     if (timeDiff >= sleepingThreshold) {
         return 'Sleeping';
