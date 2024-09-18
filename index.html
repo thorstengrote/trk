@@ -818,10 +818,11 @@ function identifyPOIs(points) {
                     const maxDistanceInCluster = Math.max(...currentCluster.map(p => 
                         calculateDistance(avgLat, avgLon, p.lat, p.lon)
                     ));
-                    
+
+                    const firstPoint = currentCluster[0];
                     const newPOI = {
-                        lat: avgLat,
-                        lon: avgLon,
+                        lat: firstPoint.lat,
+                        lon: firstPoint.lon,
                         time: currentCluster[0].time,
                         endTime: currentCluster[currentCluster.length - 1].time,
                         stopType: stopType,
