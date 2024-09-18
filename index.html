@@ -201,7 +201,6 @@
         var vanMarker;
         var stopMarkers = [];
         var homeMarker;
-        var stopPoints = [];
 
         const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving/';
         const OPENROUTE_URL = 'https://api.openrouteservice.org/v2/directions/driving-car';
@@ -264,8 +263,7 @@
                         .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
                         .sort((a, b) => a.time - b.time);
 
-                    identifyTargetPoints(routeCoordinates);
-                    identifyStopPoints(routeCoordinates);
+                    routeCoordinates = adjustStopToPrevious(routeCoordinates);
                     updateDateRange();
 
                     document.getElementById('speedRange').value = speed;
@@ -289,44 +287,6 @@
             content.classList.remove('expanded');
         }
 
-        function identifyTargetPoints(coordinates) {
-            for (let i = 0; i < coordinates.length; i++) {
-                if (i === 0) {
-                    coordinates[i].isTarget = true;
-                } else {
-                    const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
-                    coordinates[i].isTarget = timeDiff > 30;
-                }
-            }
-        }
-
-        function identifyStopPoints(coordinates) {
-            stopPoints = [];
-            for (let i = 1; i < coordinates.length; i++) {
-                const timeDiff = (coordinates[i].time - coordinates[i-1].time) / (1000 * 60);
-                if (timeDiff > 25) {
-                    let stopType = getStopType(coordinates[i-1].time, coordinates[i].time);
-                    stopPoints.push({
-                        lat: coordinates[i].lat,
-                        lon: coordinates[i].lon,
-                        time: coordinates[i].time,
-                        stopType: stopType
-                    });
-                }
-            }
-        }
-
-        function getStopType(startTime, endTime) {
-            const timeDiff = (endTime - startTime) / (1000 * 60); // difference in minutes
-            if (timeDiff > 24 * 60) { // More than a day
-                return 'camp';
-            } else if (timeDiff > 240) { // More than 4 hours
-                return 'parking';
-            } else {
-                return 'pause';
-            }
-        }
-
         function updateSpeed(value) {
             document.getElementById('speedValue').textContent = value;
             speed = parseInt(value);
@@ -336,7 +296,6 @@
             let startDate = document.getElementById('startDate').value;
             let endDate = document.getElementById('endDate').value;
             filteredCoordinates = filterRouteByDateRange(startDate, endDate);
-            stopPoints = filterStopPointsByDateRange(startDate, endDate);
             
             // Clear existing markers and path
             clearMap();
@@ -371,10 +330,13 @@
             hidePoints();
             filteredCoordinates.forEach(function(point) {
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""));
+                    .bindPopup(point.time.toLocaleString() + (point.stopType ? " (" + point.stopType + ")" : ""));
                 markers.push(marker);
+
+                if (point.stopType && point.stopType !== 'Moving') {
+                    addStopMarker(point);
+                }
             });
-            showStopPoints();
             map.fitBounds(L.latLngBounds(filteredCoordinates.map(point => [point.lat, point.lon])));
         }
 
@@ -383,12 +345,6 @@
             stopMarkers.forEach(marker => map.removeLayer(marker));
             markers = [];
             stopMarkers = [];
-        }
-
-        function showStopPoints() {
-            stopPoints.forEach(function(stopPoint) {
-                addStopMarker(stopPoint);
-            });
         }
 
         function toggleAnimation() {
@@ -432,21 +388,15 @@
             if (i < filteredCoordinates.length && animationRunning) {
                 var point = filteredCoordinates[i];
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString() + (point.isTarget ? " (Target)" : ""))
+                    .bindPopup(point.time.toLocaleString() + (point.stopType ? " (" + point.stopType + ")" : ""))
                     .openPopup();
                 markers.push(marker);
 
                 routePath.addLatLng([point.lat, point.lon]);
                 map.setView([point.lat, point.lon]);
 
-                // Check if we've reached a stop point
-                let stopPoint = stopPoints.find(stop => 
-                    Math.abs(stop.lat - point.lat) < 0.0001 && 
-                    Math.abs(stop.lon - point.lon) < 0.0001
-                );
-
-                if (stopPoint) {
-                    addStopMarker(stopPoint);
+                if (point.stopType && point.stopType !== 'Moving') {
+                    addStopMarker(point);
                 }
 
                 animationTimeout = setTimeout(function() {
@@ -565,7 +515,7 @@
 
         async function calculateCompleteRoute() {
             let completeRoute = [];
-            let targetPoints = filteredCoordinates.filter(point => point.isTarget);
+            let targetPoints = filteredCoordinates.filter(point => point.stopType !== 'Moving');
 
             try {
                 for (let i = 0; i < targetPoints.length - 1; i++) {
@@ -588,8 +538,6 @@
         function animateVanAlongRoute(route, step) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
-                var nextPoint = route[step + 1] || route[step];
-                var angle = calculateAngle(point, nextPoint);
 
                 if (!vanMarker) {
                     vanMarker = L.marker(point, {
@@ -597,25 +545,20 @@
                             className: 'van-icon',
                             iconSize: [30, 30],
                             iconAnchor: [15, 15],
-                            html: '<i class="fas fa-shuttle-van" style="font-size: 30px; color: #4a4a4a; transform: rotate(' + angle + 'deg);"></i>'
+                            html: '<div style="background-color:#4a4a4a;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-shuttle-van"></i></div>'
                         })
                     }).addTo(map);
                 } else {
                     vanMarker.setLatLng(point);
-                    vanMarker.setIcon(L.divIcon({
-                        className: 'van-icon',
-                        iconSize: [30, 30],
-                        iconAnchor: [15, 15],
-                        html: '<i class="fas fa-shuttle-van" style="font-size: 30px; color: #4a4a4a; transform: rotate(' + angle + 'deg);"></i>'
-                    }));
                 }
                 routePath.addLatLng(point);
                 map.setView(point);
 
                 // Check if we've reached a stop point
-                let stopPoint = stopPoints.find(stop => 
+                let stopPoint = filteredCoordinates.find(stop => 
                     Math.abs(stop.lat - point[0]) < 0.0001 && 
-                    Math.abs(stop.lon - point[1]) < 0.0001
+                    Math.abs(stop.lon - point[1]) < 0.0001 &&
+                    stop.stopType !== 'Moving'
                 );
 
                 if (stopPoint) {
@@ -623,7 +566,7 @@
                 }
 
                 currentAnimationIndex = step;
-                var timeToNextPoint = calculateTimeToNextPoint(point, nextPoint);
+                var timeToNextPoint = calculateTimeToNextPoint(point, route[step + 1] || point);
                 animationTimeout = setTimeout(function() {
                     animateVanAlongRoute(route, step + 1);
                 }, timeToNextPoint);
@@ -636,14 +579,14 @@
             let markerIcon;
 
             switch (stopPoint.stopType) {
-                case 'pause':
+                case 'Coffee Break':
                     markerIcon = '<div style="background-color:#c30b82;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-coffee"></i></div>';
                     break;
-                case 'parking':
+                case 'Parking':
                     markerIcon = '<div style="background-color:#3498db;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-parking"></i></div>';
                     break;
-                case 'camp':
-                    markerIcon = '<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-campground"></i></div>';
+                case 'Sleeping':
+                    markerIcon = '<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-bed"></i></div>';
                     break;
             }
 
@@ -660,27 +603,14 @@
             }
         }
 
-        function calculateAngle(point1, point2) {
-            var latDiff = point2[0] - point1[0];
-            var lngDiff = point2[1] - point1[1];
-            return (Math.atan2(lngDiff, latDiff) * 180 / Math.PI) - 90;
-        }
-
         function calculateTimeToNextPoint(point1, point2) {
-            var distance = map.distance(point1, point2);
+            var distance = calculateDistance(point1[0], point1[1], point2[0], point2[1]);
             return (distance / (speed * 1000)) * 1000; // Convert to milliseconds
         }
 
         function filterRouteByDateRange(startDate, endDate) {
             if (!startDate || !endDate) return routeCoordinates;
             return routeCoordinates.filter(point => {
-                return point.time >= new Date(startDate) && point.time <= new Date(endDate);
-            });
-        }
-
-        function filterStopPointsByDateRange(startDate, endDate) {
-            if (!startDate || !endDate) return stopPoints;
-            return stopPoints.filter(point => {
                 return point.time >= new Date(startDate) && point.time <= new Date(endDate);
             });
         }
@@ -698,12 +628,47 @@
             shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
         }
 
-        function distance(point1, point2) {
-            var lat1 = point1.lat || point1[0];
-            var lon1 = point1.lon || point1[1];
-            var lat2 = point2.lat || point2[0];
-            var lon2 = point2.lon || point2[1];
-            return Math.sqrt(Math.pow(lat2 - lat1, 2) + Math.pow(lon2 - lon1, 2));
+        // Function to calculate distance between two coordinates using the Haversine formula
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Radius of the Earth in meters
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δφ = (lat2 - lat1) * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c; // Distance in meters
+        }
+
+        // Function to classify stops (sleeping, parking, coffee break)
+        function classifyStop(distance, timeDiff, sleepingThreshold = 480, parkingThreshold = 120, coffeeBreakThreshold = 25) {
+            if (timeDiff >= sleepingThreshold) {
+                return 'Sleeping';
+            } else if (timeDiff >= parkingThreshold) {
+                return 'Parking';
+            } else if (timeDiff >= coffeeBreakThreshold) {
+                return 'Coffee Break';
+            }
+            return 'Moving';
+        }
+
+        // Function to adjust the stop classification to the previous point
+        function adjustStopToPrevious(points) {
+            for (let i = 1; i < points.length; i++) {
+                const prevPoint = points[i - 1];
+                const currPoint = points[i];
+                // Calculate distance between the two points
+                const distance = calculateDistance(prevPoint.lat, prevPoint.lon, currPoint.lat, currPoint.lon);
+                // Calculate the time difference (assuming time is in minutes)
+                const timeDiff = (currPoint.time - prevPoint.time) / (1000 * 60); // Time diff in minutes
+                // Classify the stop and assign it to the previous point
+                prevPoint.stopType = classifyStop(distance, timeDiff);
+            }
+            // Ensure the last point is marked as "Moving"
+            points[points.length - 1].stopType = 'Moving';
+            return points;
         }
     </script>
 </body>
