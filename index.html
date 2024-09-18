@@ -189,6 +189,7 @@
         var map;
         var routeCoordinates = [];
         var filteredCoordinates = [];
+        var poiCoordinates = [];
         var markers = [];
         var speed = 20; // km/s
         var routePath;
@@ -263,7 +264,7 @@
                         .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
                         .sort((a, b) => a.time - b.time);
 
-                    routeCoordinates = adjustStopToPrevious(routeCoordinates);
+                    identifyPOIs(routeCoordinates);
                     updateDateRange();
 
                     document.getElementById('speedRange').value = speed;
@@ -296,6 +297,7 @@
             let startDate = document.getElementById('startDate').value;
             let endDate = document.getElementById('endDate').value;
             filteredCoordinates = filterRouteByDateRange(startDate, endDate);
+            poiCoordinates = filterPOIsByDateRange(startDate, endDate);
             
             // Clear existing markers and path
             clearMap();
@@ -515,12 +517,11 @@
 
         async function calculateCompleteRoute() {
             let completeRoute = [];
-            let targetPoints = filteredCoordinates.filter(point => point.stopType !== 'Moving');
 
             try {
-                for (let i = 0; i < targetPoints.length - 1; i++) {
-                    let start = targetPoints[i];
-                    let end = targetPoints[i + 1];
+                for (let i = 0; i < poiCoordinates.length - 1; i++) {
+                    let start = poiCoordinates[i];
+                    let end = poiCoordinates[i + 1];
                     let route = await getRouteFromOSRM([start, end]);
                     completeRoute = completeRoute.concat(route);
                 }
@@ -554,15 +555,14 @@
                 routePath.addLatLng(point);
                 map.setView(point);
 
-                // Check if we've reached a stop point
-                let stopPoint = filteredCoordinates.find(stop => 
+                // Check if we've reached a POI
+                let poi = poiCoordinates.find(stop => 
                     Math.abs(stop.lat - point[0]) < 0.0001 && 
-                    Math.abs(stop.lon - point[1]) < 0.0001 &&
-                    stop.stopType !== 'Moving'
+                    Math.abs(stop.lon - point[1]) < 0.0001
                 );
 
-                if (stopPoint) {
-                    addStopMarker(stopPoint);
+                if (poi) {
+                    addStopMarker(poi);
                 }
 
                 currentAnimationIndex = step;
@@ -615,6 +615,13 @@
             });
         }
 
+        function filterPOIsByDateRange(startDate, endDate) {
+            if (!startDate || !endDate) return poiCoordinates;
+            return poiCoordinates.filter(point => {
+                return point.time >= new Date(startDate) && point.time <= new Date(endDate);
+            });
+        }
+
         function generateShareLink() {
             var startDate = document.getElementById('startDate').value;
             var endDate = document.getElementById('endDate').value;
@@ -654,21 +661,20 @@
             return 'Moving';
         }
 
-        // Function to adjust the stop classification to the previous point
-        function adjustStopToPrevious(points) {
+        // Function to identify POIs
+        function identifyPOIs(points) {
+            poiCoordinates = [];
             for (let i = 1; i < points.length; i++) {
                 const prevPoint = points[i - 1];
                 const currPoint = points[i];
-                // Calculate distance between the two points
                 const distance = calculateDistance(prevPoint.lat, prevPoint.lon, currPoint.lat, currPoint.lon);
-                // Calculate the time difference (assuming time is in minutes)
                 const timeDiff = (currPoint.time - prevPoint.time) / (1000 * 60); // Time diff in minutes
-                // Classify the stop and assign it to the previous point
-                prevPoint.stopType = classifyStop(distance, timeDiff);
+                const stopType = classifyStop(distance, timeDiff);
+                
+                if (stopType !== 'Moving') {
+                    poiCoordinates.push({...currPoint, stopType: stopType});
+                }
             }
-            // Ensure the last point is marked as "Moving"
-            points[points.length - 1].stopType = 'Moving';
-            return points;
         }
     </script>
 </body>
