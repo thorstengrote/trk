@@ -699,8 +699,8 @@
         }
 
         // Function to classify stops (sleeping, parking, coffee break)
-        function classifyStop(timeDiff, sleepingThreshold = 480, parkingThreshold = 120, coffeeBreakThreshold = 25) {
-    console.log(`Classifying stop with duration: ${timeDiff} minutes`);
+        function classifyStop(timeDiff, sleepingThreshold = 240, parkingThreshold = 60, coffeeBreakThreshold = 15) {
+    console.log(`Classifying stop with duration: ${timeDiff.toFixed(2)} minutes`);
     if (timeDiff >= sleepingThreshold) {
         return 'Sleeping';
     } else if (timeDiff >= parkingThreshold) {
@@ -716,8 +716,8 @@
     console.log("Starting POI identification with", points.length, "points");
     poiCoordinates = [];
     let currentCluster = [];
-    const maxClusterDistance = 500; // meters
-    const minTimeBetweenPOIs = 30 * 60 * 1000; // 30 minutes in milliseconds
+    const maxClusterDistance = 1000; // meters, increased from 500
+    const minTimeBetweenPOIs = 15 * 60 * 1000; // 15 minutes in milliseconds, decreased from 30
 
     for (let i = 0; i < points.length; i++) {
         const currentPoint = points[i];
@@ -729,14 +729,14 @@
             const distance = calculateDistance(currentPoint.lat, currentPoint.lon, nextPoint.lat, nextPoint.lon);
             const timeDiff = nextPoint.time - currentPoint.time;
 
-            console.log(`Point ${i}: Distance to next = ${distance}m, Time diff = ${timeDiff/60000}min`);
+            console.log(`Point ${i}: Distance to next = ${distance.toFixed(2)}m, Time diff = ${(timeDiff/60000).toFixed(2)}min`);
 
             if (distance > maxClusterDistance || timeDiff > minTimeBetweenPOIs) {
                 // End of cluster, classify it
                 const clusterDuration = currentCluster[currentCluster.length - 1].time - currentCluster[0].time;
                 const stopType = classifyStop(clusterDuration / (60 * 1000)); // Convert to minutes
 
-                console.log(`Cluster ended. Duration: ${clusterDuration/60000}min, Type: ${stopType}`);
+                console.log(`Cluster ended. Duration: ${(clusterDuration/60000).toFixed(2)}min, Type: ${stopType}`);
 
                 if (stopType !== 'Moving') {
                     const avgLat = currentCluster.reduce((sum, p) => sum + p.lat, 0) / currentCluster.length;
@@ -749,7 +749,7 @@
                         stopType: stopType,
                         visitCount: 1
                     });
-                    console.log(`POI added: ${stopType} at ${avgLat}, ${avgLon}`);
+                    console.log(`POI added: ${stopType} at ${avgLat.toFixed(6)}, ${avgLon.toFixed(6)}`);
                 }
 
                 currentCluster = [];
@@ -757,11 +757,11 @@
         }
     }
 
-    // Handle the last cluster if it exists
+    // Handle the last cluster
     if (currentCluster.length > 0) {
         const clusterDuration = currentCluster[currentCluster.length - 1].time - currentCluster[0].time;
         const stopType = classifyStop(clusterDuration / (60 * 1000));
-        console.log(`Last cluster. Duration: ${clusterDuration/60000}min, Type: ${stopType}`);
+        console.log(`Last cluster. Duration: ${(clusterDuration/60000).toFixed(2)}min, Type: ${stopType}`);
         if (stopType !== 'Moving') {
             const avgLat = currentCluster.reduce((sum, p) => sum + p.lat, 0) / currentCluster.length;
             const avgLon = currentCluster.reduce((sum, p) => sum + p.lon, 0) / currentCluster.length;
@@ -773,7 +773,7 @@
                 stopType: stopType,
                 visitCount: 1
             });
-            console.log(`Last POI added: ${stopType} at ${avgLat}, ${avgLon}`);
+            console.log(`Last POI added: ${stopType} at ${avgLat.toFixed(6)}, ${avgLon.toFixed(6)}`);
         }
     }
 
