@@ -582,6 +582,7 @@
        function animateVanAlongRoute(route, step) {
     if (step < route.length && driveRouteRunning) {
         var point = route[step];
+        var time = interpolateTime(step, route.length);
 
         if (!vanMarker) {
             vanMarker = L.marker(point, {
@@ -598,17 +599,35 @@
         routePath.addLatLng(point);
         map.setView(point);
 
-        // Check if we've reached a POI (with increased tolerance)
-        let nearbyPOIs = poiCoordinates.filter(p => 
-            calculateDistance(p.lat, p.lon, point[0], point[1]) < 1000 // 1000 meters tolerance
+        // Check if we've reached a POI
+        let reachedPOIs = poiCoordinates.filter(p => 
+            calculateDistance(p.lat, p.lon, point[0], point[1]) < 1000 && // 1000 meters tolerance
+            p.time <= time && time <= p.endTime
         );
 
-        nearbyPOIs.forEach(poi => {
+        reachedPOIs.forEach(poi => {
             if (!stopMarkers.some(m => m.getLatLng().equals([poi.lat, poi.lon]))) {
                 console.log("Reached POI:", poi);
                 addStopMarker(poi);
             }
         });
+
+        currentAnimationIndex = step;
+        var timeToNextPoint = calculateTimeToNextPoint(point, route[step + 1] || point);
+        animationTimeout = setTimeout(function() {
+            animateVanAlongRoute(route, step + 1);
+        }, timeToNextPoint);
+    } else if (!driveRouteRunning) {
+        stopDriveRoute();
+    }
+}
+
+function interpolateTime(step, totalSteps) {
+    const startTime = poiCoordinates[0].time;
+    const endTime = poiCoordinates[poiCoordinates.length - 1].endTime;
+    const totalDuration = endTime - startTime;
+    return new Date(startTime.getTime() + (totalDuration * step / totalSteps));
+}
 
         currentAnimationIndex = step;
         var timeToNextPoint = calculateTimeToNextPoint(point, route[step + 1] || point);
@@ -708,26 +727,94 @@
 
         // Function to identify POIs
         function identifyPOIs(points) {
-            poiCoordinates = [];
-            let poiMap = new Map();
+    poiCoordinates = [];
+    let currentCluster = [];
+    const maxClusterDistance = 500; // meters
+    const minTimeBetweenPOIs = 30 * 60 * 1000; // 30 minutes in milliseconds
 
-            for (let i = 1; i < points.length; i++) {
-                const prevPoint = points[i - 1];
-                const currPoint = points[i];
-                const timeDiff = (currPoint.time - prevPoint.time) / (1000 * 60); // Time diff in minutes
-                const stopType = classifyStop(timeDiff);
-                
+    for (let i = 0; i < points.length; i++) {
+        const currentPoint = points[i];
+        const nextPoint = points[i + 1];
+
+        currentCluster.push(currentPoint);
+
+        if (nextPoint) {
+            const distance = calculateDistance(currentPoint.lat, currentPoint.lon, nextPoint.lat, nextPoint.lon);
+            const timeDiff = nextPoint.time - currentPoint.time;
+
+            if (distance > maxClusterDistance || timeDiff > minTimeBetweenPOIs) {
+                // End of cluster, classify it
+                const clusterDuration = currentCluster[currentCluster.length - 1].time - currentCluster[0].time;
+                const stopType = classifyStop(clusterDuration / (60 * 1000)); // Convert to minutes
+
                 if (stopType !== 'Moving') {
-                    const key = `${currPoint.lat},${currPoint.lon}`;
-                    if (poiMap.has(key)) {
-                        let poi = poiMap.get(key);
-                        poi.visitCount = (poi.visitCount || 1) + 1;
-                        poi.stopType = stopType; // Update stop type if it has changed
-                    } else {
-                        poiMap.set(key, {...currPoint, stopType: stopType, visitCount: 1});
-                    }
+                    const avgLat = currentCluster.reduce((sum, p) => sum + p.lat, 0) / currentCluster.length;
+                    const avgLon = currentCluster.reduce((sum, p) => sum + p.lon, 0) / currentCluster.length;
+                    poiCoordinates.push({
+                        lat: avgLat,
+                        lon: avgLon,
+                        time: currentCluster[0].time,
+                        endTime: currentCluster[currentCluster.length - 1].time,
+                        stopType: stopType,
+                        visitCount: 1
+                    });
                 }
+
+                currentCluster = [];
             }
+        }
+    }
+
+    // Handle the last cluster if it exists
+    if (currentCluster.length > 0) {
+        const clusterDuration = currentCluster[currentCluster.length - 1].time - currentCluster[0].time;
+        const stopType = classifyStop(clusterDuration / (60 * 1000));
+        if (stopType !== 'Moving') {
+            const avgLat = currentCluster.reduce((sum, p) => sum + p.lat, 0) / currentCluster.length;
+            const avgLon = currentCluster.reduce((sum, p) => sum + p.lon, 0) / currentCluster.length;
+            poiCoordinates.push({
+                lat: avgLat,
+                lon: avgLon,
+                time: currentCluster[0].time,
+                endTime: currentCluster[currentCluster.length - 1].time,
+                stopType: stopType,
+                visitCount: 1
+            });
+        }
+    }
+
+    // Merge nearby POIs of the same type
+    poiCoordinates = mergeSimilarPOIs(poiCoordinates);
+
+    // Debug information
+    console.log(`Total POIs identified: ${poiCoordinates.length}`);
+    console.log('POIs by class:', poiCoordinates.reduce((acc, poi) => {
+        acc[poi.stopType] = (acc[poi.stopType] || 0) + 1;
+        return acc;
+    }, {}));
+}
+
+function mergeSimilarPOIs(pois) {
+    const mergedPOIs = [];
+    const maxMergeDistance = 1000; // meters
+
+    for (let poi of pois) {
+        const similarPOI = mergedPOIs.find(p => 
+            p.stopType === poi.stopType && 
+            calculateDistance(p.lat, p.lon, poi.lat, poi.lon) < maxMergeDistance &&
+            Math.abs(p.endTime - poi.time) < 12 * 60 * 60 * 1000 // 12 hours
+        );
+
+        if (similarPOI) {
+            similarPOI.endTime = Math.max(similarPOI.endTime, poi.endTime);
+            similarPOI.visitCount++;
+        } else {
+            mergedPOIs.push(poi);
+        }
+    }
+
+    return mergedPOIs;
+}
 
             poiCoordinates = Array.from(poiMap.values());
             
