@@ -896,10 +896,16 @@ function mergeSimilarPOIs(pois) {
         );
 
         if (similarPOI) {
-            similarPOI.endTime = Math.max(similarPOI.endTime, poi.endTime);
+            const newEndTime = Math.max(similarPOI.endTime, poi.endTime);
+            const totalDuration = (newEndTime - similarPOI.time) / (60 * 1000); // in minutes
+
+            similarPOI.endTime = newEndTime;
             similarPOI.visitCount++;
             similarPOI.clusterSize += poi.clusterSize;
             similarPOI.maxDistanceInCluster = Math.max(similarPOI.maxDistanceInCluster, poi.maxDistanceInCluster);
+
+            // Re-evaluate the stop type based on the total duration
+            similarPOI.stopType = classifyStop(totalDuration);
         } else {
             mergedPOIs.push(poi);
         }
