@@ -677,34 +677,46 @@
             return new Date(startTime.getTime() + (totalDuration * step / totalSteps));
         }
 
-        function addStopMarker(stopPoint) {
-            let markerIcon;
-            let visitCount = stopPoint.visitCount || 1;
+       function addStopMarker(stopPoint) {
+    let markerIcon;
+    let visitCount = stopPoint.visitCount || 1;
 
-            switch (stopPoint.stopType) {
-                case 'Coffee Break':
-                    markerIcon = `<div style="background-color:#c30b82;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-coffee"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
-                    break;
-                case 'Parking':
-                    markerIcon = `<div style="background-color:#3498db;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-parking"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
-                    break;
-                case 'Sleeping':
-                    markerIcon = `<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-campground"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
-                    break;
-            }
+    switch (stopPoint.stopType) {
+        case 'Coffee Break':
+            markerIcon = `<div style="background-color:#c30b82;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-coffee"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
+            break;
+        case 'Parking':
+            markerIcon = `<div style="background-color:#3498db;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-parking"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
+            break;
+        case 'Sleeping':
+            markerIcon = `<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-campground"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
+            break;
+    }
 
-            if (!stopMarkers.some(m => m.getLatLng().equals([stopPoint.lat, stopPoint.lon]))) {
-                let marker = L.marker([stopPoint.lat, stopPoint.lon], {
-                    icon: L.divIcon({
-                        className: 'custom-div-icon',
-                        html: markerIcon,
-                        iconSize: [30, 30],
-                        iconAnchor: [15, 15]
-                    })
-                }).addTo(map);
-                stopMarkers.push(marker);
-            }
-        }
+    if (!stopMarkers.some(m => m.getLatLng().equals([stopPoint.lat, stopPoint.lon]))) {
+        let popupContent = `
+            <h3>${stopPoint.stopType}</h3>
+            <p>Start Time: ${stopPoint.time.toLocaleString()}</p>
+            <p>End Time: ${stopPoint.endTime.toLocaleString()}</p>
+            <p>Duration: ${((stopPoint.endTime - stopPoint.time) / (60 * 1000)).toFixed(2)} minutes</p>
+            <p>Visit Count: ${visitCount}</p>
+            <p>Latitude: ${stopPoint.lat.toFixed(6)}</p>
+            <p>Longitude: ${stopPoint.lon.toFixed(6)}</p>
+            <p>Cluster Size: ${stopPoint.clusterSize} points</p>
+            <p>Max Distance in Cluster: ${stopPoint.maxDistanceInCluster.toFixed(2)} meters</p>
+        `;
+
+        let marker = L.marker([stopPoint.lat, stopPoint.lon], {
+            icon: L.divIcon({
+                className: 'custom-div-icon',
+                html: markerIcon,
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            })
+        }).addTo(map).bindPopup(popupContent);
+        stopMarkers.push(marker);
+    }
+}
 
         function calculateTimeToNextPoint(point1, point2) {
             var distance = calculateDistance(point1[0], point1[1], point2[0], point2[1]);
@@ -763,100 +775,112 @@
             return 'Moving';
         }
 
-        function identifyPOIs(points) {
-            console.log("Starting POI identification with", points.length, "points");
-            poiCoordinates = [];
-            let currentCluster = [];
+       function identifyPOIs(points) {
+    console.log("Starting POI identification with", points.length, "points");
+    poiCoordinates = [];
+    let currentCluster = [];
 
-            for (let i = 0; i < points.length; i++) {
-                const currentPoint = points[i];
-                const nextPoint = points[i + 1];
+    for (let i = 0; i < points.length; i++) {
+        const currentPoint = points[i];
+        const nextPoint = points[i + 1];
 
-                currentCluster.push(currentPoint);
+        currentCluster.push(currentPoint);
 
-                if (nextPoint) {
-                    const distance = calculateDistance(currentPoint.lat, currentPoint.lon, nextPoint.lat, nextPoint.lon);
-                    const timeDiff = nextPoint.time - currentPoint.time;
+        if (nextPoint) {
+            const distance = calculateDistance(currentPoint.lat, currentPoint.lon, nextPoint.lat, nextPoint.lon);
+            const timeDiff = nextPoint.time - currentPoint.time;
 
-                    console.log(`Point ${i}: Distance to next = ${distance.toFixed(2)}m, Time diff = ${(timeDiff/60000).toFixed(2)}min`);
+            console.log(`Point ${i}: Distance to next = ${distance.toFixed(2)}m, Time diff = ${(timeDiff/60000).toFixed(2)}min`);
 
-                    if (distance > maxClusterDistance || timeDiff > minTimeBetweenPOIs) {
-                        // End of cluster, classify it
-                        const clusterDuration = currentCluster[currentCluster.length - 1].time - currentCluster[0].time;
-                        const stopType = classifyStop(clusterDuration / (60 * 1000)); // Convert to minutes
-
-                        console.log(`Cluster ended. Duration: ${(clusterDuration/60000).toFixed(2)}min, Type: ${stopType}`);
-
-                        if (stopType !== 'Moving') {
-                            const avgLat = currentCluster.reduce((sum, p) => sum + p.lat, 0) / currentCluster.length;
-                            const avgLon = currentCluster.reduce((sum, p) => sum + p.lon, 0) / currentCluster.length;
-                            poiCoordinates.push({
-                                lat: avgLat,
-                                lon: avgLon,
-                                time: currentCluster[0].time,
-                                endTime: currentCluster[currentCluster.length - 1].time,
-                                stopType: stopType,
-                                visitCount: 1
-                            });
-                            console.log(`POI added: ${stopType} at ${avgLat.toFixed(6)}, ${avgLon.toFixed(6)}`);
-                        }
-
-                        currentCluster = [currentPoint]; // Start new cluster with current point
-                    }
-                }
-            }
-
-            // Handle the last cluster
-            if (currentCluster.length > 0) {
+            if (distance > maxClusterDistance || timeDiff > minTimeBetweenPOIs) {
+                // End of cluster, classify it
                 const clusterDuration = currentCluster[currentCluster.length - 1].time - currentCluster[0].time;
-                const stopType = classifyStop(clusterDuration / (60 * 1000));
-                console.log(`Last cluster. Duration: ${(clusterDuration/60000).toFixed(2)}min, Type: ${stopType}`);
+                const stopType = classifyStop(clusterDuration / (60 * 1000)); // Convert to minutes
+
+                console.log(`Cluster ended. Duration: ${(clusterDuration/60000).toFixed(2)}min, Type: ${stopType}`);
+
                 if (stopType !== 'Moving') {
                     const avgLat = currentCluster.reduce((sum, p) => sum + p.lat, 0) / currentCluster.length;
                     const avgLon = currentCluster.reduce((sum, p) => sum + p.lon, 0) / currentCluster.length;
+                    const maxDistanceInCluster = Math.max(...currentCluster.map(p => 
+                        calculateDistance(avgLat, avgLon, p.lat, p.lon)
+                    ));
                     poiCoordinates.push({
                         lat: avgLat,
                         lon: avgLon,
                         time: currentCluster[0].time,
                         endTime: currentCluster[currentCluster.length - 1].time,
                         stopType: stopType,
-                        visitCount: 1
+                        visitCount: 1,
+                        clusterSize: currentCluster.length,
+                        maxDistanceInCluster: maxDistanceInCluster
                     });
-                    console.log(`Last POI added: ${stopType} at ${avgLat.toFixed(6)}, ${avgLon.toFixed(6)}`);
+                    console.log(`POI added: ${stopType} at ${avgLat.toFixed(6)}, ${avgLon.toFixed(6)}`);
                 }
+
+                currentCluster = [currentPoint]; // Start new cluster with current point
             }
-
-            // Merge nearby POIs of the same type
-            poiCoordinates = mergeSimilarPOIs(poiCoordinates);
-
-            // Debug information
-            console.log(`Total POIs identified: ${poiCoordinates.length}`);
-            console.log('POIs by class:', poiCoordinates.reduce((acc, poi) => {
-                acc[poi.stopType] = (acc[poi.stopType] || 0) + 1;
-                return acc;
-            }, {}));
         }
+    }
 
-        function mergeSimilarPOIs(pois) {
-            const mergedPOIs = [];
-
-            for (let poi of pois) {
-                const similarPOI = mergedPOIs.find(p => 
-                    p.stopType === poi.stopType && 
-                    calculateDistance(p.lat, p.lon, poi.lat, poi.lon) < maxMergeDistance &&
-                    Math.abs(p.endTime - poi.time) < maxTimeBetweenMerge
-                );
-
-                if (similarPOI) {
-                    similarPOI.endTime = Math.max(similarPOI.endTime, poi.endTime);
-                    similarPOI.visitCount++;
-                } else {
-                    mergedPOIs.push(poi);
-                }
-            }
-
-            return mergedPOIs;
+    // Handle the last cluster
+    if (currentCluster.length > 0) {
+        const clusterDuration = currentCluster[currentCluster.length - 1].time - currentCluster[0].time;
+        const stopType = classifyStop(clusterDuration / (60 * 1000));
+        console.log(`Last cluster. Duration: ${(clusterDuration/60000).toFixed(2)}min, Type: ${stopType}`);
+        if (stopType !== 'Moving') {
+            const avgLat = currentCluster.reduce((sum, p) => sum + p.lat, 0) / currentCluster.length;
+            const avgLon = currentCluster.reduce((sum, p) => sum + p.lon, 0) / currentCluster.length;
+            const maxDistanceInCluster = Math.max(...currentCluster.map(p => 
+                calculateDistance(avgLat, avgLon, p.lat, p.lon)
+            ));
+            poiCoordinates.push({
+                lat: avgLat,
+                lon: avgLon,
+                time: currentCluster[0].time,
+                endTime: currentCluster[currentCluster.length - 1].time,
+                stopType: stopType,
+                visitCount: 1,
+                clusterSize: currentCluster.length,
+                maxDistanceInCluster: maxDistanceInCluster
+            });
+            console.log(`Last POI added: ${stopType} at ${avgLat.toFixed(6)}, ${avgLon.toFixed(6)}`);
         }
+    }
+
+    // Merge nearby POIs of the same type
+    poiCoordinates = mergeSimilarPOIs(poiCoordinates);
+
+    // Debug information
+    console.log(`Total POIs identified: ${poiCoordinates.length}`);
+    console.log('POIs by class:', poiCoordinates.reduce((acc, poi) => {
+        acc[poi.stopType] = (acc[poi.stopType] || 0) + 1;
+        return acc;
+    }, {}));
+}
+
+function mergeSimilarPOIs(pois) {
+    const mergedPOIs = [];
+
+    for (let poi of pois) {
+        const similarPOI = mergedPOIs.find(p => 
+            p.stopType === poi.stopType && 
+            calculateDistance(p.lat, p.lon, poi.lat, poi.lon) < maxMergeDistance &&
+            Math.abs(p.endTime - poi.time) < maxTimeBetweenMerge
+        );
+
+        if (similarPOI) {
+            similarPOI.endTime = Math.max(similarPOI.endTime, poi.endTime);
+            similarPOI.visitCount++;
+            similarPOI.clusterSize += poi.clusterSize;
+            similarPOI.maxDistanceInCluster = Math.max(similarPOI.maxDistanceInCluster, poi.maxDistanceInCluster);
+        } else {
+            mergedPOIs.push(poi);
+        }
+    }
+
+    return mergedPOIs;
+}
 
         function updateParameters() {
             maxClusterDistance = Number(document.getElementById('maxClusterDistance').value);
