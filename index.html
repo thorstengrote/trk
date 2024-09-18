@@ -699,7 +699,7 @@
         }
 
         // Function to classify stops (sleeping, parking, coffee break)
-        function classifyStop(timeDiff, sleepingThreshold = 240, parkingThreshold = 60, coffeeBreakThreshold = 15) {
+        function classifyStop(timeDiff, sleepingThreshold = 360, parkingThreshold = 60, coffeeBreakThreshold = 15) {
     console.log(`Classifying stop with duration: ${timeDiff.toFixed(2)} minutes`);
     if (timeDiff >= sleepingThreshold) {
         return 'Sleeping';
@@ -716,8 +716,8 @@
     console.log("Starting POI identification with", points.length, "points");
     poiCoordinates = [];
     let currentCluster = [];
-    const maxClusterDistance = 1000; // meters, increased from 500
-    const minTimeBetweenPOIs = 15 * 60 * 1000; // 15 minutes in milliseconds, decreased from 30
+    const maxClusterDistance = 1000; // meters
+    const minTimeBetweenPOIs = 15 * 60 * 1000; // 15 minutes in milliseconds
 
     for (let i = 0; i < points.length; i++) {
         const currentPoint = points[i];
@@ -752,7 +752,7 @@
                     console.log(`POI added: ${stopType} at ${avgLat.toFixed(6)}, ${avgLon.toFixed(6)}`);
                 }
 
-                currentCluster = [];
+                currentCluster = [currentPoint]; // Start new cluster with current point
             }
         }
     }
@@ -787,28 +787,28 @@
         return acc;
     }, {}));
 }
-
         function mergeSimilarPOIs(pois) {
-            const mergedPOIs = [];
-            const maxMergeDistance = 1000; // meters
+    const mergedPOIs = [];
+    const maxMergeDistance = 2000; // meters
+    const maxTimeBetweenMerge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
-            for (let poi of pois) {
-                const similarPOI = mergedPOIs.find(p => 
-                    p.stopType === poi.stopType && 
-                    calculateDistance(p.lat, p.lon, poi.lat, poi.lon) < maxMergeDistance &&
-                    Math.abs(p.endTime - poi.time) < 12 * 60 * 60 * 1000 // 12 hours
-                );
+    for (let poi of pois) {
+        const similarPOI = mergedPOIs.find(p => 
+            p.stopType === poi.stopType && 
+            calculateDistance(p.lat, p.lon, poi.lat, poi.lon) < maxMergeDistance &&
+            Math.abs(p.endTime - poi.time) < maxTimeBetweenMerge
+        );
 
-                if (similarPOI) {
-                    similarPOI.endTime = Math.max(similarPOI.endTime, poi.endTime);
-                    similarPOI.visitCount++;
-                } else {
-                    mergedPOIs.push(poi);
-                }
-            }
-
-            return mergedPOIs;
+        if (similarPOI) {
+            similarPOI.endTime = Math.max(similarPOI.endTime, poi.endTime);
+            similarPOI.visitCount++;
+        } else {
+            mergedPOIs.push(poi);
         }
+    }
+
+    return mergedPOIs;
+}
     </script>
 </body>
 </html>
