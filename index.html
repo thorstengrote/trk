@@ -274,6 +274,14 @@
                     if (urlParams.get('autoplay') === 'true') {
                         startDriveRoute();
                     }
+
+                    // Debug information
+                    console.log(`Total waypoints: ${routeCoordinates.length}`);
+                    console.log(`Total POIs: ${poiCoordinates.length}`);
+                    console.log('POIs by class:', poiCoordinates.reduce((acc, poi) => {
+                        acc[poi.stopType] = (acc[poi.stopType] || 0) + 1;
+                        return acc;
+                    }, {}));
                 }
             });
         }
@@ -311,6 +319,14 @@
             if (routeVisible) {
                 showRoute();
             }
+
+            // Debug information
+            console.log(`Filtered waypoints: ${filteredCoordinates.length}`);
+            console.log(`Filtered POIs: ${poiCoordinates.length}`);
+            console.log('Filtered POIs by class:', poiCoordinates.reduce((acc, poi) => {
+                acc[poi.stopType] = (acc[poi.stopType] || 0) + 1;
+                return acc;
+            }, {}));
         }
 
         function clearMap() {
@@ -332,13 +348,14 @@
             hidePoints();
             filteredCoordinates.forEach(function(point) {
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString() + (point.stopType ? " (" + point.stopType + ")" : ""));
+                    .bindPopup(point.time.toLocaleString());
                 markers.push(marker);
-
-                if (point.stopType && point.stopType !== 'Moving') {
-                    addStopMarker(point);
-                }
             });
+
+            poiCoordinates.forEach(function(poi) {
+                addStopMarker(poi);
+            });
+
             map.fitBounds(L.latLngBounds(filteredCoordinates.map(point => [point.lat, point.lon])));
         }
 
@@ -390,15 +407,16 @@
             if (i < filteredCoordinates.length && animationRunning) {
                 var point = filteredCoordinates[i];
                 var marker = L.marker([point.lat, point.lon]).addTo(map)
-                    .bindPopup(point.time.toLocaleString() + (point.stopType ? " (" + point.stopType + ")" : ""))
+                    .bindPopup(point.time.toLocaleString())
                     .openPopup();
                 markers.push(marker);
 
                 routePath.addLatLng([point.lat, point.lon]);
                 map.setView([point.lat, point.lon]);
 
-                if (point.stopType && point.stopType !== 'Moving') {
-                    addStopMarker(point);
+                let poi = poiCoordinates.find(p => p.lat === point.lat && p.lon === point.lon);
+                if (poi) {
+                    addStopMarker(poi);
                 }
 
                 animationTimeout = setTimeout(function() {
@@ -421,6 +439,10 @@
             routePath = L.polyline([], {color: 'blue'}).addTo(map);
             driveRouteRunning = true;
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
+            
+            // Temporarily show all POIs before starting the drive
+            poiCoordinates.forEach(poi => addStopMarker(poi));
+            
             calculateCompleteRoute();
         }
 
@@ -555,16 +577,6 @@
                 routePath.addLatLng(point);
                 map.setView(point);
 
-                // Check if we've reached a POI
-                let poi = poiCoordinates.find(stop => 
-                    Math.abs(stop.lat - point[0]) < 0.0001 && 
-                    Math.abs(stop.lon - point[1]) < 0.0001
-                );
-
-                if (poi) {
-                    addStopMarker(poi);
-                }
-
                 currentAnimationIndex = step;
                 var timeToNextPoint = calculateTimeToNextPoint(point, route[step + 1] || point);
                 animationTimeout = setTimeout(function() {
@@ -577,16 +589,17 @@
 
         function addStopMarker(stopPoint) {
             let markerIcon;
+            let visitCount = stopPoint.visitCount || 1;
 
             switch (stopPoint.stopType) {
                 case 'Coffee Break':
-                    markerIcon = '<div style="background-color:#c30b82;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-coffee"></i></div>';
+                    markerIcon = `<div style="background-color:#c30b82;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-coffee"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
                     break;
                 case 'Parking':
-                    markerIcon = '<div style="background-color:#3498db;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-parking"></i></div>';
+                    markerIcon = `<div style="background-color:#3498db;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-parking"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
                     break;
                 case 'Sleeping':
-                    markerIcon = '<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-bed"></i></div>';
+                    markerIcon = `<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-campground"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
                     break;
             }
 
@@ -650,7 +663,7 @@
         }
 
         // Function to classify stops (sleeping, parking, coffee break)
-        function classifyStop(distance, timeDiff, sleepingThreshold = 480, parkingThreshold = 120, coffeeBreakThreshold = 25) {
+        function classifyStop(timeDiff, sleepingThreshold = 480, parkingThreshold = 120, coffeeBreakThreshold = 25) {
             if (timeDiff >= sleepingThreshold) {
                 return 'Sleeping';
             } else if (timeDiff >= parkingThreshold) {
@@ -664,17 +677,34 @@
         // Function to identify POIs
         function identifyPOIs(points) {
             poiCoordinates = [];
+            let poiMap = new Map();
+
             for (let i = 1; i < points.length; i++) {
                 const prevPoint = points[i - 1];
                 const currPoint = points[i];
-                const distance = calculateDistance(prevPoint.lat, prevPoint.lon, currPoint.lat, currPoint.lon);
                 const timeDiff = (currPoint.time - prevPoint.time) / (1000 * 60); // Time diff in minutes
-                const stopType = classifyStop(distance, timeDiff);
+                const stopType = classifyStop(timeDiff);
                 
                 if (stopType !== 'Moving') {
-                    poiCoordinates.push({...currPoint, stopType: stopType});
+                    const key = `${currPoint.lat},${currPoint.lon}`;
+                    if (poiMap.has(key)) {
+                        let poi = poiMap.get(key);
+                        poi.visitCount = (poi.visitCount || 1) + 1;
+                        poi.stopType = stopType; // Update stop type if it has changed
+                    } else {
+                        poiMap.set(key, {...currPoint, stopType: stopType, visitCount: 1});
+                    }
                 }
             }
+
+            poiCoordinates = Array.from(poiMap.values());
+            
+            // Debug information
+            console.log(`Total POIs identified: ${poiCoordinates.length}`);
+            console.log('POIs by class:', poiCoordinates.reduce((acc, poi) => {
+                acc[poi.stopType] = (acc[poi.stopType] || 0) + 1;
+                return acc;
+            }, {}));
         }
     </script>
 </body>
