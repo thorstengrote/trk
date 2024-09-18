@@ -439,10 +439,6 @@
             routePath = L.polyline([], {color: 'blue'}).addTo(map);
             driveRouteRunning = true;
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
-            
-            // Temporarily show all POIs before starting the drive
-            poiCoordinates.forEach(poi => addStopMarker(poi));
-            
             calculateCompleteRoute();
         }
 
@@ -576,6 +572,16 @@
                 }
                 routePath.addLatLng(point);
                 map.setView(point);
+
+                // Check if we've reached a POI
+                let poi = poiCoordinates.find(p => 
+                    Math.abs(p.lat - point[0]) < 0.0001 && 
+                    Math.abs(p.lon - point[1]) < 0.0001
+                );
+
+                if (poi) {
+                    addStopMarker(poi);
+                }
 
                 currentAnimationIndex = step;
                 var timeToNextPoint = calculateTimeToNextPoint(point, route[step + 1] || point);
