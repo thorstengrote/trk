@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Widget Test</title>
+</head>
+<body>
+  <div id="octonomy-widget"></div>
+  <script>
+    window.widgetEmbedConfig = {
+      widgetId: "ZGI4MzNjMTktMjg1YS00NzI4LWE1OGUtZGQ1NmQ3YTU0MmQz",
+      baseUri: "aHR0cHM6Ly9hb2ZvdW5kYXRpb24uc3RnLm9jdG9ub215LmFp"
+    };
+  </script>
+  <script defer type="module" src="https://chatwidget.stg.octonomy.ai/octonomy-widget.js"></script>
+</body>
+</html>
