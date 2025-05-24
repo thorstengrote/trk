@@ -1,0 +1,2187 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚐 Travel Route Replay</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <style>
+        /* Font Awesome icons as CSS instead of external font */
+        .fa-home::before { content: "🏠"; }
+        .fa-coffee::before { content: "☕"; }
+        .fa-square-parking::before, .fa-parking::before { content: "🅿️"; }
+        .fa-bed::before, .fa-campground::before { content: "🏨"; }
+        .fa-shuttle-van::before { content: "🚐"; }
+        .fa-map-marker::before, .fa-map-marker-alt::before { content: "📍"; }
+        .fa-clock::before { content: "⏰"; }
+        .fa-hourglass-half::before { content: "⏳"; }
+        .fa-cog::before { content: "⚙️"; }
+        
+        .fas, .fa {
+            font-family: inherit;
+            font-style: normal;
+            font-weight: normal;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+
+        .header {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            z-index: 1000;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .header.collapsed {
+            padding: 0.5rem 1rem;
+        }
+
+        .header.collapsed .controls {
+            display: none;
+        }
+
+        .header h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            cursor: pointer;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+
+        .control-group {
+            background: rgba(255, 255, 255, 0.8);
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .control-group h3 {
+            margin-bottom: 0.5rem;
+            color: #2c3e50;
+            font-size: 0.9rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 0.3rem;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            align-items: center;
+            font-size: 0.8rem;
+        }
+
+        .form-row label {
+            min-width: 80px;
+            font-weight: 500;
+        }
+
+        input, select, button {
+            padding: 0.4rem;
+            border: 1px solid #e1e8ed;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            transition: all 0.3s ease;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+        }
+
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.7rem;
+            padding: 0.5rem 1rem;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 10px rgba(102, 126, 234, 0.3);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            transform: none;
+            cursor: not-allowed;
+        }
+
+        .main-actions {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .animation-controls {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 0.8rem 1.5rem;
+            border-radius: 50px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            display: none;
+            align-items: center;
+            gap: 1rem;
+            z-index: 1000;
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        .speed-control input[type="range"] {
+            width: 100px;
+        }
+
+        .poi-stats {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 1rem;
+            border-radius: 12px;
+            min-width: 200px;
+            display: none;
+            z-index: 1000;
+            font-size: 0.8rem;
+        }
+
+        .poi-stats h4 {
+            margin-bottom: 0.5rem;
+            color: #2c3e50;
+        }
+
+        .poi-stat {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+        }
+
+        .share-link {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 1rem;
+            border-radius: 12px;
+            display: none;
+            max-width: 300px;
+            z-index: 1000;
+        }
+
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            display: none;
+            z-index: 2000;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #ff6b6b;
+            color: white;
+            padding: 1rem;
+            border-radius: 12px;
+            margin: 1rem;
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2000;
+        }
+
+        .password-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+        }
+
+        .password-form {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            min-width: 300px;
+        }
+
+        .password-form input {
+            width: 100%;
+            margin: 1rem 0;
+            font-size: 1rem;
+            padding: 0.8rem;
+        }
+
+        @media (max-width: 768px) {
+            .controls {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .form-row label {
+                min-width: auto;
+            }
+            
+            .animation-controls {
+                bottom: 1rem;
+                left: 1rem;
+                right: 1rem;
+                transform: none;
+                border-radius: 12px;
+            }
+
+            .header {
+                left: 5px;
+                right: 5px;
+            }
+        }
+
+        /* Leaflet marker fix for CSP */
+        .leaflet-div-icon {
+            background: none !important;
+            border: none !important;
+        }
+        
+        .custom-div-icon {
+            background: none !important;
+            border: none !important;
+        }
+    </style>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+
+        .header {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            z-index: 1000;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .header.collapsed {
+            padding: 0.5rem 1rem;
+        }
+
+        .header.collapsed .controls {
+            display: none;
+        }
+
+        .header h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            cursor: pointer;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+
+        .control-group {
+            background: rgba(255, 255, 255, 0.8);
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .control-group h3 {
+            margin-bottom: 0.5rem;
+            color: #2c3e50;
+            font-size: 0.9rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 0.3rem;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            align-items: center;
+            font-size: 0.8rem;
+        }
+
+        .form-row label {
+            min-width: 80px;
+            font-weight: 500;
+        }
+
+        input, select, button {
+            padding: 0.4rem;
+            border: 1px solid #e1e8ed;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            transition: all 0.3s ease;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+        }
+
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.7rem;
+            padding: 0.5rem 1rem;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 10px rgba(102, 126, 234, 0.3);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            transform: none;
+            cursor: not-allowed;
+        }
+
+        .main-actions {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .animation-controls {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 0.8rem 1.5rem;
+            border-radius: 50px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            display: none;
+            align-items: center;
+            gap: 1rem;
+            z-index: 1000;
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        .speed-control input[type="range"] {
+            width: 100px;
+        }
+
+        .poi-stats {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 1rem;
+            border-radius: 12px;
+            min-width: 200px;
+            display: none;
+            z-index: 1000;
+            font-size: 0.8rem;
+        }
+
+        .poi-stats h4 {
+            margin-bottom: 0.5rem;
+            color: #2c3e50;
+        }
+
+        .poi-stat {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+        }
+
+        .share-link {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 1rem;
+            border-radius: 12px;
+            display: none;
+            max-width: 300px;
+            z-index: 1000;
+        }
+
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            display: none;
+            z-index: 2000;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #ff6b6b;
+            color: white;
+            padding: 1rem;
+            border-radius: 12px;
+            margin: 1rem;
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2000;
+        }
+
+        .password-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+        }
+
+        .password-form {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            min-width: 300px;
+        }
+
+        .password-form input {
+            width: 100%;
+            margin: 1rem 0;
+            font-size: 1rem;
+            padding: 0.8rem;
+        }
+
+        @media (max-width: 768px) {
+            .controls {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .form-row label {
+                min-width: auto;
+            }
+            
+            .animation-controls {
+                bottom: 1rem;
+                left: 1rem;
+                right: 1rem;
+                transform: none;
+                border-radius: 12px;
+            }
+
+            .header {
+                left: 5px;
+                right: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="password-overlay" id="passwordOverlay">
+        <div class="password-form">
+            <h2>🔐 Access Required</h2>
+            <p>Enter password to view travel route</p>
+            <input type="password" id="passwordInput" placeholder="Password">
+            <button onclick="checkPassword()">Enter</button>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="header" id="header">
+        <h1 onclick="toggleHeader()">🚐 Travel Route Replay</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <h3>📊 Configuration</h3>
+                <div class="form-row">
+                    <label>Sheet ID:</label>
+                    <input type="text" id="sheetId" value="13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o" readonly>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>📅 Zeitraum</h3>
+                <div class="form-row">
+                    <label>Von:</label>
+                    <input type="date" id="dateFrom">
+                </div>
+                <div class="form-row">
+                    <label>Bis:</label>
+                    <input type="date" id="dateTo">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>⏱️ POI Zeiten (Min.)</h3>
+                <div class="form-row">
+                    <label>Kaffeepause:</label>
+                    <input type="number" id="coffeeTime" value="15" min="5" max="180">
+                </div>
+                <div class="form-row">
+                    <label>Parken:</label>
+                    <input type="number" id="parkingTime" value="60" min="30" max="480">
+                </div>
+                <div class="form-row">
+                    <label>Übernachten:</label>
+                    <input type="number" id="overnightTime" value="360" min="240" max="1440">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>📍 Zusammenlegung</h3>
+                <div class="form-row">
+                    <label>Cluster (m):</label>
+                    <input type="number" id="clusterDistance" value="1000" min="100" max="5000">
+                </div>
+                <div class="form-row">
+                    <label>Merge (m):</label>
+                    <input type="number" id="mergeDistance" value="2000" min="500" max="10000">
+                </div>
+            </div>
+        </div>
+
+        <div class="main-actions">
+            <button id="loadData">📥 Laden</button>
+            <button id="showRoute" disabled>🗺️ Route</button>
+            <button id="startAnimation" disabled>🎬 Animation</button>
+            <button id="generateShareLink" disabled>🔗 Teilen</button>
+        </div>
+    </div>
+
+    <div class="animation-controls" id="animationControls">
+        <button id="playPause">⏸️ Pause</button>
+        <div class="speed-control">
+            <label>Geschwindigkeit:</label>
+            <input type="range" id="speedSlider" min="1" max="50" value="20">
+            <span id="speedDisplay">20</span>x
+        </div>
+        <button id="stopAnimation">⏹️ Stop</button>
+    </div>
+
+    <div class="poi-stats" id="poiStats">
+        <h4>📊 POI Statistiken</h4>
+        <div class="poi-stat">
+            <span>☕ Kaffeepausen:</span>
+            <span id="coffeeCount">0</span>
+        </div>
+        <div class="poi-stat">
+            <span>🅿️ Parkstopps:</span>
+            <span id="parkingCount">0</span>
+        </div>
+        <div class="poi-stat">
+            <span>🏨 Übernachtungen:</span>
+            <span id="overnightCount">0</span>
+        </div>
+        <div class="poi-stat">
+            <span>📏 Gesamtstrecke:</span>
+            <span id="totalDistance">0 km</span>
+        </div>
+        <div class="poi-stat">
+            <span>📅 Zeitraum:</span>
+            <span id="dateRange">-</span>
+        </div>
+    </div>
+
+    <div class="share-link" id="shareLink">
+        <h4>🔗 Share Link</h4>
+        <p>Link zum direkten Abspielen der Route:</p>
+        <input type="text" id="shareLinkInput" readonly>
+        <button onclick="copyShareLink()">📋 Kopieren</button>
+    </div>
+
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Lade und analysiere Daten...</p>
+    </div>
+
+    <div class="error-message" id="errorMessage"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" onload="console.log('Leaflet loaded from CDNJS')" onerror="console.error('Leaflet failed to load from CDNJS')"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js" onload="console.log('PapaParse loaded')" onerror="console.error('PapaParse failed to load')"></script>
+    <script>
+        // Wait for all libraries to load with timeout
+        function waitForLibraries() {
+            return new Promise((resolve, reject) => {
+                let attempts = 0;
+                const maxAttempts = 50; // 5 seconds max
+                
+                const checkLibraries = () => {
+                    attempts++;
+                    console.log(`Checking libraries attempt ${attempts}, L: ${typeof L}, Papa: ${typeof Papa}`);
+                    
+                    if (typeof L !== 'undefined' && typeof Papa !== 'undefined') {
+                        console.log('All libraries loaded successfully!');
+                        resolve();
+                    } else if (attempts >= maxAttempts) {
+                        console.error('Libraries failed to load within timeout');
+                        reject(new Error('Libraries failed to load'));
+                    } else {
+                        setTimeout(checkLibraries, 100);
+                    }
+                };
+                checkLibraries();
+            });
+        }
+
+        class TravelRouteApp {
+            constructor() {
+                this.map = null;
+                this.rawData = [];
+                this.pois = [];
+                this.routeLayer = null;
+                this.animationMarker = null;
+                this.isAnimating = false;
+                this.animationSpeed = 20;
+                this.currentAnimationIndex = 0;
+                
+                // Configuration from your existing script
+                this.sheetId = '13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o';
+                this.homeCoordinates = [50.7852, 7.0141]; // Bornheim
+                
+                this.initEventListeners();
+                this.loadFromURL();
+            }
+
+            initEventListeners() {
+                console.log('Initializing event listeners...');
+                
+                const loadButton = document.getElementById('loadData');
+                const showRouteButton = document.getElementById('showRoute');
+                const startAnimationButton = document.getElementById('startAnimation');
+                const generateShareLinkButton = document.getElementById('generateShareLink');
+                const playPauseButton = document.getElementById('playPause');
+                const stopAnimationButton = document.getElementById('stopAnimation');
+                const speedSlider = document.getElementById('speedSlider');
+                
+                console.log('Load button found:', !!loadButton);
+                
+                if (loadButton) {
+                    loadButton.addEventListener('click', (e) => {
+                        console.log('Load button clicked!');
+                        e.preventDefault();
+                        this.loadData();
+                    });
+                }
+                
+                if (showRouteButton) {
+                    showRouteButton.addEventListener('click', (e) => {
+                        console.log('Show route button clicked!');
+                        e.preventDefault();
+                        this.showRoute();
+                    });
+                }
+                
+                if (startAnimationButton) {
+                    startAnimationButton.addEventListener('click', (e) => {
+                        console.log('Start animation button clicked!');
+                        e.preventDefault();
+                        this.startAnimation();
+                    });
+                }
+                
+                if (generateShareLinkButton) {
+                    generateShareLinkButton.addEventListener('click', (e) => {
+                        console.log('Generate share link button clicked!');
+                        e.preventDefault();
+                        this.generateShareLink();
+                    });
+                }
+                
+                if (playPauseButton) {
+                    playPauseButton.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        this.toggleAnimation();
+                    });
+                }
+                
+                if (stopAnimationButton) {
+                    stopAnimationButton.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        this.stopAnimation();
+                    });
+                }
+                
+                if (speedSlider) {
+                    speedSlider.addEventListener('input', (e) => {
+                        this.updateSpeed(e.target.value);
+                    });
+                }
+                
+                console.log('Event listeners initialized');
+            }
+
+            loadFromURL() {
+                const params = new URLSearchParams(window.location.search);
+                
+                // Set default date range to last 3 months
+                const today = new Date();
+                const threeMonthsAgo = new Date();
+                threeMonthsAgo.setMonth(today.getMonth() - 3);
+                
+                const defaultDateFrom = threeMonthsAgo.toISOString().split('T')[0];
+                const defaultDateTo = today.toISOString().split('T')[0];
+                
+                // Load parameters from URL or set defaults
+                document.getElementById('dateFrom').value = params.get('start') || defaultDateFrom;
+                document.getElementById('dateTo').value = params.get('end') || defaultDateTo;
+                
+                if (params.has('coffee')) document.getElementById('coffeeTime').value = params.get('coffee');
+                if (params.has('parking')) document.getElementById('parkingTime').value = params.get('parking');
+                if (params.has('overnight')) document.getElementById('overnightTime').value = params.get('overnight');
+                if (params.has('cluster')) document.getElementById('clusterDistance').value = params.get('cluster');
+                if (params.has('merge')) document.getElementById('mergeDistance').value = params.get('merge');
+                
+                console.log(`Default date range set: ${defaultDateFrom} to ${defaultDateTo}`);
+                
+                // Check for autoplay and password
+                if (params.has('autoplay') && params.get('autoplay') === 'true') {
+                    // Show password prompt
+                    document.getElementById('passwordOverlay').style.display = 'flex';
+                } else {
+                    document.getElementById('passwordOverlay').style.display = 'flex';
+                }
+            }
+
+            checkPassword() {
+                const password = document.getElementById('passwordInput').value;
+                if (password === 'thorsten') {
+                    document.getElementById('passwordOverlay').style.display = 'none';
+                    
+                    // Initialize map after password check
+                    setTimeout(() => {
+                        this.initMap();
+                        
+                        // Check for autoplay
+                        const params = new URLSearchParams(window.location.search);
+                        if (params.has('autoplay')) {
+                            this.loadData().then(() => {
+                                this.startAnimation();
+                            }).catch(error => {
+                                console.error('Autoplay failed:', error);
+                            });
+                        }
+                    }, 100);
+                } else {
+                    alert('Falsches Passwort!');
+                }
+            }
+
+            initMap() {
+                console.log('Initializing map...');
+                this.map = L.map('map').setView(this.homeCoordinates, 10);
+                
+                // Use data URLs for tile layers to avoid CSP issues
+                const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19,
+                    crossOrigin: 'anonymous'
+                });
+                
+                // Alternative tile server that might work better with CSP
+                const stamenLayer = L.tileLayer('https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}.jpg', {
+                    attribution: 'Map tiles by Stamen Design, CC BY 3.0 — Map data © OpenStreetMap contributors',
+                    maxZoom: 18,
+                    crossOrigin: 'anonymous'
+                });
+                
+                // Add default layer
+                osmLayer.addTo(this.map);
+                
+                // Add layer control
+                const baseMaps = {
+                    "OpenStreetMap": osmLayer,
+                    "Terrain": stamenLayer
+                };
+                
+                L.control.layers(baseMaps).addTo(this.map);
+
+                // Add home marker with emoji instead of FontAwesome
+                L.marker(this.homeCoordinates, {
+                    icon: L.divIcon({
+                        className: 'custom-div-icon',
+                        html: '<div style="background-color:#FF5733;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;font-size:16px;">🏠</div>',
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    })
+                }).addTo(this.map).bindPopup('🏠 Home - Bornheim');
+                
+                console.log('Map initialized with CSP-safe layers');
+            }
+
+            async loadData() {
+                console.log('=== LOAD DATA START ===');
+                
+                try {
+                    document.getElementById('loading').style.display = 'block';
+                    console.log('Loading display set to block');
+                    
+                    // Try to load REAL data from Google Sheets
+                    let csvText = '';
+                    let dataLoaded = false;
+                    
+                    // Method 1: Try Google Sheets public CSV URL
+                    const publicUrl = `https://docs.google.com/spreadsheets/d/${this.sheetId}/export?format=csv&gid=0`;
+                    console.log('Trying Google Sheets public export URL:', publicUrl);
+                    
+                    try {
+                        const response = await fetch(publicUrl, {
+                            mode: 'cors',
+                            credentials: 'omit'
+                        });
+                        
+                        if (response.ok) {
+                            csvText = await response.text();
+                            dataLoaded = true;
+                            console.log('SUCCESS: Google Sheets data loaded directly!');
+                        } else {
+                            console.log('Direct access failed:', response.status, response.statusText);
+                        }
+                    } catch (error) {
+                        console.log('Direct access error:', error.message);
+                    }
+                    
+                    // Method 2: Try with CORS proxy
+                    if (!dataLoaded) {
+                        console.log('Trying CORS proxy...');
+                        try {
+                            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(publicUrl)}`;
+                            const response = await fetch(proxyUrl);
+                            
+                            if (response.ok) {
+                                const data = await response.json();
+                                csvText = data.contents;
+                                dataLoaded = true;
+                                console.log('SUCCESS: Data loaded via CORS proxy!');
+                            }
+                        } catch (error) {
+                            console.log('CORS proxy failed:', error.message);
+                        }
+                    }
+                    
+                    // Method 3: Use sample data for testing
+                    if (!dataLoaded) {
+                        console.log('FALLBACK: Using sample data for testing');
+                        csvText = this.getRealSampleData();
+                        dataLoaded = true;
+                    }
+                    
+                    console.log('=== CSV DATA ANALYSIS ===');
+                    console.log('CSV length:', csvText.length);
+                    console.log('First 300 chars:', csvText.substring(0, 300));
+                    
+                    // Parse CSV with Papa Parse
+                    const parsed = Papa.parse(csvText, {
+                        header: true,
+                        skipEmptyLines: true,
+                        dynamicTyping: false
+                    });
+
+                    console.log('Parsed result:', {
+                        data: parsed.data.length + ' rows',
+                        fields: parsed.meta.fields,
+                        errors: parsed.errors.length
+                    });
+
+                    if (parsed.errors.length > 0) {
+                        console.warn('Parse errors:', parsed.errors);
+                    }
+
+                    // Process the data
+                    this.rawData = [];
+                    
+                    parsed.data.forEach((row, index) => {
+                        console.log(`Processing row ${index}:`, row);
+                        
+                        try {
+                            const lat = parseFloat(row.lat || row.Lat || row.LAT);
+                            const lon = parseFloat(row.lon || row.Lon || row.lng || row.Lng || row.LON);
+                            const timeStr = row.time || row.Time || row.timestamp;
+                            const elevation = parseFloat(row.Elevation || row.elevation) || 0;
+                            
+                            if (isNaN(lat) || isNaN(lon)) {
+                                console.log(`Row ${index}: Invalid coordinates - lat=${lat}, lon=${lon}`);
+                                return;
+                            }
+                            
+                            if (!timeStr) {
+                                console.log(`Row ${index}: No time data - ${timeStr}`);
+                                return;
+                            }
+                            
+                            const time = new Date(timeStr);
+                            if (isNaN(time.getTime())) {
+                                console.log(`Row ${index}: Invalid time - ${timeStr}`);
+                                return;
+                            }
+                            
+                            const point = { lat, lon, time, elevation };
+                            this.rawData.push(point);
+                            console.log(`Row ${index}: VALID - ${lat.toFixed(5)}, ${lon.toFixed(5)} at ${time.toISOString()}`);
+                            
+                        } catch (error) {
+                            console.error(`Row ${index} processing error:`, error, row);
+                        }
+                    });
+
+                    console.log('=== DATA PROCESSING COMPLETE ===');
+                    console.log('Valid data points:', this.rawData.length);
+                    
+                    if (this.rawData.length === 0) {
+                        throw new Error('No valid data points found after processing');
+                    }
+
+                    // Sort by time
+                    this.rawData.sort((a, b) => a.time - b.time);
+                    console.log('Data sorted by time');
+                    console.log('Time range:', this.rawData[0].time.toISOString(), 'to', this.rawData[this.rawData.length - 1].time.toISOString());
+
+                    // Apply date filter
+                    this.filterByDate();
+                    console.log('After date filter:', this.filteredData.length, 'points');
+                    
+                    // Generate POIs
+                    this.generatePOIs();
+                    console.log('Generated POIs:', this.pois.length);
+                    
+                    // Update statistics
+                    this.updateStats();
+                    
+                    // Enable buttons
+                    document.getElementById('showRoute').disabled = false;
+                    document.getElementById('startAnimation').disabled = false;
+                    document.getElementById('generateShareLink').disabled = false;
+                    
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('poiStats').style.display = 'block';
+                    
+                    console.log('=== LOAD DATA SUCCESS ===');
+                    
+                } catch (error) {
+                    console.error('=== LOAD DATA ERROR ===', error);
+                    document.getElementById('loading').style.display = 'none';
+                    this.showError('Data loading failed: ' + error.message);
+                }
+            }
+
+            getRealSampleData() {
+                // Use realistic data that should generate POIs
+                return `lat,lon,time,Elevation
+50.7852,7.0141,2025-02-24T08:00:00Z,120
+50.7852,7.0141,2025-02-24T20:00:00Z,120
+50.8000,7.2000,2025-02-25T08:00:00Z,130
+50.8000,7.2000,2025-02-25T08:45:00Z,130
+50.8000,7.2000,2025-02-25T10:00:00Z,130
+48.1351,11.5820,2025-02-26T14:00:00Z,520
+48.1351,11.5820,2025-02-27T08:00:00Z,520
+45.4642,9.1900,2025-02-28T12:00:00Z,200
+45.4642,9.1900,2025-02-28T13:00:00Z,200
+45.4642,9.1900,2025-03-01T09:00:00Z,200
+50.7852,7.0141,2025-03-02T18:00:00Z,120`;
+            }
+
+            // Sample data for testing when Google Sheets is not available
+            getSampleData() {
+                // Generate sample data with realistic POI scenarios
+                const today = new Date();
+                const startDate = new Date();
+                startDate.setMonth(today.getMonth() - 3);
+                
+                const formatDate = (date) => date.toISOString();
+                
+                // Create realistic scenarios with proper time gaps
+                const baseTime = startDate.getTime();
+                const day = 24 * 60 * 60 * 1000; // milliseconds in a day
+                const hour = 60 * 60 * 1000; // milliseconds in an hour
+                
+                return `lat,lon,time,Elevation
+50.7352,7.1041,${formatDate(new Date(baseTime))},120
+50.7352,7.1041,${formatDate(new Date(baseTime + 8 * hour))},120
+50.8000,7.2000,${formatDate(new Date(baseTime + day))},130
+50.8000,7.2000,${formatDate(new Date(baseTime + day + 30 * 60 * 1000))},130
+50.8000,7.2000,${formatDate(new Date(baseTime + day + 2 * hour))},130
+48.1351,11.5820,${formatDate(new Date(baseTime + 3 * day))},520
+48.1351,11.5820,${formatDate(new Date(baseTime + 3 * day + 12 * hour))},520
+48.1351,11.5820,${formatDate(new Date(baseTime + 4 * day))},520
+45.4642,9.1900,${formatDate(new Date(baseTime + 7 * day))},200
+45.4642,9.1900,${formatDate(new Date(baseTime + 7 * day + 45 * 60 * 1000))},200
+45.4642,9.1900,${formatDate(new Date(baseTime + 8 * day))},200
+45.4642,9.1900,${formatDate(new Date(baseTime + 9 * day))},200
+44.4949,11.3426,${formatDate(new Date(baseTime + 14 * day))},50
+44.4949,11.3426,${formatDate(new Date(baseTime + 14 * day + 3 * hour))},50
+44.4949,11.3426,${formatDate(new Date(baseTime + 15 * day))},50
+50.7352,7.1041,${formatDate(new Date(baseTime + 21 * day))},120`;
+            }
+
+            filterByDate() {
+                const dateFrom = document.getElementById('dateFrom').value;
+                const dateTo = document.getElementById('dateTo').value;
+                
+                console.log(`Filtering data from ${dateFrom} to ${dateTo}`);
+                
+                this.filteredData = this.rawData;
+                
+                if (dateFrom && dateTo) {
+                    const fromDate = new Date(dateFrom);
+                    const toDate = new Date(dateTo);
+                    // Set end date to end of day
+                    toDate.setHours(23, 59, 59, 999);
+                    
+                    this.filteredData = this.rawData.filter(point => {
+                        return point.time >= fromDate && point.time <= toDate;
+                    });
+                    
+                    console.log(`Filtered ${this.rawData.length} points to ${this.filteredData.length} points`);
+                } else {
+                    console.log('No date filter applied, using all data');
+                }
+            }
+
+            generatePOIs() {
+                const coffeeTime = parseInt(document.getElementById('coffeeTime').value);
+                const parkingTime = parseInt(document.getElementById('parkingTime').value);
+                const overnightTime = parseInt(document.getElementById('overnightTime').value);
+                const clusterDistance = parseFloat(document.getElementById('clusterDistance').value);
+                const mergeDistance = parseFloat(document.getElementById('mergeDistance').value);
+
+                console.log(`POI Generation Parameters:
+                    Coffee: ${coffeeTime}min, Parking: ${parkingTime}min, Overnight: ${overnightTime}min
+                    Cluster Distance: ${clusterDistance}m, Merge Distance: ${mergeDistance}m`);
+
+                this.pois = [];
+                
+                if (this.filteredData.length === 0) {
+                    console.log('No filtered data available for POI generation');
+                    return;
+                }
+
+                console.log(`Processing ${this.filteredData.length} data points for POI generation`);
+
+                // Simple approach: Analyze time gaps between consecutive points
+                for (let i = 0; i < this.filteredData.length - 1; i++) {
+                    const current = this.filteredData[i];
+                    const next = this.filteredData[i + 1];
+                    
+                    const timeDiff = (next.time - current.time) / (1000 * 60); // minutes
+                    const distance = this.calculateDistance(
+                        current.lat, current.lon,
+                        next.lat, next.lon
+                    ) * 1000; // convert to meters
+                    
+                    console.log(`Point ${i} -> ${i+1}: ${timeDiff.toFixed(1)}min, ${distance.toFixed(0)}m`);
+                    
+                    // If we stayed in roughly the same place for a significant time
+                    if (distance <= clusterDistance && timeDiff >= coffeeTime) {
+                        let type = 'coffee';
+                        if (timeDiff >= overnightTime) {
+                            type = 'overnight';
+                        } else if (timeDiff >= parkingTime) {
+                            type = 'parking';
+                        }
+                        
+                        console.log(`Found ${type} POI: ${timeDiff.toFixed(1)}min at ${current.lat.toFixed(5)}, ${current.lon.toFixed(5)}`);
+                        
+                        this.pois.push({
+                            lat: current.lat,
+                            lon: current.lon,
+                            time: current.time,
+                            endTime: next.time,
+                            type,
+                            duration: timeDiff,
+                            clusterSize: 2
+                        });
+                    }
+                }
+
+                // Also check the last point - if it's recent, it might be a current stop
+                if (this.filteredData.length > 0) {
+                    const lastPoint = this.filteredData[this.filteredData.length - 1];
+                    const now = new Date();
+                    const timeSinceLastPoint = (now - lastPoint.time) / (1000 * 60); // minutes
+                    
+                    if (timeSinceLastPoint >= coffeeTime && timeSinceLastPoint <= 7 * 24 * 60) { // max 7 days
+                        let type = 'coffee';
+                        if (timeSinceLastPoint >= overnightTime) {
+                            type = 'overnight';
+                        } else if (timeSinceLastPoint >= parkingTime) {
+                            type = 'parking';
+                        }
+                        
+                        console.log(`Found current ${type} POI: ${timeSinceLastPoint.toFixed(1)}min at ${lastPoint.lat.toFixed(5)}, ${lastPoint.lon.toFixed(5)}`);
+                        
+                        this.pois.push({
+                            lat: lastPoint.lat,
+                            lon: lastPoint.lon,
+                            time: lastPoint.time,
+                            endTime: now,
+                            type,
+                            duration: timeSinceLastPoint,
+                            clusterSize: 1
+                        });
+                    }
+                }
+
+                // Merge nearby POIs if requested
+                if (mergeDistance > 0) {
+                    this.mergePOIs(mergeDistance);
+                }
+
+                console.log(`Final POI count: ${this.pois.length}`);
+                this.pois.forEach((poi, index) => {
+                    console.log(`POI ${index + 1}: ${poi.type} - ${poi.duration.toFixed(1)}min at ${poi.lat.toFixed(5)}, ${poi.lon.toFixed(5)}`);
+                });
+            }
+
+            processCluster(cluster, coffeeTime, parkingTime, overnightTime) {
+                if (cluster.length < 2) return;
+
+                const duration = (cluster[cluster.length - 1].time - cluster[0].time) / (1000 * 60); // minutes
+                let type = 'waypoint';
+
+                if (duration >= overnightTime) {
+                    type = 'overnight';
+                } else if (duration >= parkingTime) {
+                    type = 'parking';
+                } else if (duration >= coffeeTime) {
+                    type = 'coffee';
+                }
+
+                if (type !== 'waypoint') {
+                    const avgLat = cluster.reduce((sum, p) => sum + p.lat, 0) / cluster.length;
+                    const avgLon = cluster.reduce((sum, p) => sum + p.lon, 0) / cluster.length;
+
+                    this.pois.push({
+                        lat: avgLat,
+                        lon: avgLon,
+                        time: cluster[0].time,
+                        endTime: cluster[cluster.length - 1].time,
+                        type,
+                        duration,
+                        clusterSize: cluster.length
+                    });
+                }
+            }
+
+            mergePOIs(radiusKm) {
+                const merged = [];
+                const used = new Set();
+                
+                for (let i = 0; i < this.pois.length; i++) {
+                    if (used.has(i)) continue;
+                    
+                    const poi = this.pois[i];
+                    const nearby = [poi];
+                    used.add(i);
+                    
+                    for (let j = i + 1; j < this.pois.length; j++) {
+                        if (used.has(j)) continue;
+                        
+                        const distance = this.calculateDistance(poi.lat, poi.lon, this.pois[j].lat, this.pois[j].lon);
+                        if (distance <= radiusKm / 1000) { // Convert to km
+                            nearby.push(this.pois[j]);
+                            used.add(j);
+                        }
+                    }
+                    
+                    if (nearby.length > 1) {
+                        const avgLat = nearby.reduce((sum, p) => sum + p.lat, 0) / nearby.length;
+                        const avgLon = nearby.reduce((sum, p) => sum + p.lon, 0) / nearby.length;
+                        const totalDuration = nearby.reduce((sum, p) => sum + p.duration, 0);
+                        const maxType = nearby.reduce((max, p) => {
+                            const priority = { waypoint: 0, coffee: 1, parking: 2, overnight: 3 };
+                            return priority[p.type] > priority[max.type] ? p : max;
+                        }).type;
+                        
+                        merged.push({
+                            lat: avgLat,
+                            lon: avgLon,
+                            time: nearby[0].time,
+                            endTime: nearby[nearby.length - 1].endTime,
+                            type: maxType,
+                            duration: totalDuration,
+                            merged: nearby.length,
+                            clusterSize: nearby.reduce((sum, p) => sum + p.clusterSize, 0)
+                        });
+                    } else {
+                        merged.push(poi);
+                    }
+                }
+                
+                this.pois = merged;
+            }
+
+            calculateDistance(lat1, lon1, lat2, lon2) {
+                const R = 6371e3; // Earth's radius in meters
+                const φ1 = lat1 * Math.PI / 180;
+                const φ2 = lat2 * Math.PI / 180;
+                const Δφ = (lat2 - lat1) * Math.PI / 180;
+                const Δλ = (lon2 - lon1) * Math.PI / 180;
+                const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                        Math.cos(φ1) * Math.cos(φ2) *
+                        Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                return R * c / 1000; // Distance in km
+            }
+
+            updateStats() {
+                const stats = { coffee: 0, parking: 0, overnight: 0 };
+                let totalDistance = 0;
+                
+                this.pois.forEach(poi => {
+                    stats[poi.type]++;
+                });
+                
+                for (let i = 1; i < this.pois.length; i++) {
+                    totalDistance += this.calculateDistance(
+                        this.pois[i-1].lat, this.pois[i-1].lon,
+                        this.pois[i].lat, this.pois[i].lon
+                    );
+                }
+                
+                document.getElementById('coffeeCount').textContent = stats.coffee;
+                document.getElementById('parkingCount').textContent = stats.parking;
+                document.getElementById('overnightCount').textContent = stats.overnight;
+                document.getElementById('totalDistance').textContent = Math.round(totalDistance) + ' km';
+                
+                if (this.filteredData.length > 0) {
+                    const startDate = this.filteredData[0].time.toLocaleDateString();
+                    const endDate = this.filteredData[this.filteredData.length - 1].time.toLocaleDateString();
+                    document.getElementById('dateRange').textContent = `${startDate} - ${endDate}`;
+                }
+            }
+
+            showRoute() {
+                console.log('=== SHOW ROUTE START ===');
+                console.log('POIs available:', this.pois.length);
+                
+                if (this.pois.length === 0) {
+                    console.error('No POIs available to show route!');
+                    this.showError('Keine POIs verfügbar. Laden Sie zuerst die Daten.');
+                    return;
+                }
+                
+                if (this.routeLayer) {
+                    this.map.removeLayer(this.routeLayer);
+                }
+                
+                this.routeLayer = L.layerGroup().addTo(this.map);
+                
+                // Add POI markers first
+                this.pois.forEach((poi, index) => {
+                    console.log(`Adding POI marker ${index + 1}:`, poi.type, 'at', poi.lat.toFixed(5), poi.lon.toFixed(5));
+                    
+                    const icon = this.getPOIIcon(poi.type);
+                    const marker = L.marker([poi.lat, poi.lon], { icon })
+                        .bindPopup(`
+                            <div style="text-align: center;">
+                                <h3>${this.getPOITitle(poi.type)}</h3>
+                                <p><strong>Start:</strong> ${poi.time.toLocaleString()}</p>
+                                <p><strong>Ende:</strong> ${poi.endTime.toLocaleString()}</p>
+                                <p><strong>Dauer:</strong> ${Math.round(poi.duration)} min</p>
+                                <p><strong>Koordinaten:</strong> ${poi.lat.toFixed(5)}, ${poi.lon.toFixed(5)}</p>
+                            </div>
+                        `);
+                    this.routeLayer.addLayer(marker);
+                });
+                
+                // Add routes between POIs
+                if (this.pois.length > 1) {
+                    for (let i = 0; i < this.pois.length - 1; i++) {
+                        const start = this.pois[i];
+                        const end = this.pois[i + 1];
+                        
+                        console.log(`Creating route ${i + 1}: ${start.lat.toFixed(4)},${start.lon.toFixed(4)} → ${end.lat.toFixed(4)},${end.lon.toFixed(4)}`);
+                        
+                        const routePoints = this.createRealisticRoute(start, end);
+                        
+                        const routeLine = L.polyline(routePoints, {
+                            color: this.getRouteColor(i),
+                            weight: 4,
+                            opacity: 0.8
+                        });
+                        this.routeLayer.addLayer(routeLine);
+                        
+                        console.log(`Added route segment ${i + 1} with ${routePoints.length} points`);
+                    }
+                } else {
+                    console.log('Only one POI - no routes to draw');
+                }
+                
+                // Fit map to show all POIs
+                if (this.pois.length > 0) {
+                    const bounds = L.latLngBounds(this.pois.map(poi => [poi.lat, poi.lon]));
+                    this.map.fitBounds(bounds, { padding: [50, 50] });
+                    console.log('Map fitted to POI bounds');
+                }
+                
+                console.log('=== SHOW ROUTE COMPLETE ===');
+            }
+
+            createRealisticRoute(start, end) {
+                const points = [];
+                const numPoints = 50; // Number of intermediate points
+                
+                // Calculate distance to determine route complexity
+                const distance = this.calculateDistance(start.lat, start.lon, end.lat, end.lon);
+                
+                console.log(`Creating realistic route: ${distance.toFixed(1)}km`);
+                
+                // Add major waypoints for long distances
+                const waypoints = [start];
+                
+                if (distance > 100) {
+                    // Add realistic intermediate waypoints for long distances
+                    const midLat = (start.lat + end.lat) / 2;
+                    const midLon = (start.lon + end.lon) / 2;
+                    
+                    // Offset waypoints to simulate realistic highway routing
+                    if (Math.abs(end.lat - start.lat) > Math.abs(end.lon - start.lon)) {
+                        // More north-south travel - follow major north-south routes
+                        waypoints.push({
+                            lat: midLat,
+                            lon: midLon + (Math.random() - 0.5) * 0.5
+                        });
+                    } else {
+                        // More east-west travel - follow major east-west routes  
+                        waypoints.push({
+                            lat: midLat + (Math.random() - 0.5) * 0.5,
+                            lon: midLon
+                        });
+                    }
+                }
+                
+                waypoints.push(end);
+                
+                // Generate smooth curve through waypoints
+                for (let i = 0; i < waypoints.length - 1; i++) {
+                    const segmentStart = waypoints[i];
+                    const segmentEnd = waypoints[i + 1];
+                    
+                    const pointsPerSegment = Math.floor(numPoints / (waypoints.length - 1));
+                    
+                    for (let j = 0; j <= pointsPerSegment; j++) {
+                        const t = j / pointsPerSegment;
+                        
+                        // Use Bezier curve for smooth routing
+                        const controlLat = (segmentStart.lat + segmentEnd.lat) / 2 + (Math.sin(t * Math.PI) * 0.02);
+                        const controlLon = (segmentStart.lon + segmentEnd.lon) / 2 + (Math.cos(t * Math.PI) * 0.02);
+                        
+                        const lat = segmentStart.lat + (segmentEnd.lat - segmentStart.lat) * t + 
+                                  (controlLat - (segmentStart.lat + segmentEnd.lat) / 2) * Math.sin(t * Math.PI);
+                        const lon = segmentStart.lon + (segmentEnd.lon - segmentStart.lon) * t + 
+                                  (controlLon - (segmentStart.lon + segmentEnd.lon) / 2) * Math.sin(t * Math.PI);
+                        
+                        points.push([lat, lon]);
+                    }
+                }
+                
+                return points;
+            }
+
+            async calculateAndDisplayRoutes() {
+                for (let i = 0; i < this.pois.length - 1; i++) {
+                    const start = this.pois[i];
+                    const end = this.pois[i + 1];
+                    
+                    console.log(`Calculating route ${i + 1}/${this.pois.length - 1}: ${start.lat.toFixed(4)},${start.lon.toFixed(4)} → ${end.lat.toFixed(4)},${end.lon.toFixed(4)}`);
+                    
+                    try {
+                        const routeCoords = await this.getRouteFromOSRM(start, end);
+                        
+                        if (routeCoords && routeCoords.length > 0) {
+                            // Add the calculated route
+                            const routeLine = L.polyline(routeCoords, {
+                                color: this.getRouteColor(i),
+                                weight: 4,
+                                opacity: 0.8
+                            });
+                            this.routeLayer.addLayer(routeLine);
+                            
+                            console.log(`Route ${i + 1} added: ${routeCoords.length} points`);
+                        } else {
+                            // Fallback to straight line
+                            console.log(`Route ${i + 1} fallback to straight line`);
+                            this.addStraightLine(start, end, i);
+                        }
+                        
+                        // Small delay to avoid overwhelming the routing service
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        
+                    } catch (error) {
+                        console.error(`Route ${i + 1} failed:`, error);
+                        // Fallback to straight line
+                        this.addStraightLine(start, end, i);
+                    }
+                }
+            }
+
+            async getRouteFromOSRM(start, end) {
+                const coordinates = `${start.lon},${start.lat};${end.lon},${end.lat}`;
+                const baseUrl = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`;
+                
+                // Try multiple approaches to get routing data
+                const attempts = [
+                    // Method 1: CORS Proxies for OSRM
+                    {
+                        name: 'OSRM via allorigins',
+                        url: `https://api.allorigins.win/get?url=${encodeURIComponent(baseUrl)}`
+                    },
+                    {
+                        name: 'OSRM via corsproxy',
+                        url: `https://corsproxy.io/?${encodeURIComponent(baseUrl)}`
+                    },
+                    // Method 2: Alternative routing with simpler approach
+                    {
+                        name: 'GraphHopper',
+                        url: null, // Will use GraphHopper API
+                        custom: true
+                    }
+                ];
+                
+                for (const attempt of attempts) {
+                    try {
+                        console.log(`Trying routing via ${attempt.name}...`);
+                        
+                        if (attempt.custom) {
+                            // Try GraphHopper routing
+                            const route = await this.getRouteFromGraphHopper(start, end);
+                            if (route) {
+                                console.log(`${attempt.name} Success: ${route.length} points`);
+                                return route;
+                            }
+                        } else {
+                            const response = await fetch(attempt.url);
+                            
+                            if (!response.ok) {
+                                throw new Error(`HTTP ${response.status}`);
+                            }
+                            
+                            let data;
+                            if (attempt.name.includes('allorigins')) {
+                                const proxyResponse = await response.json();
+                                data = JSON.parse(proxyResponse.contents);
+                            } else {
+                                data = await response.json();
+                            }
+                            
+                            if (data.routes && data.routes.length > 0) {
+                                const route = data.routes[0];
+                                console.log(`${attempt.name} Success: ${route.geometry.coordinates.length} points, ${route.distance}m`);
+                                
+                                // Convert coordinates from [lon, lat] to [lat, lon]
+                                return route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                            }
+                        }
+                    } catch (error) {
+                        console.log(`${attempt.name} failed:`, error.message);
+                    }
+                }
+                
+                console.log('All routing services failed, using intelligent interpolation');
+                return this.generateIntelligentRoute(start, end);
+            }
+
+            async getRouteFromGraphHopper(start, end) {
+                // GraphHopper public API (limited but often works)
+                const url = `https://graphhopper.com/api/1/route?point=${start.lat},${start.lon}&point=${end.lat},${end.lon}&vehicle=car&locale=de&calc_points=true&key=`;
+                
+                try {
+                    // Try without API key first (limited usage)
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.paths && data.paths.length > 0) {
+                            const points = data.paths[0].points;
+                            // Decode GraphHopper polyline (simplified)
+                            return this.decodePolyline(points.coordinates || []);
+                        }
+                    }
+                } catch (error) {
+                    console.log('GraphHopper failed:', error.message);
+                }
+                
+                return null;
+            }
+
+            generateIntelligentRoute(start, end) {
+                // Generate a more realistic route using waypoints
+                const points = [];
+                const steps = 20; // Number of intermediate points
+                
+                // Calculate distance to determine if we need intermediate waypoints
+                const distance = this.calculateDistance(start.lat, start.lon, end.lat, end.lon);
+                
+                if (distance < 50) {
+                    // Short distance: simple curve
+                    for (let i = 0; i <= steps; i++) {
+                        const t = i / steps;
+                        const lat = start.lat + (end.lat - start.lat) * t + 
+                                  Math.sin(t * Math.PI) * 0.01 * Math.random(); // Add slight curve
+                        const lon = start.lon + (end.lon - start.lon) * t + 
+                                  Math.cos(t * Math.PI) * 0.01 * Math.random();
+                        points.push([lat, lon]);
+                    }
+                } else {
+                    // Long distance: add realistic waypoints based on geography
+                    const waypoints = this.generateRealisticWaypoints(start, end);
+                    
+                    for (let i = 0; i < waypoints.length - 1; i++) {
+                        const segmentStart = waypoints[i];
+                        const segmentEnd = waypoints[i + 1];
+                        
+                        // Generate points for this segment
+                        for (let j = 0; j <= 5; j++) {
+                            const t = j / 5;
+                            const lat = segmentStart.lat + (segmentEnd.lat - segmentStart.lat) * t;
+                            const lon = segmentStart.lon + (segmentEnd.lon - segmentStart.lon) * t;
+                            points.push([lat, lon]);
+                        }
+                    }
+                }
+                
+                console.log(`Generated intelligent route: ${points.length} points, ~${distance.toFixed(0)}km`);
+                return points;
+            }
+
+            generateRealisticWaypoints(start, end) {
+                const waypoints = [start];
+                
+                // Add major cities as waypoints for long routes
+                const majorCities = [
+                    { lat: 50.1109, lon: 8.6821, name: 'Frankfurt' },
+                    { lat: 48.1351, lon: 11.5820, name: 'München' },
+                    { lat: 47.0707, lon: 15.4395, name: 'Graz' },
+                    { lat: 45.4642, lon: 9.1900, name: 'Milano' },
+                    { lat: 46.9480, lon: 7.4474, name: 'Bern' },
+                    { lat: 47.3769, lon: 8.5417, name: 'Zürich' },
+                    { lat: 48.2082, lon: 16.3738, name: 'Wien' }
+                ];
+                
+                // Find cities that are roughly on the path
+                const routeDistance = this.calculateDistance(start.lat, start.lon, end.lat, end.lon);
+                
+                for (const city of majorCities) {
+                    const distToStart = this.calculateDistance(start.lat, start.lon, city.lat, city.lon);
+                    const distToEnd = this.calculateDistance(city.lat, city.lon, end.lat, end.lon);
+                    
+                    // If city is roughly on the path (total distance not much longer than direct)
+                    if (distToStart + distToEnd < routeDistance * 1.3 && distToStart > 20 && distToEnd > 20) {
+                        waypoints.push(city);
+                        console.log(`Added waypoint: ${city.name}`);
+                    }
+                }
+                
+                waypoints.push(end);
+                
+                // Sort waypoints by distance from start
+                waypoints.sort((a, b) => {
+                    const distA = this.calculateDistance(start.lat, start.lon, a.lat, a.lon);
+                    const distB = this.calculateDistance(start.lat, start.lon, b.lat, b.lon);
+                    return distA - distB;
+                });
+                
+                return waypoints;
+            }
+
+            decodePolyline(coordinates) {
+                // Simple coordinate array to lat/lon conversion
+                if (Array.isArray(coordinates) && coordinates.length > 0) {
+                    return coordinates.map(coord => [coord[1], coord[0]]); // [lon,lat] to [lat,lon]
+                }
+                return [];
+            }
+
+            async getRouteFromOpenRouteService(start, end) {
+                // OpenRouteService as fallback (requires API key but has free tier)
+                const url = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson';
+                
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': '5b3ce3597851110001cf6248c56af19b19b2427c9486702926df507d' // Free tier key
+                        },
+                        body: JSON.stringify({
+                            coordinates: [[start.lon, start.lat], [end.lon, end.lat]]
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`OpenRouteService HTTP ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.features && data.features.length > 0) {
+                        const coords = data.features[0].geometry.coordinates;
+                        console.log(`OpenRouteService Success: ${coords.length} points`);
+                        
+                        // Convert coordinates from [lon, lat] to [lat, lon]
+                        return coords.map(coord => [coord[1], coord[0]]);
+                    } else {
+                        throw new Error('No routes found in OpenRouteService response');
+                    }
+                    
+                } catch (error) {
+                    console.error('OpenRouteService routing failed:', error);
+                    throw error;
+                }
+            }
+
+            addStraightLine(start, end, index) {
+                // Instead of straight line, use our intelligent route generator
+                const intelligentRoute = this.generateIntelligentRoute(start, end);
+                
+                const routeLine = L.polyline(intelligentRoute, {
+                    color: this.getRouteColor(index),
+                    weight: 3,
+                    opacity: 0.7
+                });
+                this.routeLayer.addLayer(routeLine);
+                
+                console.log(`Added intelligent route approximation for route ${index + 1} (${intelligentRoute.length} points)`);
+            }
+
+            addSimpleRoute() {
+                // Enhanced fallback: Generate intelligent routes between all POIs
+                console.log('Generating intelligent route approximations...');
+                
+                for (let i = 0; i < this.pois.length - 1; i++) {
+                    const start = this.pois[i];
+                    const end = this.pois[i + 1];
+                    
+                    const intelligentRoute = this.generateIntelligentRoute(start, end);
+                    
+                    const routeLine = L.polyline(intelligentRoute, {
+                        color: this.getRouteColor(i),
+                        weight: 3,
+                        opacity: 0.7
+                    });
+                    this.routeLayer.addLayer(routeLine);
+                }
+                
+                console.log('Added intelligent route approximations for all segments');
+            }
+
+            getRouteColor(index) {
+                const colors = [
+                    '#667eea', // Blue
+                    '#f093fb', // Pink
+                    '#4facfe', // Light Blue  
+                    '#43e97b', // Green
+                    '#fa709a', // Red-Pink
+                    '#ffecd2', // Orange
+                    '#a8edea'  // Mint
+                ];
+                return colors[index % colors.length];
+            }
+
+            getPOIIcon(type) {
+                const configs = {
+                    coffee: { color: '#f39c12', emoji: '☕' },
+                    parking: { color: '#3498db', emoji: '🅿️' },
+                    overnight: { color: '#9b59b6', emoji: '🏨' }
+                };
+                
+                const config = configs[type] || { color: '#95a5a6', emoji: '📍' };
+                
+                return L.divIcon({
+                    html: `<div style="background: ${config.color}; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 16px; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">${config.emoji}</div>`,
+                    className: 'custom-div-icon',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                });
+            }
+
+            getPOITitle(type) {
+                const titles = {
+                    coffee: 'Kaffeepause',
+                    parking: 'Parken',
+                    overnight: 'Übernachtung'
+                };
+                return titles[type] || 'Wegpunkt';
+            }
+
+            async startAnimation() {
+                if (this.routeLayer) {
+                    this.map.removeLayer(this.routeLayer);
+                }
+                
+                this.isAnimating = true;
+                this.currentAnimationIndex = 0;
+                
+                document.getElementById('animationControls').style.display = 'flex';
+                document.getElementById('header').classList.add('collapsed');
+                
+                console.log('Starting animation with realistic routes...');
+                
+                // Pre-generate all routes for smooth animation
+                this.animationRoutes = [];
+                
+                for (let i = 0; i < this.pois.length - 1; i++) {
+                    const start = this.pois[i];
+                    const end = this.pois[i + 1];
+                    
+                    const routeCoords = this.createRealisticRoute(start, end);
+                    this.animationRoutes.push({
+                        coords: routeCoords,
+                        startPOI: start,
+                        endPOI: end
+                    });
+                    
+                    console.log(`Animation route ${i + 1}: ${routeCoords.length} points`);
+                }
+                
+                // Create van marker with emoji
+                this.animationMarker = L.marker([this.pois[0].lat, this.pois[0].lon], {
+                    icon: L.divIcon({
+                        html: '<div style="background: #ff6b6b; color: white; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 3px solid white; box-shadow: 0 3px 10px rgba(0,0,0,0.4); z-index: 1000;">🚐</div>',
+                        className: 'van-marker',
+                        iconSize: [40, 40],
+                        iconAnchor: [20, 20]
+                    }),
+                    zIndexOffset: 1000
+                }).addTo(this.map);
+                
+                // Create route polyline that will be drawn progressively
+                this.animationRoute = L.polyline([], {
+                    color: '#ff6b6b',
+                    weight: 4,
+                    opacity: 0.8
+                }).addTo(this.map);
+                
+                this.currentRouteIndex = 0;
+                this.currentPointIndex = 0;
+                
+                console.log(`Animation ready: ${this.animationRoutes.length} routes, starting animation`);
+                this.animateVanAlongRealRoute();
+            }
+
+            animateVanAlongRealRoute() {
+                if (!this.isAnimating) {
+                    this.stopAnimation();
+                    return;
+                }
+                
+                // Check if we have routes to animate
+                if (this.currentRouteIndex >= this.animationRoutes.length) {
+                    this.stopAnimation();
+                    return;
+                }
+                
+                const currentRoute = this.animationRoutes[this.currentRouteIndex];
+                
+                // Check if we've finished the current route
+                if (this.currentPointIndex >= currentRoute.coords.length) {
+                    // Show POI popup at the end of the route
+                    const endPOI = currentRoute.endPOI;
+                    this.showPOIPopup(endPOI);
+                    
+                    // Move to next route
+                    this.currentRouteIndex++;
+                    this.currentPointIndex = 0;
+                    
+                    // Wait at POI based on type
+                    const waitTime = this.getPOIWaitTime(endPOI.type);
+                    setTimeout(() => this.animateVanAlongRealRoute(), waitTime);
+                    return;
+                }
+                
+                // Get current point
+                const point = currentRoute.coords[this.currentPointIndex];
+                
+                // Move van to current point
+                this.animationMarker.setLatLng(point);
+                this.map.setView(point, 12, { animate: true, duration: 0.5 });
+                
+                // Add point to the drawn route
+                this.animationRoute.addLatLng(point);
+                
+                // Move to next point
+                this.currentPointIndex++;
+                
+                // Calculate delay based on speed
+                const delay = 1000 / this.animationSpeed; // Base delay in ms
+                
+                setTimeout(() => this.animateVanAlongRealRoute(), delay);
+            }
+
+            showPOIPopup(poi) {
+                const popup = L.popup()
+                    .setLatLng([poi.lat, poi.lon])
+                    .setContent(`
+                        <div style="text-align: center; min-width: 150px;">
+                            <h3>${this.getPOITitle(poi.type)}</h3>
+                            <p>⏰ ${poi.time.toLocaleString()}</p>
+                            <p>⏳ ${Math.round(poi.duration)} Minuten</p>
+                            <p>📍 ${poi.lat.toFixed(4)}, ${poi.lon.toFixed(4)}</p>
+                        </div>
+                    `)
+                    .openOn(this.map);
+                
+                // Auto-close popup after a short time during animation
+                setTimeout(() => {
+                    if (this.isAnimating && this.map.hasLayer(popup)) {
+                        this.map.closePopup(popup);
+                    }
+                }, 2000);
+            }
+
+            getPOIWaitTime(type) {
+                // Return wait times in milliseconds based on POI type and animation speed
+                const baseTimes = {
+                    coffee: 1000,    // 1 second
+                    parking: 1500,   // 1.5 seconds  
+                    overnight: 2000  // 2 seconds
+                };
+                
+                return (baseTimes[type] || 1000) / this.animationSpeed;
+            }
+
+            toggleAnimation() {
+                this.isAnimating = !this.isAnimating;
+                const button = document.getElementById('playPause');
+                button.innerHTML = this.isAnimating ? '⏸️ Pause' : '▶️ Play';
+                
+                if (this.isAnimating) {
+                    this.animateRoute();
+                }
+            }
+
+            stopAnimation() {
+                this.isAnimating = false;
+                document.getElementById('animationControls').style.display = 'none';
+                document.getElementById('header').classList.remove('collapsed');
+                
+                if (this.animationMarker) {
+                    this.map.removeLayer(this.animationMarker);
+                    this.animationMarker = null;
+                }
+                
+                if (this.animationRoute) {
+                    this.map.removeLayer(this.animationRoute);
+                    this.animationRoute = null;
+                }
+                
+                // Reset animation state
+                this.currentRouteIndex = 0;
+                this.currentPointIndex = 0;
+                this.animationRoutes = [];
+                
+                this.map.closePopup();
+                this.showRoute(); // Show static route again
+            }
+
+            updateSpeed(speed) {
+                this.animationSpeed = parseInt(speed);
+                document.getElementById('speedDisplay').textContent = speed;
+            }
+
+            generateShareLink() {
+                const params = new URLSearchParams();
+                params.set('start', document.getElementById('dateFrom').value || '');
+                params.set('end', document.getElementById('dateTo').value || '');
+                params.set('coffee', document.getElementById('coffeeTime').value);
+                params.set('parking', document.getElementById('parkingTime').value);
+                params.set('overnight', document.getElementById('overnightTime').value);
+                params.set('cluster', document.getElementById('clusterDistance').value);
+                params.set('merge', document.getElementById('mergeDistance').value);
+                params.set('autoplay', 'true');
+                
+                const shareUrl = window.location.origin + window.location.pathname + '?' + params.toString();
+                document.getElementById('shareLinkInput').value = shareUrl;
+                document.getElementById('shareLink').style.display = 'block';
+                
+                setTimeout(() => {
+                    document.getElementById('shareLink').style.display = 'none';
+                }, 10000);
+            }
+
+            showError(message) {
+                const errorEl = document.getElementById('errorMessage');
+                errorEl.textContent = message;
+                errorEl.style.display = 'block';
+                setTimeout(() => {
+                    errorEl.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Global functions (ensure they're available)
+        window.toggleHeader = function() {
+            document.getElementById('header').classList.toggle('collapsed');
+        }
+
+        window.checkPassword = function() {
+            if (window.app) {
+                window.app.checkPassword();
+            } else {
+                console.error('App not initialized yet');
+            }
+        }
+
+        window.copyShareLink = function() {
+            const input = document.getElementById('shareLinkInput');
+            input.select();
+            document.execCommand('copy');
+            
+            // Show feedback
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '✓ Kopiert!';
+            button.style.background = '#27ae60';
+            
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.background = '';
+            }, 2000);
+        }
+
+        // Initialize app with fallback loading
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('DOM Content Loaded');
+            
+            // Try loading libraries with fallback
+            try {
+                console.log('Attempting to load libraries...');
+                await loadLibrariesWithFallback();
+                console.log('Libraries loaded successfully');
+                
+                // Initialize app
+                console.log('Creating TravelRouteApp...');
+                window.app = new TravelRouteApp();
+                console.log('App initialized successfully');
+                
+            } catch (error) {
+                console.error('Complete initialization failed:', error);
+                
+                // Show user-friendly error
+                document.body.innerHTML = `
+                    <div style="display: flex; justify-content: center; align-items: center; height: 100vh; background: #f8f9fa; font-family: Arial, sans-serif;">
+                        <div style="text-align: center; padding: 2rem; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); max-width: 500px;">
+                            <h2 style="color: #e74c3c; margin-bottom: 1rem;">⚠️ Fehler beim Laden</h2>
+                            <p style="margin-bottom: 1.5rem; color: #666;">Die Kartenanwendung konnte nicht geladen werden.</p>
+                            <p style="margin-bottom: 1.5rem; color: #666;"><strong>Mögliche Ursachen:</strong></p>
+                            <ul style="text-align: left; color: #666; margin-bottom: 1.5rem;">
+                                <li>Internetverbindung unterbrochen</li>
+                                <li>Content-Blocker oder Ad-Blocker aktiv</li>
+                                <li>Firewall blockiert externe Scripts</li>
+                            </ul>
+                            <button onclick="location.reload()" style="background: #667eea; color: white; padding: 0.8rem 2rem; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem;">
+                                🔄 Seite neu laden
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+
+        // Enhanced library loading with multiple fallbacks
+        async function loadLibrariesWithFallback() {
+            // First try: Wait for already loading libraries
+            try {
+                console.log('Trying primary library loading...');
+                await waitForLibraries();
+                return;
+            } catch (error) {
+                console.log('Primary loading failed, trying fallbacks...');
+            }
+
+            // Fallback: Try loading from alternative CDNs
+            const fallbacks = [
+                {
+                    name: 'jsDelivr CDN',
+                    leaflet: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+                    css: 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'
+                },
+                {
+                    name: 'unpkg CDN',
+                    leaflet: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+                    css: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+                }
+            ];
+
+            for (const fallback of fallbacks) {
+                try {
+                    console.log(`Trying ${fallback.name}...`);
+                    
+                    // Load CSS
+                    const cssLink = document.createElement('link');
+                    cssLink.rel = 'stylesheet';
+                    cssLink.href = fallback.css;
+                    document.head.appendChild(cssLink);
+                    
+                    // Load JS
+                    await loadScript(fallback.leaflet);
+                    
+                    // Check if it worked
+                    if (typeof L !== 'undefined') {
+                        console.log(`Successfully loaded Leaflet from ${fallback.name}`);
+                        return;
+                    }
+                } catch (error) {
+                    console.log(`${fallback.name} failed:`, error);
+                }
+            }
+
+            throw new Error('All fallback loading attempts failed');
+        }
+
+        // Helper function to load script dynamically
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+    </script>
+</body>
+</html>
