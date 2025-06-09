@@ -1047,8 +1047,8 @@
         }
 
         function updateInfoOverlay(point, step, totalSteps) {
-            // Nutze currentDisplayTime oder Fallback
-            if (currentDisplayTime) {
+            // Nutze currentDisplayTime oder Fallback  
+            if (currentDisplayTime && typeof currentDisplayTime.toLocaleDateString === 'function') {
                 document.getElementById('current-date').textContent = currentDisplayTime.toLocaleDateString('de-DE');
                 document.getElementById('current-time').textContent = currentDisplayTime.toLocaleTimeString('de-DE');
             } else {
