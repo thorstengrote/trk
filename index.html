@@ -1,6 +1,45 @@
-var vanMarker;
-        var currentDisplayTime = null;
-        var currentDisplayElevation = null;<!DOCTYPE html>
+// Sichere Date-Formatierung
+        function formatDateSafely(dateValue) {
+            try {
+                if (!dateValue) return '--';
+                
+                // Wenn es bereits ein Date-Object ist
+                if (dateValue instanceof Date) {
+                    return dateValue.toLocaleDateString('de-DE');
+                }
+                
+                // Wenn es ein String oder Number ist, versuche es zu konvertieren
+                const date = new Date(dateValue);
+                if (isNaN(date.getTime())) {
+                    return '--';
+                }
+                return date.toLocaleDateString('de-DE');
+            } catch (error) {
+                console.log('Date formatting error:', error, dateValue);
+                return '--';
+            }
+        }
+
+        function formatTimeSafely(dateValue) {
+            try {
+                if (!dateValue) return '--';
+                
+                // Wenn es bereits ein Date-Object ist
+                if (dateValue instanceof Date) {
+                    return dateValue.toLocaleTimeString('de-DE');
+                }
+                
+                // Wenn es ein String oder Number ist, versuche es zu konvertieren
+                const date = new Date(dateValue);
+                if (isNaN(date.getTime())) {
+                    return '--';
+                }
+                return date.toLocaleTimeString('de-DE');
+            } catch (error) {
+                console.log('Time formatting error:', error, dateValue);
+                return '--';
+            }
+        }<!DOCTYPE html>
 <html>
 <head>
     <title>Map</title>
