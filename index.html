@@ -207,9 +207,9 @@
         </div>
         <div id="controls-content">
             <div class="control-group">
-                <label for="speedRange">Playback Speed (km/s): </label>
+                <label for="speedRange">Animation Speed: </label>
                 <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
-                <span id="speedValue">20</span> km/s
+                <span id="speedValue">20</span>x speed
             </div>
             <div class="control-group">
                 <button onclick="togglePoints()">Show Points</button>
@@ -407,19 +407,27 @@
             let startDate = document.getElementById('startDate').value;
             let endDate = document.getElementById('endDate').value;
             
-            // Alle Daten verwenden wenn keine Filter gesetzt sind
+            // Filtere die Koordinaten
             if (!startDate && !endDate) {
                 filteredCoordinates = [...routeCoordinates];
-                // Verwende die originalen POIs (nicht Smart POIs) für die Anzeige
-                poiCoordinates = [];
-                for (let poi of smartPOIs.length > 0 ? smartPOIs : []) {
-                    poiCoordinates.push({...poi});
-                }
-                console.log("Using all data - no date filter applied");
+                console.log("Using all coordinates - no date filter applied");
             } else {
                 filteredCoordinates = filterRouteByDateRange(startDate, endDate);
-                poiCoordinates = filterPOIsByDateRange(startDate, endDate);
                 console.log("Applied date filter:", startDate, "to", endDate);
+            }
+            
+            // Filtere die POIs - verwende immer die originalen identifizierten POIs
+            if (!startDate && !endDate) {
+                // Verwende alle Smart POIs wenn keine Filter gesetzt sind
+                poiCoordinates = [...smartPOIs];
+            } else {
+                // Filtere Smart POIs nach Datum
+                poiCoordinates = smartPOIs.filter(poi => {
+                    if (!startDate && !endDate) return true;
+                    let start = startDate ? new Date(startDate) : new Date(0);
+                    let end = endDate ? new Date(endDate) : new Date();
+                    return poi.time >= start && poi.time <= end;
+                });
             }
             
             // Clear existing markers and path
@@ -442,6 +450,11 @@
                 acc[poi.stopType] = (acc[poi.stopType] || 0) + 1;
                 return acc;
             }, {}));
+            
+            // Debug POI details
+            poiCoordinates.forEach((poi, i) => {
+                console.log(`POI ${i+1}: ${poi.stopType} at ${poi.time.toLocaleString()} (${poi.lat.toFixed(6)}, ${poi.lon.toFixed(6)})`);
+            });
         }
 
         function clearMap() {
@@ -570,14 +583,33 @@
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Drive Route";
             if (vanMarker) map.removeLayer(vanMarker);
             
+            // Füge alle verpassten POIs hinzu
+            addMissedPOIs();
+            
             console.log("Total POIs displayed during drive:", stopMarkers.length);
             console.log("POIs displayed by type:", stopMarkers.reduce((acc, marker) => {
                 let type = marker.options.icon.options.html.includes('fa-coffee') ? 'Coffee Break' :
                            marker.options.icon.options.html.includes('fa-parking') ? 'Parking' :
-                           'Sleeping';
+                           marker.options.icon.options.html.includes('fa-campground') ? 'Sleeping' :
+                           marker.options.icon.options.html.includes('fa-home') ? 'Home' : 'Other';
                 acc[type] = (acc[type] || 0) + 1;
                 return acc;
             }, {}));
+        }
+
+        // Funktion zum Hinzufügen verpasster POIs am Ende der Route
+        function addMissedPOIs() {
+            console.log("Checking for missed POIs...");
+            for (let poi of poiCoordinates) {
+                let alreadyDisplayed = stopMarkers.some(m => 
+                    calculateDistance(m.getLatLng().lat, m.getLatLng().lng, poi.lat, poi.lon) < 500
+                );
+                
+                if (!alreadyDisplayed) {
+                    console.log(`Adding missed POI: ${poi.stopType} at ${poi.lat.toFixed(6)}, ${poi.lon.toFixed(6)}`);
+                    addStopMarker(poi);
+                }
+            }
         }
 
         async function getRouteFromOSRM(points) {
@@ -728,11 +760,11 @@
             }
         }
 
-        // Komplett überarbeitete Animation mit Info-Overlay und besserer POI-Erkennung
+        // Komplett überarbeitete Animation mit echter Zeit und Geschwindigkeit
         function animateVanAlongRoute(route, step, routePOIs) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
-                var currentTime = interpolateTimeFromRoute(step, route.length, routePOIs);
+                var currentTime = interpolateRealTimeFromRoute(step, route.length);
 
                 if (!vanMarker) {
                     vanMarker = L.marker(point, {
@@ -755,59 +787,68 @@
                 }
                 lastPosition = point;
 
-                // Bessere POI-Erkennung basierend auf aktueller Position und Zeit
+                // Verbesserte POI-Erkennung - checke alle POIs
                 for (let poi of poiCoordinates) {
                     let distance = calculateDistance(poi.lat, poi.lon, point[0], point[1]);
-                    let timeMatch = Math.abs(currentTime - poi.time) < 60 * 60 * 1000; // 1 Stunde Toleranz
                     
-                    // POI erreicht wenn wir nahe sind UND die Zeit stimmt
-                    if (distance < 2000 && timeMatch) {
-                        if (!stopMarkers.some(m => 
-                            calculateDistance(m.getLatLng().lat, m.getLatLng().lng, poi.lat, poi.lon) < 100
-                        )) {
-                            console.log(`Reached POI: ${poi.stopType} at ${poi.time.toLocaleString()}, distance: ${distance.toFixed(0)}m`);
+                    // POI erreicht wenn wir sehr nahe sind (1km Toleranz)
+                    if (distance < 1000) {
+                        // Prüfe ob dieser POI bereits angezeigt wurde
+                        let alreadyDisplayed = stopMarkers.some(m => 
+                            calculateDistance(m.getLatLng().lat, m.getLatLng().lng, poi.lat, poi.lon) < 500
+                        );
+                        
+                        if (!alreadyDisplayed) {
+                            console.log(`Reached POI: ${poi.stopType} at distance ${distance.toFixed(0)}m`);
                             addStopMarker(poi);
                         }
                     }
                 }
 
-                // Update info overlay
+                // Update info overlay mit echter Zeit
                 updateInfoOverlay(point, currentTime, step, route.length);
 
                 currentAnimationIndex = step;
+                
+                // Geschwindigkeitsbasierte Animation - speed ist in km/s
                 var timeToNextPoint = calculateTimeToNextPoint(point, route[step + 1] || point);
                 animationTimeout = setTimeout(function() {
                     animateVanAlongRoute(route, step + 1, routePOIs);
-                }, Math.max(50, timeToNextPoint)); // Minimum 50ms für flüssige Animation
+                }, timeToNextPoint);
             } else if (step >= route.length && driveRouteRunning) {
                 console.log("Route completed!");
                 setTimeout(stopDriveRoute, 2000); // Warte 2 Sekunden bevor Stop
             }
         }
 
-        function interpolateTimeFromRoute(step, totalSteps, routePOIs) {
-            if (routePOIs.length < 2) return new Date();
+        // Echte Zeit-Interpolation basierend auf originalen Datenpunkten
+        function interpolateRealTimeFromRoute(step, totalSteps) {
+            if (filteredCoordinates.length === 0) return new Date();
             
-            const startTime = routePOIs[0].time;
-            const endTime = routePOIs[routePOIs.length - 1].time;
+            // Finde den Fortschritt in der gesamten Route (0 bis 1)
+            const progress = step / totalSteps;
+            
+            // Interpoliere zwischen erstem und letztem Datenpunkt
+            const startTime = filteredCoordinates[0].time;
+            const endTime = filteredCoordinates[filteredCoordinates.length - 1].time;
             const totalDuration = endTime - startTime;
             
-            return new Date(startTime.getTime() + (totalDuration * step / totalSteps));
+            return new Date(startTime.getTime() + (totalDuration * progress));
         }
 
         function updateInfoOverlay(point, currentTime, step, totalSteps) {
-            document.getElementById('current-date').textContent = currentTime.toLocaleDateString();
-            document.getElementById('current-time').textContent = currentTime.toLocaleTimeString();
+            document.getElementById('current-date').textContent = currentTime.toLocaleDateString('de-DE');
+            document.getElementById('current-time').textContent = currentTime.toLocaleTimeString('de-DE');
             document.getElementById('current-lat').textContent = point[0].toFixed(6);
             document.getElementById('current-lon').textContent = point[1].toFixed(6);
             document.getElementById('total-distance').textContent = totalDistance.toFixed(1);
             
-            // Geschwindigkeit berechnen (vereinfacht)
-            let speedKmh = speed * 3.6; // Umrechnung von m/s zu km/h
-            document.getElementById('current-speed').textContent = speedKmh.toFixed(0);
+            // Realistische Reisegeschwindigkeit (50-120 km/h je nach speed setting)
+            let realisticSpeed = 50 + (speed / 100) * 70; // 50-120 km/h
+            document.getElementById('current-speed').textContent = realisticSpeed.toFixed(0);
             
-            // Elevation (mockup - in echten Daten würde man API aufrufen)
-            currentElevation = 50 + Math.sin(step / 100) * 30; // Simulierte Elevation
+            // Elevation (mockup - aber realistischer basierend auf Position)
+            currentElevation = 50 + Math.sin(point[0] * 0.01) * 100 + Math.cos(point[1] * 0.01) * 50;
             document.getElementById('current-elevation').textContent = currentElevation.toFixed(0);
             
             // Elevation chart update
@@ -863,9 +904,19 @@
                 case 'Sleeping':
                     markerIcon = `<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-campground"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
                     break;
+                case 'Home':
+                    markerIcon = `<div style="background-color:#FF5733;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-home"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
+                    break;
+                default:
+                    markerIcon = `<div style="background-color:#666;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-map-marker"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
             }
 
-            if (!stopMarkers.some(m => m.getLatLng().equals([stopPoint.lat, stopPoint.lon]))) {
+            // Prüfe ob bereits ein ähnlicher Marker existiert
+            let alreadyExists = stopMarkers.some(m => 
+                calculateDistance(m.getLatLng().lat, m.getLatLng().lng, stopPoint.lat, stopPoint.lon) < 100
+            );
+            
+            if (!alreadyExists) {
                 const durationMinutes = (stopPoint.endTime - stopPoint.time) / (60 * 1000);
                 let nextCategory, suggestionText;
                 
@@ -879,8 +930,8 @@
 
                 let popupContent = `
                     <h3>${stopPoint.stopType}</h3>
-                    <p>Start Time: ${stopPoint.time.toLocaleString()}</p>
-                    <p>End Time: ${stopPoint.endTime ? stopPoint.endTime.toLocaleString() : 'N/A'}</p>
+                    <p>Start Time: ${stopPoint.time.toLocaleString('de-DE')}</p>
+                    <p>End Time: ${stopPoint.endTime ? stopPoint.endTime.toLocaleString('de-DE') : 'N/A'}</p>
                     <p>Duration: ${durationMinutes.toFixed(2)} minutes</p>
                     <p>Visit Count: ${visitCount}</p>
                     <p>Latitude: ${stopPoint.lat.toFixed(6)}</p>
@@ -889,6 +940,7 @@
                     <p>Max Distance in Cluster: ${(stopPoint.maxDistanceInCluster || 0).toFixed(2)} meters</p>
                     <p>Time to Next POI: ${((stopPoint.timeToNextPOI || 0) / (60 * 1000)).toFixed(2)} minutes</p>
                     <p>Distance to Next POI: ${(stopPoint.distanceToNextPOI || 0).toFixed(2)} meters</p>
+                    ${stopPoint.isSnapped ? `<p>Snapped to road: ${stopPoint.snapDistance.toFixed(0)}m</p>` : ''}
                     ${nextCategory ? `<p>To change to ${nextCategory}: ${suggestionText}</p>` : ''}
                 `;
 
@@ -900,13 +952,20 @@
                         iconAnchor: [15, 15]
                     })
                 }).addTo(map).bindPopup(popupContent);
+                
                 stopMarkers.push(marker);
+                console.log(`Added stop marker: ${stopPoint.stopType} at ${stopPoint.lat.toFixed(6)}, ${stopPoint.lon.toFixed(6)}`);
+            } else {
+                console.log(`Stop marker already exists for ${stopPoint.stopType} at ${stopPoint.lat.toFixed(6)}, ${stopPoint.lon.toFixed(6)}`);
             }
         }
 
         function calculateTimeToNextPoint(point1, point2) {
             var distance = calculateDistance(point1[0], point1[1], point2[0], point2[1]);
-            return (distance / (speed * 1000)) * 1000; // Convert to milliseconds
+            // speed ist in km/s, konvertiere zu m/s und dann zu ms
+            var speedMs = speed * 1000; // km/s zu m/s
+            var timeInSeconds = distance / speedMs;
+            return Math.max(10, timeInSeconds * 1000); // Minimum 10ms, sonst echte Zeit in ms
         }
 
         function filterRouteByDateRange(startDate, endDate) {
