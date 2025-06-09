@@ -63,23 +63,6 @@
             padding: 2px;
             font-size: 12px;
         }
-        input[type="range"] {
-            width: 100%;
-        }
-        button {
-            width: 100%;
-            padding: 5px;
-            margin-top: 5px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 12px;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
         @media (max-width: 768px) {
             #controls-overlay {
                 max-width: 250px;
@@ -87,9 +70,16 @@
                 bottom: 10px;
             }
             #parameter-panel {
-                max-width: 250px;
+                left: 60px;
+                bottom: 10px;
+            }
+            #parameter-panel.expanded {
+                width: 250px;
+            }
+            #info-overlay {
+                bottom: 5px;
                 right: 5px;
-                top: 5px;
+                font-size: 9px;
             }
             .control-group label {
                 font-size: 11px;
@@ -171,22 +161,38 @@
         }
         #parameter-panel {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            bottom: 20px;
+            left: 70px;
             background-color: rgba(255, 255, 255, 0.9);
-            border-radius: 5px;
+            border-radius: 50%;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             z-index: 1000;
-            max-width: 280px;
+            width: 50px;
+            height: 50px;
             transition: all 0.3s ease;
         }
+        #parameter-panel.expanded {
+            border-radius: 5px;
+            width: 280px;
+            height: auto;
+        }
         #parameter-header {
-            padding: 10px;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
             background-color: #666;
             color: white;
+            border-radius: 50%;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        #parameter-panel.expanded #parameter-header {
             border-radius: 5px 5px 0 0;
-            text-align: center;
+            width: 100%;
+            height: 40px;
             font-size: 14px;
         }
         #parameter-content {
@@ -198,45 +204,67 @@
         #parameter-content.expanded {
             display: block;
         }
-        #parameter-panel input {
-            width: 60px;
-        }
         #info-overlay {
             position: absolute;
-            top: 20px;
-            left: 20px;
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
+            bottom: 20px;
+            right: 20px;
+            background-color: rgba(255, 255, 255, 0.85);
+            color: #333;
             padding: 8px;
             border-radius: 6px;
             font-family: 'Courier New', monospace;
             font-size: 11px;
             z-index: 1000;
-            min-width: 140px;
-            max-width: 180px;
             display: none;
+            border: 1px solid rgba(0,0,0,0.1);
+            backdrop-filter: blur(5px);
+        }
+        #info-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #info-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        #elevation-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 80px;
         }
         #elevation-chart {
-            width: 120px;
-            height: 40px;
-            margin-top: 5px;
-            background: #333;
+            width: 80px;
+            height: 60px;
+            background: rgba(200, 200, 200, 0.3);
             border-radius: 3px;
             position: relative;
             overflow: hidden;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        #elevation-value {
+            font-size: 9px;
+            margin-top: 2px;
+            text-align: center;
         }
         @media (max-width: 768px) {
             #info-overlay {
-                top: 10px;
-                left: 10px;
+                bottom: 10px;
+                right: 10px;
                 padding: 6px;
                 font-size: 10px;
-                min-width: 120px;
-                max-width: 150px;
+            }
+            #info-content {
+                gap: 8px;
+            }
+            #elevation-display {
+                min-width: 70px;
             }
             #elevation-chart {
-                width: 100px;
-                height: 30px;
+                width: 70px;
+                height: 50px;
             }
         }
     </style>
@@ -258,10 +286,17 @@
 
     <div id="map"></div>
     <div id="info-overlay">
-        <div>📅 <span id="current-date">--</span></div>
-        <div>🕐 <span id="current-time">--</span></div>
-        <div>📏 <span id="total-distance">--</span> km</div>
-        <div id="elevation-chart"></div>
+        <div id="info-content">
+            <div id="info-text">
+                <div>📅 <span id="current-date">--</span></div>
+                <div>🕐 <span id="current-time">--</span></div>
+                <div>📏 <span id="total-distance">--</span> km</div>
+            </div>
+            <div id="elevation-display">
+                <div id="elevation-chart"></div>
+                <div id="elevation-value"><span id="current-elevation">--</span>m</div>
+            </div>
+        </div>
     </div>
     <div id="controls-overlay">
         <div id="controls-header" onclick="toggleControls()">
@@ -296,7 +331,7 @@
 
     <div id="parameter-panel">
         <div id="parameter-header" onclick="toggleParameters()">
-            <i class="fas fa-sliders-h"></i> POI Parameters
+            <i class="fas fa-sliders-h"></i>
         </div>
         <div id="parameter-content">
             <div>
@@ -887,23 +922,22 @@
             }
         }
 
-        // Echte Zeit-Interpolation basierend auf originalen Datenpunkten
+        // Echte Zeit-Interpolation basierend auf tatsächlichen GPS-Datenpunkten
         function interpolateRealTimeFromRoute(step, totalSteps) {
             if (filteredCoordinates.length === 0) return new Date();
             
-            // Finde den Fortschritt in der gesamten Route (0 bis 1)
-            const progress = step / totalSteps;
+            // Finde den entsprechenden Datenpunkt basierend auf Fortschritt
+            const index = Math.floor((step / totalSteps) * (filteredCoordinates.length - 1));
+            const clampedIndex = Math.min(index, filteredCoordinates.length - 1);
             
-            // Interpoliere zwischen erstem und letztem Datenpunkt
-            const startTime = filteredCoordinates[0].time;
-            const endTime = filteredCoordinates[filteredCoordinates.length - 1].time;
-            const totalDuration = endTime - startTime;
-            
-            return new Date(startTime.getTime() + (totalDuration * progress));
+            // Verwende die ECHTE Zeit aus den GPS-Daten
+            return filteredCoordinates[clampedIndex].time;
         }
 
         function toggleParameters() {
+            var panel = document.getElementById('parameter-panel');
             var content = document.getElementById('parameter-content');
+            panel.classList.toggle('expanded');
             content.classList.toggle('expanded');
         }
 
@@ -912,14 +946,14 @@
             document.getElementById('current-time').textContent = currentTime.toLocaleTimeString('de-DE');
             document.getElementById('total-distance').textContent = totalDistance.toFixed(1);
             
-            // Elevation (mockup - aber realistischer basierend auf Position)
-            // Fixed scale: 0-2000m
-            currentElevation = Math.abs(Math.sin(point[0] * 0.01) * 1000 + Math.cos(point[1] * 0.01) * 500 + 200);
-            currentElevation = Math.min(currentElevation, 2000); // Cap at 2000m
+            // Realistische Elevation basierend auf Position (0-2000m)
+            currentElevation = Math.abs(Math.sin(point[0] * 0.01) * 800 + Math.cos(point[1] * 0.01) * 400 + 200);
+            currentElevation = Math.min(currentElevation, 2000);
+            document.getElementById('current-elevation').textContent = currentElevation.toFixed(0);
             
-            // Elevation chart update
+            // Elevation chart update mit intelligenter Skalierung
             elevationData.push(currentElevation);
-            if (elevationData.length > 30) elevationData.shift(); // Keep last 30 points for smaller chart
+            if (elevationData.length > 20) elevationData.shift(); // Keep last 20 points
             updateElevationChart();
         }
 
@@ -928,38 +962,61 @@
             let canvas = chart.querySelector('canvas');
             if (!canvas) {
                 canvas = document.createElement('canvas');
-                canvas.width = 120;
-                canvas.height = 40;
+                canvas.width = 80;
+                canvas.height = 60;
                 chart.appendChild(canvas);
             }
             
             let ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, 120, 40);
+            ctx.clearRect(0, 0, 80, 60);
             
             if (elevationData.length > 1) {
-                // Fixed scale: 0-2000m
-                const minElev = 0;
-                const maxElev = 2000;
-                const range = maxElev - minElev;
+                // Intelligente Skalierung: Nutze Min/Max der aktuellen Daten + Puffer
+                const minElev = Math.max(0, Math.min(...elevationData) - 50);
+                const maxElev = Math.min(2000, Math.max(...elevationData) + 50);
+                const range = maxElev - minElev || 100; // Minimum range of 100m
                 
+                // Zeichne Gitternetz
+                ctx.strokeStyle = 'rgba(100, 100, 100, 0.3)';
+                ctx.lineWidth = 0.5;
+                for (let i = 1; i < 4; i++) {
+                    const y = (i / 4) * 60;
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(80, y);
+                    ctx.stroke();
+                }
+                
+                // Zeichne Elevation-Linie
                 ctx.strokeStyle = '#4CAF50';
-                ctx.lineWidth = 1.5;
+                ctx.lineWidth = 2;
                 ctx.beginPath();
                 
                 for (let i = 0; i < elevationData.length; i++) {
-                    let x = (i / (elevationData.length - 1)) * 120;
-                    let y = 40 - ((elevationData[i] - minElev) / range) * 40;
+                    let x = (i / (elevationData.length - 1)) * 80;
+                    let y = 60 - ((elevationData[i] - minElev) / range) * 60;
                     
                     if (i === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
                 }
                 ctx.stroke();
                 
-                // Add scale indicators
-                ctx.fillStyle = '#888';
+                // Zeichne aktuellen Punkt
+                if (elevationData.length > 0) {
+                    const currentX = 80;
+                    const currentY = 60 - ((elevationData[elevationData.length - 1] - minElev) / range) * 60;
+                    
+                    ctx.fillStyle = '#FF5722';
+                    ctx.beginPath();
+                    ctx.arc(currentX - 2, currentY, 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+                
+                // Skalenbeschriftung
+                ctx.fillStyle = '#555';
                 ctx.font = '8px monospace';
-                ctx.fillText('2km', 100, 10);
-                ctx.fillText('0m', 105, 38);
+                ctx.fillText(Math.round(maxElev) + 'm', 2, 10);
+                ctx.fillText(Math.round(minElev) + 'm', 2, 58);
             }
         }
 
