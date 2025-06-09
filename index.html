@@ -406,7 +406,7 @@
 
     <div id="parameter-panel">
         <div id="parameter-button" onclick="toggleParameters()">
-            <i class="fas fa-cogs"></i>
+            <i class="fas fa-sliders-h"></i>
         </div>
         <div id="parameter-content">
             <div class="control-group">
@@ -461,11 +461,8 @@
         var animationTimeout;
         var driveRouteRunning = false;
         var vanMarker;
-        var currentPOIIndex = 0;
-        var lastPOITime = null;
-        var nextPOITime = null;
-        var lastPOIPosition = null;
-        var nextPOIPosition = null;
+        var currentDisplayTime = null;
+        var currentDisplayElevation = null;
         var stopMarkers = [];
         var homeMarker;
         var totalDistance = 0;
@@ -794,11 +791,8 @@
             totalDistance = 0;
             lastPosition = null;
             elevationData = [];
-            currentPOIIndex = 0;
-            lastPOITime = null;
-            nextPOITime = null;
-            lastPOIPosition = null;
-            nextPOIPosition = null;
+            currentDisplayTime = null;
+            currentDisplayElevation = null;
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
             calculateCompleteRoute();
         }
@@ -987,13 +981,10 @@
             }
         }
 
-        // Hybrid-Zeit-System: POI-basiert + Interpolation
+        // Super Simple Animation - Zeit nur bei POI-Erreichen setzen
         function animateVanAlongRoute(route, step, routePOIs) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
-                
-                // Berechne aktuelle Zeit mit Hybrid-System
-                var currentTime = calculateHybridTime(point, step, route.length);
 
                 if (!vanMarker) {
                     vanMarker = L.marker(point, {
@@ -1016,7 +1007,7 @@
                 }
                 lastPosition = point;
 
-                // POI-Erkennung
+                // POI-Erkennung - hier wird Zeit/Elevation gesetzt
                 for (let poi of poiCoordinates) {
                     let distance = calculateDistance(poi.lat, poi.lon, point[0], point[1]);
                     
@@ -1026,14 +1017,22 @@
                         );
                         
                         if (!alreadyDisplayed) {
-                            console.log(`Reached POI: ${poi.stopType} at distance ${distance.toFixed(0)}m`);
+                            console.log(`Reached POI: ${poi.stopType} at ${poi.time.toLocaleString('de-DE')}`);
                             addStopMarker(poi);
+                            
+                            // HIER: Zeit und Elevation hart setzen
+                            currentDisplayTime = poi.time;
+                            // POI hat elevation? Sonst mockup
+                            currentDisplayElevation = poi.elevation || (200 + Math.random() * 800);
+                            elevationData.push(currentDisplayElevation);
+                            if (elevationData.length > 20) elevationData.shift();
+                            updateElevationChart();
                         }
                     }
                 }
 
-                // Update info overlay
-                updateInfoOverlay(point, currentTime, step, route.length);
+                // Update info overlay (nutzt currentDisplayTime)
+                updateInfoOverlay(point, step, route.length);
 
                 currentAnimationIndex = step;
                 
@@ -1047,60 +1046,23 @@
             }
         }
 
-        // Hybrid-Zeit-Berechnung: POI-basiert + Interpolation
-        function calculateHybridTime(currentPoint, step, totalSteps) {
-            // 1. Prüfe ob POI erreicht (harte Zeitvorgabe)
-            for (let poi of poiCoordinates) {
-                let distance = calculateDistance(poi.lat, poi.lon, currentPoint[0], currentPoint[1]);
-                if (distance < 1000) {
-                    console.log(`Time set to POI: ${poi.time.toLocaleString('de-DE')}`);
-                    updatePOIAnchors(poi);
-                    return poi.time;
-                }
-            }
-            
-            // 2. Interpoliere zwischen bekannten POI-Zeiten
-            if (lastPOITime && nextPOITime && lastPOIPosition && nextPOIPosition) {
-                let totalDistance = calculateDistance(
-                    lastPOIPosition[0], lastPOIPosition[1], 
-                    nextPOIPosition[0], nextPOIPosition[1]
-                );
-                let currentDistance = calculateDistance(
-                    lastPOIPosition[0], lastPOIPosition[1], 
-                    currentPoint[0], currentPoint[1]
-                );
-                let progress = Math.min(currentDistance / totalDistance, 1);
-                
-                let timeDiff = nextPOITime - lastPOITime;
-                return new Date(lastPOITime.getTime() + (timeDiff * progress));
-            }
-            
-            // 3. Fallback: Linear über gesamte Route
-            if (filteredCoordinates.length > 0) {
-                let routeProgress = step / totalSteps;
-                let startTime = filteredCoordinates[0].time;
-                let endTime = filteredCoordinates[filteredCoordinates.length - 1].time;
-                let timeDiff = endTime - startTime;
-                return new Date(startTime.getTime() + (timeDiff * routeProgress));
-            }
-            
-            return new Date();
-        }
-
-        // Aktualisiere POI-Anker für Interpolation
-        function updatePOIAnchors(currentPOI) {
-            lastPOITime = currentPOI.time;
-            lastPOIPosition = [currentPOI.lat, currentPOI.lon];
-            
-            // Finde nächsten POI
-            let currentIndex = poiCoordinates.findIndex(poi => poi.time === currentPOI.time);
-            if (currentIndex >= 0 && currentIndex < poiCoordinates.length - 1) {
-                let nextPOI = poiCoordinates[currentIndex + 1];
-                nextPOITime = nextPOI.time;
-                nextPOIPosition = [nextPOI.lat, nextPOI.lon];
+        function updateInfoOverlay(point, step, totalSteps) {
+            // Nutze currentDisplayTime oder Fallback
+            if (currentDisplayTime) {
+                document.getElementById('current-date').textContent = currentDisplayTime.toLocaleDateString('de-DE');
+                document.getElementById('current-time').textContent = currentDisplayTime.toLocaleTimeString('de-DE');
             } else {
-                nextPOITime = null;
-                nextPOIPosition = null;
+                document.getElementById('current-date').textContent = '--';
+                document.getElementById('current-time').textContent = '--';
+            }
+            
+            document.getElementById('total-distance').textContent = totalDistance.toFixed(1);
+            
+            // Nutze currentDisplayElevation
+            if (currentDisplayElevation) {
+                document.getElementById('current-elevation').textContent = currentDisplayElevation.toFixed(0);
+            } else {
+                document.getElementById('current-elevation').textContent = '--';
             }
         }
 
