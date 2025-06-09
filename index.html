@@ -183,10 +183,10 @@
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            background-color: #666;
+            background-color: #4a4a4a;
             color: white;
             border-radius: 50%;
-            font-size: 16px;
+            font-size: 20px;
             transition: all 0.3s ease;
         }
         #parameter-panel.expanded #parameter-header {
@@ -331,7 +331,7 @@
 
     <div id="parameter-panel">
         <div id="parameter-header" onclick="toggleParameters()">
-            <i class="fas fa-sliders-h"></i>
+            <i class="fas fa-cogs"></i>
         </div>
         <div id="parameter-content">
             <div>
@@ -386,6 +386,8 @@
         var animationTimeout;
         var driveRouteRunning = false;
         var vanMarker;
+        var currentPOIIndex = 0;
+        var lastUpdateTime = null;
         var stopMarkers = [];
         var homeMarker;
         var totalDistance = 0;
@@ -419,6 +421,40 @@
 
             if (startDate) document.getElementById('startDate').value = startDate;
             if (endDate) document.getElementById('endDate').value = endDate;
+            
+            // POI Parameter aus URL laden
+            if (urlParams.get('maxClusterDistance')) {
+                maxClusterDistance = parseInt(urlParams.get('maxClusterDistance'));
+                document.getElementById('maxClusterDistance').value = maxClusterDistance;
+            }
+            if (urlParams.get('minTimeBetweenPOIs')) {
+                minTimeBetweenPOIs = parseInt(urlParams.get('minTimeBetweenPOIs')) * 60 * 1000; // Convert to ms
+                document.getElementById('minTimeBetweenPOIs').value = parseInt(urlParams.get('minTimeBetweenPOIs'));
+            }
+            if (urlParams.get('sleepingThreshold')) {
+                sleepingThreshold = parseInt(urlParams.get('sleepingThreshold'));
+                document.getElementById('sleepingThreshold').value = sleepingThreshold;
+            }
+            if (urlParams.get('parkingThreshold')) {
+                parkingThreshold = parseInt(urlParams.get('parkingThreshold'));
+                document.getElementById('parkingThreshold').value = parkingThreshold;
+            }
+            if (urlParams.get('coffeeBreakThreshold')) {
+                coffeeBreakThreshold = parseInt(urlParams.get('coffeeBreakThreshold'));
+                document.getElementById('coffeeBreakThreshold').value = coffeeBreakThreshold;
+            }
+            if (urlParams.get('maxMergeDistance')) {
+                maxMergeDistance = parseInt(urlParams.get('maxMergeDistance'));
+                document.getElementById('maxMergeDistance').value = maxMergeDistance;
+            }
+            if (urlParams.get('maxTimeBetweenMerge')) {
+                maxTimeBetweenMerge = parseInt(urlParams.get('maxTimeBetweenMerge')) * 60 * 60 * 1000; // Convert to ms
+                document.getElementById('maxTimeBetweenMerge').value = parseInt(urlParams.get('maxTimeBetweenMerge'));
+            }
+            if (urlParams.get('roadSnapDistance')) {
+                roadSnapDistance = parseInt(urlParams.get('roadSnapDistance'));
+                document.getElementById('roadSnapDistance').value = roadSnapDistance;
+            }
         });
 
         function checkPassword() {
@@ -669,10 +705,19 @@
             document.getElementById('info-overlay').style.display = 'block';
             if (routePath) map.removeLayer(routePath);
             routePath = L.polyline([], {color: 'blue'}).addTo(map);
+            
+            // Van Marker richtig zurücksetzen
+            if (vanMarker) {
+                map.removeLayer(vanMarker);
+                vanMarker = null;
+            }
+            
             driveRouteRunning = true;
             totalDistance = 0;
             lastPosition = null;
             elevationData = [];
+            currentPOIIndex = 0;
+            lastUpdateTime = null;
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
             calculateCompleteRoute();
         }
@@ -861,11 +906,13 @@
             }
         }
 
-        // Komplett überarbeitete Animation mit echter Zeit und Geschwindigkeit
+        // Komplett überarbeitete Animation mit echter Zeit basierend auf POI-Erreichen
         function animateVanAlongRoute(route, step, routePOIs) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
-                var currentTime = interpolateRealTimeFromRoute(step, route.length);
+                
+                // Zeit-Update nur bei POI-Erreichen oder Initialisierung
+                var currentTime = updateTimeBasedOnPOIs(point);
 
                 if (!vanMarker) {
                     vanMarker = L.marker(point, {
@@ -888,13 +935,11 @@
                 }
                 lastPosition = point;
 
-                // Verbesserte POI-Erkennung - checke alle POIs
+                // POI-Erkennung
                 for (let poi of poiCoordinates) {
                     let distance = calculateDistance(poi.lat, poi.lon, point[0], point[1]);
                     
-                    // POI erreicht wenn wir sehr nahe sind (1km Toleranz)
                     if (distance < 1000) {
-                        // Prüfe ob dieser POI bereits angezeigt wurde
                         let alreadyDisplayed = stopMarkers.some(m => 
                             calculateDistance(m.getLatLng().lat, m.getLatLng().lng, poi.lat, poi.lon) < 500
                         );
@@ -906,32 +951,45 @@
                     }
                 }
 
-                // Update info overlay mit echter Zeit
+                // Update info overlay
                 updateInfoOverlay(point, currentTime, step, route.length);
 
                 currentAnimationIndex = step;
                 
-                // Geschwindigkeitsbasierte Animation - speed ist in km/s
                 var timeToNextPoint = calculateTimeToNextPoint(point, route[step + 1] || point);
                 animationTimeout = setTimeout(function() {
                     animateVanAlongRoute(route, step + 1, routePOIs);
                 }, timeToNextPoint);
             } else if (step >= route.length && driveRouteRunning) {
                 console.log("Route completed!");
-                setTimeout(stopDriveRoute, 2000); // Warte 2 Sekunden bevor Stop
+                setTimeout(stopDriveRoute, 2000);
             }
         }
 
-        // Echte Zeit-Interpolation basierend auf tatsächlichen GPS-Datenpunkten
-        function interpolateRealTimeFromRoute(step, totalSteps) {
-            if (filteredCoordinates.length === 0) return new Date();
+        // Neue Funktion für POI-basierte Zeit-Updates
+        function updateTimeBasedOnPOIs(currentPoint) {
+            // Finde den nächsten POI
+            for (let i = currentPOIIndex; i < poiCoordinates.length; i++) {
+                let poi = poiCoordinates[i];
+                let distance = calculateDistance(poi.lat, poi.lon, currentPoint[0], currentPoint[1]);
+                
+                if (distance < 1000) {
+                    // POI erreicht - aktualisiere Zeit
+                    currentPOIIndex = i;
+                    lastUpdateTime = poi.time;
+                    console.log(`Time updated to POI ${i}: ${poi.time.toLocaleString('de-DE')}`);
+                    return poi.time;
+                }
+            }
             
-            // Finde den entsprechenden Datenpunkt basierend auf Fortschritt
-            const index = Math.floor((step / totalSteps) * (filteredCoordinates.length - 1));
-            const clampedIndex = Math.min(index, filteredCoordinates.length - 1);
-            
-            // Verwende die ECHTE Zeit aus den GPS-Daten
-            return filteredCoordinates[clampedIndex].time;
+            // Kein POI erreicht - verwende letzte bekannte Zeit oder erste Zeit
+            if (lastUpdateTime) {
+                return lastUpdateTime;
+            } else if (filteredCoordinates.length > 0) {
+                return filteredCoordinates[0].time;
+            } else {
+                return new Date();
+            }
         }
 
         function toggleParameters() {
@@ -971,13 +1029,16 @@
             ctx.clearRect(0, 0, 80, 60);
             
             if (elevationData.length > 1) {
-                // Intelligente Skalierung: Nutze Min/Max der aktuellen Daten + Puffer
-                const minElev = Math.max(0, Math.min(...elevationData) - 50);
-                const maxElev = Math.min(2000, Math.max(...elevationData) + 50);
-                const range = maxElev - minElev || 100; // Minimum range of 100m
+                // Adaptive Skalierung basierend auf den letzten Werten
+                const minElev = Math.min(...elevationData);
+                const maxElev = Math.max(...elevationData);
+                const range = Math.max(maxElev - minElev, 50); // Minimum 50m Range für Sichtbarkeit
+                const center = (minElev + maxElev) / 2;
+                const displayMin = center - range / 2;
+                const displayMax = center + range / 2;
                 
-                // Zeichne Gitternetz
-                ctx.strokeStyle = 'rgba(100, 100, 100, 0.3)';
+                // Zeichne subtiles Gitternetz
+                ctx.strokeStyle = 'rgba(150, 150, 150, 0.2)';
                 ctx.lineWidth = 0.5;
                 for (let i = 1; i < 4; i++) {
                     const y = (i / 4) * 60;
@@ -987,36 +1048,51 @@
                     ctx.stroke();
                 }
                 
-                // Zeichne Elevation-Linie
-                ctx.strokeStyle = '#4CAF50';
+                // Zeichne Elevation-Kurve
+                ctx.strokeStyle = '#2196F3';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
                 
                 for (let i = 0; i < elevationData.length; i++) {
                     let x = (i / (elevationData.length - 1)) * 80;
-                    let y = 60 - ((elevationData[i] - minElev) / range) * 60;
+                    let y = 60 - ((elevationData[i] - displayMin) / range) * 60;
                     
                     if (i === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
                 }
                 ctx.stroke();
                 
-                // Zeichne aktuellen Punkt
+                // Zeichne gefüllte Fläche unter der Kurve
+                ctx.fillStyle = 'rgba(33, 150, 243, 0.1)';
+                ctx.beginPath();
+                ctx.moveTo(0, 60);
+                for (let i = 0; i < elevationData.length; i++) {
+                    let x = (i / (elevationData.length - 1)) * 80;
+                    let y = 60 - ((elevationData[i] - displayMin) / range) * 60;
+                    ctx.lineTo(x, y);
+                }
+                ctx.lineTo(80, 60);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Zeichne aktuellen Punkt (letzter Wert)
                 if (elevationData.length > 0) {
-                    const currentX = 80;
-                    const currentY = 60 - ((elevationData[elevationData.length - 1] - minElev) / range) * 60;
+                    const currentX = 78;
+                    const currentY = 60 - ((elevationData[elevationData.length - 1] - displayMin) / range) * 60;
                     
                     ctx.fillStyle = '#FF5722';
                     ctx.beginPath();
-                    ctx.arc(currentX - 2, currentY, 3, 0, 2 * Math.PI);
+                    ctx.arc(currentX, currentY, 2.5, 0, 2 * Math.PI);
                     ctx.fill();
                 }
                 
-                // Skalenbeschriftung
-                ctx.fillStyle = '#555';
-                ctx.font = '8px monospace';
-                ctx.fillText(Math.round(maxElev) + 'm', 2, 10);
-                ctx.fillText(Math.round(minElev) + 'm', 2, 58);
+                // Zeige Höhenänderung als Text
+                const heightChange = elevationData[elevationData.length - 1] - elevationData[0];
+                const changeText = heightChange >= 0 ? `+${heightChange.toFixed(0)}m` : `${heightChange.toFixed(0)}m`;
+                
+                ctx.fillStyle = heightChange >= 0 ? '#4CAF50' : '#F44336';
+                ctx.font = '9px monospace';
+                ctx.fillText(changeText, 2, 12);
             }
         }
 
@@ -1129,6 +1205,16 @@
             
             if (startDate) shareUrl += `start=${startDate}&`;
             if (endDate) shareUrl += `end=${endDate}&`;
+            
+            // POI Parameter hinzufügen
+            shareUrl += `maxClusterDistance=${maxClusterDistance}&`;
+            shareUrl += `minTimeBetweenPOIs=${minTimeBetweenPOIs / (60 * 1000)}&`; // Convert back to minutes
+            shareUrl += `sleepingThreshold=${sleepingThreshold}&`;
+            shareUrl += `parkingThreshold=${parkingThreshold}&`;
+            shareUrl += `coffeeBreakThreshold=${coffeeBreakThreshold}&`;
+            shareUrl += `maxMergeDistance=${maxMergeDistance}&`;
+            shareUrl += `maxTimeBetweenMerge=${maxTimeBetweenMerge / (60 * 60 * 1000)}&`; // Convert back to hours
+            shareUrl += `roadSnapDistance=${roadSnapDistance}&`;
             shareUrl += 'autoplay=true';
             
             var shareLinkElement = document.getElementById('shareLink');
