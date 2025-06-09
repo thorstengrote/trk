@@ -50,6 +50,19 @@
         .control-group {
             margin-bottom: 10px;
         }
+        .control-group div {
+            margin-bottom: 5px;
+        }
+        .control-group label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 2px;
+        }
+        .control-group input[type="number"] {
+            width: 60px;
+            padding: 2px;
+            font-size: 12px;
+        }
         input[type="range"] {
             width: 100%;
         }
@@ -62,9 +75,29 @@
             border: none;
             border-radius: 3px;
             cursor: pointer;
+            font-size: 12px;
         }
         button:hover {
             background-color: #45a049;
+        }
+        @media (max-width: 768px) {
+            #controls-overlay {
+                max-width: 250px;
+                left: 5px;
+                bottom: 10px;
+            }
+            #parameter-panel {
+                max-width: 250px;
+                right: 5px;
+                top: 5px;
+            }
+            .control-group label {
+                font-size: 11px;
+            }
+            button {
+                font-size: 11px;
+                padding: 4px;
+            }
         }
         #passwordOverlay {
             position: fixed;
@@ -140,11 +173,30 @@
             position: absolute;
             top: 10px;
             right: 10px;
-            background: white;
-            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.9);
             border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             z-index: 1000;
+            max-width: 280px;
+            transition: all 0.3s ease;
+        }
+        #parameter-header {
+            padding: 10px;
+            cursor: pointer;
+            background-color: #666;
+            color: white;
+            border-radius: 5px 5px 0 0;
+            text-align: center;
+            font-size: 14px;
+        }
+        #parameter-content {
+            padding: 10px;
+            display: none;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        #parameter-content.expanded {
+            display: block;
         }
         #parameter-panel input {
             width: 60px;
@@ -153,24 +205,39 @@
             position: absolute;
             top: 20px;
             left: 20px;
-            background-color: rgba(0, 0, 0, 0.8);
+            background-color: rgba(0, 0, 0, 0.7);
             color: white;
-            padding: 15px;
-            border-radius: 8px;
+            padding: 8px;
+            border-radius: 6px;
             font-family: 'Courier New', monospace;
-            font-size: 14px;
+            font-size: 11px;
             z-index: 1000;
-            min-width: 250px;
+            min-width: 140px;
+            max-width: 180px;
             display: none;
         }
         #elevation-chart {
-            width: 200px;
-            height: 80px;
-            margin-top: 10px;
+            width: 120px;
+            height: 40px;
+            margin-top: 5px;
             background: #333;
-            border-radius: 4px;
+            border-radius: 3px;
             position: relative;
             overflow: hidden;
+        }
+        @media (max-width: 768px) {
+            #info-overlay {
+                top: 10px;
+                left: 10px;
+                padding: 6px;
+                font-size: 10px;
+                min-width: 120px;
+                max-width: 150px;
+            }
+            #elevation-chart {
+                width: 100px;
+                height: 30px;
+            }
         }
     </style>
 </head>
@@ -191,15 +258,10 @@
 
     <div id="map"></div>
     <div id="info-overlay">
-        <div><strong>Van Tracking Info</strong></div>
         <div>📅 <span id="current-date">--</span></div>
         <div>🕐 <span id="current-time">--</span></div>
-        <div>📍 Lat: <span id="current-lat">--</span></div>
-        <div>📍 Lon: <span id="current-lon">--</span></div>
-        <div>⚡ Speed: <span id="current-speed">--</span> km/h</div>
-        <div>📏 Distance: <span id="total-distance">--</span> km</div>
+        <div>📏 <span id="total-distance">--</span> km</div>
         <div id="elevation-chart"></div>
-        <div>📈 Elevation: <span id="current-elevation">--</span> m</div>
     </div>
     <div id="controls-overlay">
         <div id="controls-header" onclick="toggleControls()">
@@ -233,40 +295,44 @@
     </div>
 
     <div id="parameter-panel">
-        <h3>POI Detection Parameters</h3>
-        <div>
-            <label for="maxClusterDistance">Max Cluster Distance (m):</label>
-            <input type="number" id="maxClusterDistance" value="1000">
+        <div id="parameter-header" onclick="toggleParameters()">
+            <i class="fas fa-sliders-h"></i> POI Parameters
         </div>
-        <div>
-            <label for="minTimeBetweenPOIs">Min Time Between POIs (min):</label>
-            <input type="number" id="minTimeBetweenPOIs" value="15">
+        <div id="parameter-content">
+            <div>
+                <label for="maxClusterDistance">Max Cluster Distance (m):</label>
+                <input type="number" id="maxClusterDistance" value="1000">
+            </div>
+            <div>
+                <label for="minTimeBetweenPOIs">Min Time Between POIs (min):</label>
+                <input type="number" id="minTimeBetweenPOIs" value="15">
+            </div>
+            <div>
+                <label for="sleepingThreshold">Sleeping Threshold (min):</label>
+                <input type="number" id="sleepingThreshold" value="360">
+            </div>
+            <div>
+                <label for="parkingThreshold">Parking Threshold (min):</label>
+                <input type="number" id="parkingThreshold" value="60">
+            </div>
+            <div>
+                <label for="coffeeBreakThreshold">Coffee Break Threshold (min):</label>
+                <input type="number" id="coffeeBreakThreshold" value="20">
+            </div>
+            <div>
+                <label for="maxMergeDistance">Max Merge Distance (m):</label>
+                <input type="number" id="maxMergeDistance" value="2000">
+            </div>
+            <div>
+                <label for="maxTimeBetweenMerge">Max Time Between Merge (hours):</label>
+                <input type="number" id="maxTimeBetweenMerge" value="24">
+            </div>
+            <div>
+                <label for="roadSnapDistance">Road Snap Distance (m):</label>
+                <input type="number" id="roadSnapDistance" value="5000">
+            </div>
+            <button onclick="updateParameters()">Apply Changes</button>
         </div>
-        <div>
-            <label for="sleepingThreshold">Sleeping Threshold (min):</label>
-            <input type="number" id="sleepingThreshold" value="360">
-        </div>
-        <div>
-            <label for="parkingThreshold">Parking Threshold (min):</label>
-            <input type="number" id="parkingThreshold" value="60">
-        </div>
-        <div>
-            <label for="coffeeBreakThreshold">Coffee Break Threshold (min):</label>
-            <input type="number" id="coffeeBreakThreshold" value="20">
-        </div>
-        <div>
-            <label for="maxMergeDistance">Max Merge Distance (m):</label>
-            <input type="number" id="maxMergeDistance" value="2000">
-        </div>
-        <div>
-            <label for="maxTimeBetweenMerge">Max Time Between Merge (hours):</label>
-            <input type="number" id="maxTimeBetweenMerge" value="24">
-        </div>
-        <div>
-            <label for="roadSnapDistance">Road Snap Distance (m):</label>
-            <input type="number" id="roadSnapDistance" value="5000">
-        </div>
-        <button onclick="updateParameters()">Apply Changes</button>
     </div>
 
     <script>
@@ -836,24 +902,24 @@
             return new Date(startTime.getTime() + (totalDuration * progress));
         }
 
+        function toggleParameters() {
+            var content = document.getElementById('parameter-content');
+            content.classList.toggle('expanded');
+        }
+
         function updateInfoOverlay(point, currentTime, step, totalSteps) {
             document.getElementById('current-date').textContent = currentTime.toLocaleDateString('de-DE');
             document.getElementById('current-time').textContent = currentTime.toLocaleTimeString('de-DE');
-            document.getElementById('current-lat').textContent = point[0].toFixed(6);
-            document.getElementById('current-lon').textContent = point[1].toFixed(6);
             document.getElementById('total-distance').textContent = totalDistance.toFixed(1);
             
-            // Realistische Reisegeschwindigkeit (50-120 km/h je nach speed setting)
-            let realisticSpeed = 50 + (speed / 100) * 70; // 50-120 km/h
-            document.getElementById('current-speed').textContent = realisticSpeed.toFixed(0);
-            
             // Elevation (mockup - aber realistischer basierend auf Position)
-            currentElevation = 50 + Math.sin(point[0] * 0.01) * 100 + Math.cos(point[1] * 0.01) * 50;
-            document.getElementById('current-elevation').textContent = currentElevation.toFixed(0);
+            // Fixed scale: 0-2000m
+            currentElevation = Math.abs(Math.sin(point[0] * 0.01) * 1000 + Math.cos(point[1] * 0.01) * 500 + 200);
+            currentElevation = Math.min(currentElevation, 2000); // Cap at 2000m
             
             // Elevation chart update
             elevationData.push(currentElevation);
-            if (elevationData.length > 50) elevationData.shift(); // Keep last 50 points
+            if (elevationData.length > 30) elevationData.shift(); // Keep last 30 points for smaller chart
             updateElevationChart();
         }
 
@@ -862,31 +928,38 @@
             let canvas = chart.querySelector('canvas');
             if (!canvas) {
                 canvas = document.createElement('canvas');
-                canvas.width = 200;
-                canvas.height = 80;
+                canvas.width = 120;
+                canvas.height = 40;
                 chart.appendChild(canvas);
             }
             
             let ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, 200, 80);
+            ctx.clearRect(0, 0, 120, 40);
             
             if (elevationData.length > 1) {
+                // Fixed scale: 0-2000m
+                const minElev = 0;
+                const maxElev = 2000;
+                const range = maxElev - minElev;
+                
                 ctx.strokeStyle = '#4CAF50';
-                ctx.lineWidth = 2;
+                ctx.lineWidth = 1.5;
                 ctx.beginPath();
                 
-                let minElev = Math.min(...elevationData);
-                let maxElev = Math.max(...elevationData);
-                let range = maxElev - minElev || 1;
-                
                 for (let i = 0; i < elevationData.length; i++) {
-                    let x = (i / (elevationData.length - 1)) * 200;
-                    let y = 80 - ((elevationData[i] - minElev) / range) * 80;
+                    let x = (i / (elevationData.length - 1)) * 120;
+                    let y = 40 - ((elevationData[i] - minElev) / range) * 40;
                     
                     if (i === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
                 }
                 ctx.stroke();
+                
+                // Add scale indicators
+                ctx.fillStyle = '#888';
+                ctx.font = '8px monospace';
+                ctx.fillText('2km', 100, 10);
+                ctx.fillText('0m', 105, 38);
             }
         }
 
