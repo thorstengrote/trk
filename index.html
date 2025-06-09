@@ -1,4 +1,6 @@
-<!DOCTYPE html>
+var vanMarker;
+        var currentDisplayTime = null;
+        var currentDisplayElevation = null;<!DOCTYPE html>
 <html>
 <head>
     <title>Map</title>
@@ -460,9 +462,48 @@
         var currentAnimationIndex = 0;
         var animationTimeout;
         var driveRouteRunning = false;
-        var vanMarker;
-        var currentDisplayTime = null;
-        var currentDisplayElevation = null;
+        // Sichere Date-Formatierung
+        function formatDateSafely(dateValue) {
+            try {
+                if (!dateValue) return '--';
+                
+                // Wenn es bereits ein Date-Object ist
+                if (dateValue instanceof Date) {
+                    return dateValue.toLocaleDateString('de-DE');
+                }
+                
+                // Wenn es ein String oder Number ist, versuche es zu konvertieren
+                const date = new Date(dateValue);
+                if (isNaN(date.getTime())) {
+                    return '--';
+                }
+                return date.toLocaleDateString('de-DE');
+            } catch (error) {
+                console.log('Date formatting error:', error, dateValue);
+                return '--';
+            }
+        }
+
+        function formatTimeSafely(dateValue) {
+            try {
+                if (!dateValue) return '--';
+                
+                // Wenn es bereits ein Date-Object ist
+                if (dateValue instanceof Date) {
+                    return dateValue.toLocaleTimeString('de-DE');
+                }
+                
+                // Wenn es ein String oder Number ist, versuche es zu konvertieren
+                const date = new Date(dateValue);
+                if (isNaN(date.getTime())) {
+                    return '--';
+                }
+                return date.toLocaleTimeString('de-DE');
+            } catch (error) {
+                console.log('Time formatting error:', error, dateValue);
+                return '--';
+            }
+        }
         var stopMarkers = [];
         var homeMarker;
         var totalDistance = 0;
@@ -1047,14 +1088,9 @@
         }
 
         function updateInfoOverlay(point, step, totalSteps) {
-            // Nutze currentDisplayTime oder Fallback  
-            if (currentDisplayTime && typeof currentDisplayTime.toLocaleDateString === 'function') {
-                document.getElementById('current-date').textContent = currentDisplayTime.toLocaleDateString('de-DE');
-                document.getElementById('current-time').textContent = currentDisplayTime.toLocaleTimeString('de-DE');
-            } else {
-                document.getElementById('current-date').textContent = '--';
-                document.getElementById('current-time').textContent = '--';
-            }
+            // Nutze currentDisplayTime mit sicherer Formatierung
+            document.getElementById('current-date').textContent = formatDateSafely(currentDisplayTime);
+            document.getElementById('current-time').textContent = formatTimeSafely(currentDisplayTime);
             
             document.getElementById('total-distance').textContent = totalDistance.toFixed(1);
             
