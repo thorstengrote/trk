@@ -21,22 +21,55 @@
         }
         #controls-overlay {
             position: absolute;
-            bottom: 20px;
-            left: 10px;
-            background-color: rgba(255, 255, 255, 0.9);
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            bottom: 30px;
+            left: 30px;
             z-index: 1000;
-            max-width: 300px;
+        }
+        #controls-button {
+            width: 44px;
+            height: 44px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(20px);
+            transition: all 0.2s ease;
+            border: 0.5px solid rgba(0, 0, 0, 0.04);
+        }
+        #controls-button:hover {
+            background: rgba(255, 255, 255, 0.95);
+            transform: scale(1.05);
+        }
+        #controls-button:active {
+            transform: scale(0.95);
+        }
+        #controls-button i {
+            font-size: 18px;
+            color: #1d1d1f;
+        }
+        #controls-content {
+            position: absolute;
+            bottom: 54px;
+            left: 0;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 20px;
+            min-width: 280px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+            backdrop-filter: blur(20px);
+            border: 0.5px solid rgba(0, 0, 0, 0.04);
+            display: none;
+            opacity: 0;
+            transform: translateY(10px);
             transition: all 0.3s ease;
         }
-        #controls-header {
-            padding: 10px;
-            cursor: pointer;
-            background-color: #4a4a4a;
-            color: white;
-            border-radius: 5px 5px 0 0;
-            text-align: center;
+        #controls-content.expanded {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
         }
         #controls-content {
             padding: 10px;
@@ -48,46 +81,70 @@
             display: block;
         }
         .control-group {
-            margin-bottom: 10px;
-        }
-        .control-group div {
-            margin-bottom: 5px;
+            margin-bottom: 16px;
         }
         .control-group label {
             display: block;
-            font-size: 12px;
-            margin-bottom: 2px;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            color: #1d1d1f;
+            margin-bottom: 8px;
         }
-        .control-group input[type="number"] {
-            width: 60px;
-            padding: 2px;
-            font-size: 12px;
+        .control-group input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #e5e5e7;
+            outline: none;
+            -webkit-appearance: none;
         }
-        @media (max-width: 768px) {
-            #controls-overlay {
-                max-width: 250px;
-                left: 5px;
-                bottom: 10px;
-            }
-            #parameter-panel {
-                left: 60px;
-                bottom: 10px;
-            }
-            #parameter-panel.expanded {
-                width: 250px;
-            }
-            #info-overlay {
-                bottom: 5px;
-                right: 5px;
-                font-size: 9px;
-            }
-            .control-group label {
-                font-size: 11px;
-            }
-            button {
-                font-size: 11px;
-                padding: 4px;
-            }
+        .control-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #007aff;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 122, 255, 0.3);
+        }
+        .control-group input[type="number"], 
+        .control-group input[type="date"] {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #f2f2f7;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+        }
+        .control-group input[type="number"]:focus,
+        .control-group input[type="date"]:focus {
+            outline: none;
+            border-color: #007aff;
+            background: white;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-top: 8px;
+            background: #007aff;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+            transition: all 0.15s ease;
+        }
+        button:hover {
+            background: #0056d3;
+            transform: translateY(-1px);
+        }
+        button:active {
+            transform: translateY(0);
+            background: #004bb8;
         }
         #passwordOverlay {
             position: fixed;
@@ -161,39 +218,55 @@
         }
         #parameter-panel {
             position: absolute;
-            bottom: 20px;
-            left: 70px;
-            background-color: rgba(255, 255, 255, 0.9);
-            border-radius: 50%;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            bottom: 30px;
+            left: 84px;
             z-index: 1000;
-            width: 50px;
-            height: 50px;
-            transition: all 0.3s ease;
         }
-        #parameter-panel.expanded {
-            border-radius: 5px;
-            width: 280px;
-            height: auto;
-        }
-        #parameter-header {
-            width: 50px;
-            height: 50px;
+        #parameter-button {
+            width: 44px;
+            height: 44px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 22px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            background-color: #4a4a4a;
-            color: white;
-            border-radius: 50%;
-            font-size: 20px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(20px);
+            transition: all 0.2s ease;
+            border: 0.5px solid rgba(0, 0, 0, 0.04);
+        }
+        #parameter-button:hover {
+            background: rgba(255, 255, 255, 0.95);
+            transform: scale(1.05);
+        }
+        #parameter-button:active {
+            transform: scale(0.95);
+        }
+        #parameter-button i {
+            font-size: 18px;
+            color: #1d1d1f;
+        }
+        #parameter-content {
+            position: absolute;
+            bottom: 54px;
+            left: 0;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 20px;
+            min-width: 300px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+            backdrop-filter: blur(20px);
+            border: 0.5px solid rgba(0, 0, 0, 0.04);
+            display: none;
+            opacity: 0;
+            transform: translateY(10px);
             transition: all 0.3s ease;
         }
-        #parameter-panel.expanded #parameter-header {
-            border-radius: 5px 5px 0 0;
-            width: 100%;
-            height: 40px;
-            font-size: 14px;
+        #parameter-content.expanded {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
         }
         #parameter-content {
             padding: 10px;
@@ -206,18 +279,20 @@
         }
         #info-overlay {
             position: absolute;
-            bottom: 20px;
-            right: 20px;
-            background-color: rgba(255, 255, 255, 0.85);
-            color: #333;
-            padding: 8px;
-            border-radius: 6px;
-            font-family: 'Courier New', monospace;
-            font-size: 11px;
+            bottom: 30px;
+            right: 30px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 16px;
+            border-radius: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+            font-size: 12px;
+            font-weight: 500;
             z-index: 1000;
             display: none;
-            border: 1px solid rgba(0,0,0,0.1);
-            backdrop-filter: blur(5px);
+            backdrop-filter: blur(20px);
+            border: 0.5px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
         }
         #info-content {
             display: flex;
@@ -299,12 +374,12 @@
         </div>
     </div>
     <div id="controls-overlay">
-        <div id="controls-header" onclick="toggleControls()">
+        <div id="controls-button" onclick="toggleControls()">
             <i class="fas fa-cog"></i>
         </div>
         <div id="controls-content">
             <div class="control-group">
-                <label for="speedRange">Animation Speed: </label>
+                <label for="speedRange">Animation Speed</label>
                 <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
                 <span id="speedValue">20</span>x speed
             </div>
@@ -315,11 +390,11 @@
                 <button onclick="toggleDriveRoute()">Drive Route</button>
             </div>
             <div class="control-group">
-                <label for="startDate">Start Date: </label>
+                <label for="startDate">Start Date</label>
                 <input type="date" id="startDate" onchange="updateDateRange()">
             </div>
             <div class="control-group">
-                <label for="endDate">End Date: </label>
+                <label for="endDate">End Date</label>
                 <input type="date" id="endDate" onchange="updateDateRange()">
             </div>
             <div class="control-group">
@@ -330,40 +405,40 @@
     </div>
 
     <div id="parameter-panel">
-        <div id="parameter-header" onclick="toggleParameters()">
+        <div id="parameter-button" onclick="toggleParameters()">
             <i class="fas fa-cogs"></i>
         </div>
         <div id="parameter-content">
-            <div>
-                <label for="maxClusterDistance">Max Cluster Distance (m):</label>
+            <div class="control-group">
+                <label for="maxClusterDistance">Max Cluster Distance (m)</label>
                 <input type="number" id="maxClusterDistance" value="1000">
             </div>
-            <div>
-                <label for="minTimeBetweenPOIs">Min Time Between POIs (min):</label>
+            <div class="control-group">
+                <label for="minTimeBetweenPOIs">Min Time Between POIs (min)</label>
                 <input type="number" id="minTimeBetweenPOIs" value="15">
             </div>
-            <div>
-                <label for="sleepingThreshold">Sleeping Threshold (min):</label>
+            <div class="control-group">
+                <label for="sleepingThreshold">Sleeping Threshold (min)</label>
                 <input type="number" id="sleepingThreshold" value="360">
             </div>
-            <div>
-                <label for="parkingThreshold">Parking Threshold (min):</label>
+            <div class="control-group">
+                <label for="parkingThreshold">Parking Threshold (min)</label>
                 <input type="number" id="parkingThreshold" value="60">
             </div>
-            <div>
-                <label for="coffeeBreakThreshold">Coffee Break Threshold (min):</label>
+            <div class="control-group">
+                <label for="coffeeBreakThreshold">Coffee Break Threshold (min)</label>
                 <input type="number" id="coffeeBreakThreshold" value="20">
             </div>
-            <div>
-                <label for="maxMergeDistance">Max Merge Distance (m):</label>
+            <div class="control-group">
+                <label for="maxMergeDistance">Max Merge Distance (m)</label>
                 <input type="number" id="maxMergeDistance" value="2000">
             </div>
-            <div>
-                <label for="maxTimeBetweenMerge">Max Time Between Merge (hours):</label>
+            <div class="control-group">
+                <label for="maxTimeBetweenMerge">Max Time Between Merge (hours)</label>
                 <input type="number" id="maxTimeBetweenMerge" value="24">
             </div>
-            <div>
-                <label for="roadSnapDistance">Road Snap Distance (m):</label>
+            <div class="control-group">
+                <label for="roadSnapDistance">Road Snap Distance (m)</label>
                 <input type="number" id="roadSnapDistance" value="5000">
             </div>
             <button onclick="updateParameters()">Apply Changes</button>
@@ -387,7 +462,10 @@
         var driveRouteRunning = false;
         var vanMarker;
         var currentPOIIndex = 0;
-        var lastUpdateTime = null;
+        var lastPOITime = null;
+        var nextPOITime = null;
+        var lastPOIPosition = null;
+        var nextPOIPosition = null;
         var stopMarkers = [];
         var homeMarker;
         var totalDistance = 0;
@@ -717,7 +795,10 @@
             lastPosition = null;
             elevationData = [];
             currentPOIIndex = 0;
-            lastUpdateTime = null;
+            lastPOITime = null;
+            nextPOITime = null;
+            lastPOIPosition = null;
+            nextPOIPosition = null;
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
             calculateCompleteRoute();
         }
@@ -906,13 +987,13 @@
             }
         }
 
-        // Komplett überarbeitete Animation mit echter Zeit basierend auf POI-Erreichen
+        // Hybrid-Zeit-System: POI-basiert + Interpolation
         function animateVanAlongRoute(route, step, routePOIs) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
                 
-                // Zeit-Update nur bei POI-Erreichen oder Initialisierung
-                var currentTime = updateTimeBasedOnPOIs(point);
+                // Berechne aktuelle Zeit mit Hybrid-System
+                var currentTime = calculateHybridTime(point, step, route.length);
 
                 if (!vanMarker) {
                     vanMarker = L.marker(point, {
@@ -966,36 +1047,65 @@
             }
         }
 
-        // Neue Funktion für POI-basierte Zeit-Updates
-        function updateTimeBasedOnPOIs(currentPoint) {
-            // Finde den nächsten POI
-            for (let i = currentPOIIndex; i < poiCoordinates.length; i++) {
-                let poi = poiCoordinates[i];
+        // Hybrid-Zeit-Berechnung: POI-basiert + Interpolation
+        function calculateHybridTime(currentPoint, step, totalSteps) {
+            // 1. Prüfe ob POI erreicht (harte Zeitvorgabe)
+            for (let poi of poiCoordinates) {
                 let distance = calculateDistance(poi.lat, poi.lon, currentPoint[0], currentPoint[1]);
-                
                 if (distance < 1000) {
-                    // POI erreicht - aktualisiere Zeit
-                    currentPOIIndex = i;
-                    lastUpdateTime = poi.time;
-                    console.log(`Time updated to POI ${i}: ${poi.time.toLocaleString('de-DE')}`);
+                    console.log(`Time set to POI: ${poi.time.toLocaleString('de-DE')}`);
+                    updatePOIAnchors(poi);
                     return poi.time;
                 }
             }
             
-            // Kein POI erreicht - verwende letzte bekannte Zeit oder erste Zeit
-            if (lastUpdateTime) {
-                return lastUpdateTime;
-            } else if (filteredCoordinates.length > 0) {
-                return filteredCoordinates[0].time;
+            // 2. Interpoliere zwischen bekannten POI-Zeiten
+            if (lastPOITime && nextPOITime && lastPOIPosition && nextPOIPosition) {
+                let totalDistance = calculateDistance(
+                    lastPOIPosition[0], lastPOIPosition[1], 
+                    nextPOIPosition[0], nextPOIPosition[1]
+                );
+                let currentDistance = calculateDistance(
+                    lastPOIPosition[0], lastPOIPosition[1], 
+                    currentPoint[0], currentPoint[1]
+                );
+                let progress = Math.min(currentDistance / totalDistance, 1);
+                
+                let timeDiff = nextPOITime - lastPOITime;
+                return new Date(lastPOITime.getTime() + (timeDiff * progress));
+            }
+            
+            // 3. Fallback: Linear über gesamte Route
+            if (filteredCoordinates.length > 0) {
+                let routeProgress = step / totalSteps;
+                let startTime = filteredCoordinates[0].time;
+                let endTime = filteredCoordinates[filteredCoordinates.length - 1].time;
+                let timeDiff = endTime - startTime;
+                return new Date(startTime.getTime() + (timeDiff * routeProgress));
+            }
+            
+            return new Date();
+        }
+
+        // Aktualisiere POI-Anker für Interpolation
+        function updatePOIAnchors(currentPOI) {
+            lastPOITime = currentPOI.time;
+            lastPOIPosition = [currentPOI.lat, currentPOI.lon];
+            
+            // Finde nächsten POI
+            let currentIndex = poiCoordinates.findIndex(poi => poi.time === currentPOI.time);
+            if (currentIndex >= 0 && currentIndex < poiCoordinates.length - 1) {
+                let nextPOI = poiCoordinates[currentIndex + 1];
+                nextPOITime = nextPOI.time;
+                nextPOIPosition = [nextPOI.lat, nextPOI.lon];
             } else {
-                return new Date();
+                nextPOITime = null;
+                nextPOIPosition = null;
             }
         }
 
         function toggleParameters() {
-            var panel = document.getElementById('parameter-panel');
             var content = document.getElementById('parameter-content');
-            panel.classList.toggle('expanded');
             content.classList.toggle('expanded');
         }
 
@@ -1029,16 +1139,13 @@
             ctx.clearRect(0, 0, 80, 60);
             
             if (elevationData.length > 1) {
-                // Adaptive Skalierung basierend auf den letzten Werten
+                // Einfache relative Skalierung für Höhenänderungen
                 const minElev = Math.min(...elevationData);
                 const maxElev = Math.max(...elevationData);
-                const range = Math.max(maxElev - minElev, 50); // Minimum 50m Range für Sichtbarkeit
-                const center = (minElev + maxElev) / 2;
-                const displayMin = center - range / 2;
-                const displayMax = center + range / 2;
+                const range = Math.max(maxElev - minElev, 10); // Minimum 10m für Sichtbarkeit
                 
                 // Zeichne subtiles Gitternetz
-                ctx.strokeStyle = 'rgba(150, 150, 150, 0.2)';
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
                 ctx.lineWidth = 0.5;
                 for (let i = 1; i < 4; i++) {
                     const y = (i / 4) * 60;
@@ -1055,7 +1162,7 @@
                 
                 for (let i = 0; i < elevationData.length; i++) {
                     let x = (i / (elevationData.length - 1)) * 80;
-                    let y = 60 - ((elevationData[i] - displayMin) / range) * 60;
+                    let y = 60 - ((elevationData[i] - minElev) / range) * 60;
                     
                     if (i === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
@@ -1063,22 +1170,22 @@
                 ctx.stroke();
                 
                 // Zeichne gefüllte Fläche unter der Kurve
-                ctx.fillStyle = 'rgba(33, 150, 243, 0.1)';
+                ctx.fillStyle = 'rgba(33, 150, 243, 0.2)';
                 ctx.beginPath();
                 ctx.moveTo(0, 60);
                 for (let i = 0; i < elevationData.length; i++) {
                     let x = (i / (elevationData.length - 1)) * 80;
-                    let y = 60 - ((elevationData[i] - displayMin) / range) * 60;
+                    let y = 60 - ((elevationData[i] - minElev) / range) * 60;
                     ctx.lineTo(x, y);
                 }
                 ctx.lineTo(80, 60);
                 ctx.closePath();
                 ctx.fill();
                 
-                // Zeichne aktuellen Punkt (letzter Wert)
+                // Zeichne aktuellen Punkt
                 if (elevationData.length > 0) {
                     const currentX = 78;
-                    const currentY = 60 - ((elevationData[elevationData.length - 1] - displayMin) / range) * 60;
+                    const currentY = 60 - ((elevationData[elevationData.length - 1] - minElev) / range) * 60;
                     
                     ctx.fillStyle = '#FF5722';
                     ctx.beginPath();
@@ -1086,9 +1193,16 @@
                     ctx.fill();
                 }
                 
-                // Zeige Höhenänderung als Text
+                // Zeige Höhenänderung seit Start
                 const heightChange = elevationData[elevationData.length - 1] - elevationData[0];
-                const changeText = heightChange >= 0 ? `+${heightChange.toFixed(0)}m` : `${heightChange.toFixed(0)}m`;
+                let changeText;
+                if (Math.abs(heightChange) < 1) {
+                    changeText = "±0m";
+                } else if (heightChange > 0) {
+                    changeText = `+${heightChange.toFixed(0)}m`;
+                } else {
+                    changeText = `${heightChange.toFixed(0)}m`;
+                }
                 
                 ctx.fillStyle = heightChange >= 0 ? '#4CAF50' : '#F44336';
                 ctx.font = '9px monospace';
