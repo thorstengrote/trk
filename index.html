@@ -149,6 +149,29 @@
         #parameter-panel input {
             width: 60px;
         }
+        #info-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            z-index: 1000;
+            min-width: 250px;
+            display: none;
+        }
+        #elevation-chart {
+            width: 200px;
+            height: 80px;
+            margin-top: 10px;
+            background: #333;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
@@ -167,6 +190,17 @@
     </div>
 
     <div id="map"></div>
+    <div id="info-overlay">
+        <div><strong>Van Tracking Info</strong></div>
+        <div>📅 <span id="current-date">--</span></div>
+        <div>🕐 <span id="current-time">--</span></div>
+        <div>📍 Lat: <span id="current-lat">--</span></div>
+        <div>📍 Lon: <span id="current-lon">--</span></div>
+        <div>⚡ Speed: <span id="current-speed">--</span> km/h</div>
+        <div>📏 Distance: <span id="total-distance">--</span> km</div>
+        <div id="elevation-chart"></div>
+        <div>📈 Elevation: <span id="current-elevation">--</span> m</div>
+    </div>
     <div id="controls-overlay">
         <div id="controls-header" onclick="toggleControls()">
             <i class="fas fa-cog"></i>
@@ -253,6 +287,10 @@
         var vanMarker;
         var stopMarkers = [];
         var homeMarker;
+        var totalDistance = 0;
+        var lastPosition = null;
+        var elevationData = [];
+        var currentElevation = 0;
 
         const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving/';
         const OPENROUTE_URL = 'https://api.openrouteservice.org/v2/directions/driving-car';
@@ -369,13 +407,19 @@
             let startDate = document.getElementById('startDate').value;
             let endDate = document.getElementById('endDate').value;
             
-            // FIX 1: Wenn keine Daten gesetzt sind, alle Daten verwenden
+            // Alle Daten verwenden wenn keine Filter gesetzt sind
             if (!startDate && !endDate) {
-                filteredCoordinates = routeCoordinates;
-                poiCoordinates = [...smartPOIs]; // Alle POIs verwenden
+                filteredCoordinates = [...routeCoordinates];
+                // Verwende die originalen POIs (nicht Smart POIs) für die Anzeige
+                poiCoordinates = [];
+                for (let poi of smartPOIs.length > 0 ? smartPOIs : []) {
+                    poiCoordinates.push({...poi});
+                }
+                console.log("Using all data - no date filter applied");
             } else {
                 filteredCoordinates = filterRouteByDateRange(startDate, endDate);
                 poiCoordinates = filterPOIsByDateRange(startDate, endDate);
+                console.log("Applied date filter:", startDate, "to", endDate);
             }
             
             // Clear existing markers and path
@@ -508,9 +552,13 @@
 
         function startDriveRoute() {
             document.getElementById('loadingModal').style.display = 'block';
+            document.getElementById('info-overlay').style.display = 'block';
             if (routePath) map.removeLayer(routePath);
             routePath = L.polyline([], {color: 'blue'}).addTo(map);
             driveRouteRunning = true;
+            totalDistance = 0;
+            lastPosition = null;
+            elevationData = [];
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
             calculateCompleteRoute();
         }
@@ -518,6 +566,7 @@
         function stopDriveRoute() {
             driveRouteRunning = false;
             clearTimeout(animationTimeout);
+            document.getElementById('info-overlay').style.display = 'none';
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Drive Route";
             if (vanMarker) map.removeLayer(vanMarker);
             
@@ -617,26 +666,60 @@
             lastRequestTime = Date.now();
         }
 
-        // FIX 4: Intelligente Route-Berechnung mit Smart POIs
+        // Verbesserte Route-Berechnung die ALLE POIs einschließt
         async function calculateCompleteRoute() {
             let completeRoute = [];
-            let routePOIs = poiCoordinates.length > 0 ? poiCoordinates : smartPOIs;
+            let routePOIs = poiCoordinates.length > 0 ? [...poiCoordinates] : [...smartPOIs];
 
-            console.log("POIs used for route calculation:", routePOIs);
+            // Stelle sicher, dass wir mit Home starten und enden
+            if (routePOIs.length > 0) {
+                // Füge Home am Anfang hinzu, falls nicht bereits da
+                let firstPOI = routePOIs[0];
+                if (calculateDistance(HOME_COORDINATES[0], HOME_COORDINATES[1], firstPOI.lat, firstPOI.lon) > 1000) {
+                    routePOIs.unshift({
+                        lat: HOME_COORDINATES[0],
+                        lon: HOME_COORDINATES[1],
+                        time: new Date(firstPOI.time.getTime() - 60*60*1000), // 1 Stunde früher
+                        endTime: new Date(firstPOI.time.getTime() - 60*60*1000),
+                        stopType: 'Home'
+                    });
+                }
+
+                // Füge Home am Ende hinzu, falls nicht bereits da
+                let lastPOI = routePOIs[routePOIs.length - 1];
+                if (calculateDistance(HOME_COORDINATES[0], HOME_COORDINATES[1], lastPOI.lat, lastPOI.lon) > 1000) {
+                    routePOIs.push({
+                        lat: HOME_COORDINATES[0],
+                        lon: HOME_COORDINATES[1],
+                        time: new Date(lastPOI.endTime.getTime() + 60*60*1000), // 1 Stunde später
+                        endTime: new Date(lastPOI.endTime.getTime() + 60*60*1000),
+                        stopType: 'Home'
+                    });
+                }
+            }
+
+            console.log("Complete POI route including home:", routePOIs);
 
             try {
                 for (let i = 0; i < routePOIs.length - 1; i++) {
                     let start = routePOIs[i];
                     let end = routePOIs[i + 1];
-                    console.log(`Calculating route from ${start.lat},${start.lon} to ${end.lat},${end.lon}`);
+                    console.log(`Calculating route from ${start.stopType || 'POI'} at ${start.lat},${start.lon} to ${end.stopType || 'POI'} at ${end.lat},${end.lon}`);
                     let route = await getRouteFromOSRM([start, end]);
-                    completeRoute = completeRoute.concat(route);
+                    if (route && route.length > 0) {
+                        completeRoute = completeRoute.concat(route);
+                    }
                 }
 
                 console.log("Complete route calculated, total points:", completeRoute.length);
 
                 document.getElementById('loadingModal').style.display = 'none';
-                animateVanAlongRoute(completeRoute, 0);
+                if (completeRoute.length > 0) {
+                    animateVanAlongRoute(completeRoute, 0, routePOIs);
+                } else {
+                    alert('Could not calculate route. Please try again.');
+                    stopDriveRoute();
+                }
             } catch (error) {
                 console.error('Error calculating route:', error);
                 alert('An error occurred while calculating the route. Please try again later.');
@@ -645,11 +728,11 @@
             }
         }
 
-        // FIX 3: Verbesserte POI-Anzeige während der Animation
-        function animateVanAlongRoute(route, step) {
+        // Komplett überarbeitete Animation mit Info-Overlay und besserer POI-Erkennung
+        function animateVanAlongRoute(route, step, routePOIs) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
-                var time = interpolateTime(step, route.length);
+                var currentTime = interpolateTimeFromRoute(step, route.length, routePOIs);
 
                 if (!vanMarker) {
                     vanMarker = L.marker(point, {
@@ -666,37 +749,104 @@
                 routePath.addLatLng(point);
                 map.setView(point);
 
-                // Verbesserte POI-Erkennung mit Zeit-Toleranz
-                let reachedPOIs = poiCoordinates.filter(p => {
-                    let distance = calculateDistance(p.lat, p.lon, point[0], point[1]);
-                    let timeWindow = 30 * 60 * 1000; // 30 Minuten Toleranz
-                    return distance < 2000 && // 2km Toleranz
-                           Math.abs(p.time - time) < timeWindow;
-                });
+                // Update distance tracking
+                if (lastPosition) {
+                    totalDistance += calculateDistance(lastPosition[0], lastPosition[1], point[0], point[1]) / 1000; // km
+                }
+                lastPosition = point;
 
-                reachedPOIs.forEach(poi => {
-                    if (!stopMarkers.some(m => m.getLatLng().equals([poi.lat, poi.lon]))) {
-                        console.log("Reached POI:", poi);
-                        addStopMarker(poi);
+                // Bessere POI-Erkennung basierend auf aktueller Position und Zeit
+                for (let poi of poiCoordinates) {
+                    let distance = calculateDistance(poi.lat, poi.lon, point[0], point[1]);
+                    let timeMatch = Math.abs(currentTime - poi.time) < 60 * 60 * 1000; // 1 Stunde Toleranz
+                    
+                    // POI erreicht wenn wir nahe sind UND die Zeit stimmt
+                    if (distance < 2000 && timeMatch) {
+                        if (!stopMarkers.some(m => 
+                            calculateDistance(m.getLatLng().lat, m.getLatLng().lng, poi.lat, poi.lon) < 100
+                        )) {
+                            console.log(`Reached POI: ${poi.stopType} at ${poi.time.toLocaleString()}, distance: ${distance.toFixed(0)}m`);
+                            addStopMarker(poi);
+                        }
                     }
-                });
+                }
+
+                // Update info overlay
+                updateInfoOverlay(point, currentTime, step, route.length);
 
                 currentAnimationIndex = step;
                 var timeToNextPoint = calculateTimeToNextPoint(point, route[step + 1] || point);
                 animationTimeout = setTimeout(function() {
-                    animateVanAlongRoute(route, step + 1);
-                }, timeToNextPoint);
-            } else if (!driveRouteRunning) {
-                stopDriveRoute();
+                    animateVanAlongRoute(route, step + 1, routePOIs);
+                }, Math.max(50, timeToNextPoint)); // Minimum 50ms für flüssige Animation
+            } else if (step >= route.length && driveRouteRunning) {
+                console.log("Route completed!");
+                setTimeout(stopDriveRoute, 2000); // Warte 2 Sekunden bevor Stop
             }
         }
 
-        function interpolateTime(step, totalSteps) {
-            if (poiCoordinates.length === 0) return new Date();
-            const startTime = poiCoordinates[0].time;
-            const endTime = poiCoordinates[poiCoordinates.length - 1].endTime || poiCoordinates[poiCoordinates.length - 1].time;
+        function interpolateTimeFromRoute(step, totalSteps, routePOIs) {
+            if (routePOIs.length < 2) return new Date();
+            
+            const startTime = routePOIs[0].time;
+            const endTime = routePOIs[routePOIs.length - 1].time;
             const totalDuration = endTime - startTime;
+            
             return new Date(startTime.getTime() + (totalDuration * step / totalSteps));
+        }
+
+        function updateInfoOverlay(point, currentTime, step, totalSteps) {
+            document.getElementById('current-date').textContent = currentTime.toLocaleDateString();
+            document.getElementById('current-time').textContent = currentTime.toLocaleTimeString();
+            document.getElementById('current-lat').textContent = point[0].toFixed(6);
+            document.getElementById('current-lon').textContent = point[1].toFixed(6);
+            document.getElementById('total-distance').textContent = totalDistance.toFixed(1);
+            
+            // Geschwindigkeit berechnen (vereinfacht)
+            let speedKmh = speed * 3.6; // Umrechnung von m/s zu km/h
+            document.getElementById('current-speed').textContent = speedKmh.toFixed(0);
+            
+            // Elevation (mockup - in echten Daten würde man API aufrufen)
+            currentElevation = 50 + Math.sin(step / 100) * 30; // Simulierte Elevation
+            document.getElementById('current-elevation').textContent = currentElevation.toFixed(0);
+            
+            // Elevation chart update
+            elevationData.push(currentElevation);
+            if (elevationData.length > 50) elevationData.shift(); // Keep last 50 points
+            updateElevationChart();
+        }
+
+        function updateElevationChart() {
+            let chart = document.getElementById('elevation-chart');
+            let canvas = chart.querySelector('canvas');
+            if (!canvas) {
+                canvas = document.createElement('canvas');
+                canvas.width = 200;
+                canvas.height = 80;
+                chart.appendChild(canvas);
+            }
+            
+            let ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, 200, 80);
+            
+            if (elevationData.length > 1) {
+                ctx.strokeStyle = '#4CAF50';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                
+                let minElev = Math.min(...elevationData);
+                let maxElev = Math.max(...elevationData);
+                let range = maxElev - minElev || 1;
+                
+                for (let i = 0; i < elevationData.length; i++) {
+                    let x = (i / (elevationData.length - 1)) * 200;
+                    let y = 80 - ((elevationData[i] - minElev) / range) * 80;
+                    
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
         }
 
         function addStopMarker(stopPoint) {
@@ -821,38 +971,31 @@
             return 'Moving';
         }
 
-        // FIX 4: Neue Funktion für intelligente POI-Erkennung
+        // Verbesserte Smart POI Erstellung
         function createSmartPOIs() {
-            if (poiCoordinates.length === 0) return;
+            if (poiCoordinates.length === 0) {
+                console.log("No POIs found for Smart POI creation");
+                return;
+            }
             
             smartPOIs = [];
             
-            // Gruppiere POIs basierend auf Bedeutung (längere Aufenthalte = wichtiger)
-            let significantPOIs = poiCoordinates.filter(poi => {
-                let duration = (poi.endTime - poi.time) / (60 * 1000); // Minuten
-                return duration >= coffeeBreakThreshold; // Nur POIs mit mindestens Coffee Break Dauer
-            });
+            console.log(`Creating Smart POIs from ${poiCoordinates.length} original POIs`);
             
-            // Für jeden bedeutsamen POI, finde den besten "Straßen-Snap" Punkt
-            for (let poi of significantPOIs) {
+            // Alle POIs durchgehen (nicht nur die mit mindestens Coffee Break Dauer)
+            for (let poi of poiCoordinates) {
                 let nearbyPoints = routeCoordinates.filter(point => {
                     let distance = calculateDistance(poi.lat, poi.lon, point.lat, point.lon);
                     let timeDiff = Math.abs(point.time - poi.time);
-                    return distance < roadSnapDistance && timeDiff < 60 * 60 * 1000; // 1 Stunde Toleranz
+                    return distance < roadSnapDistance && timeDiff < 2 * 60 * 60 * 1000; // 2 Stunden Toleranz
                 });
                 
                 if (nearbyPoints.length > 0) {
-                    // Finde den Punkt, der am nächsten zur wahrscheinlichen Straße ist
-                    // (Punkte mit mehr Nachbarn sind wahrscheinlicher auf Hauptstraßen)
+                    // Finde den zeitlich nächsten Punkt
                     let bestPoint = nearbyPoints.reduce((best, current) => {
-                        let currentNeighbors = nearbyPoints.filter(p => 
-                            calculateDistance(current.lat, current.lon, p.lat, p.lon) < 100
-                        ).length;
-                        let bestNeighbors = nearbyPoints.filter(p => 
-                            calculateDistance(best.lat, best.lon, p.lat, p.lon) < 100
-                        ).length;
-                        
-                        return currentNeighbors > bestNeighbors ? current : best;
+                        let currentTimeDiff = Math.abs(current.time - poi.time);
+                        let bestTimeDiff = Math.abs(best.time - poi.time);
+                        return currentTimeDiff < bestTimeDiff ? current : best;
                     });
                     
                     // Erstelle Smart POI mit besserer Position
@@ -867,14 +1010,22 @@
                     };
                     
                     smartPOIs.push(smartPOI);
-                    console.log(`Smart POI created: ${poi.stopType} snapped ${smartPOI.snapDistance.toFixed(0)}m to road`);
+                    console.log(`Smart POI created: ${poi.stopType} (${((poi.endTime - poi.time) / (60 * 1000)).toFixed(0)}min) snapped ${smartPOI.snapDistance.toFixed(0)}m to road`);
                 } else {
                     // Kein besserer Punkt gefunden, originalen POI verwenden
-                    smartPOIs.push({...poi, isSnapped: false});
+                    let originalPOI = {...poi, isSnapped: false};
+                    smartPOIs.push(originalPOI);
+                    console.log(`Smart POI kept original: ${poi.stopType} (no nearby route points found)`);
                 }
             }
             
-            console.log(`Created ${smartPOIs.length} smart POIs from ${poiCoordinates.length} original POIs`);
+            // Sortiere Smart POIs nach Zeit
+            smartPOIs.sort((a, b) => a.time - b.time);
+            
+            console.log(`Created ${smartPOIs.length} smart POIs:`);
+            smartPOIs.forEach((poi, i) => {
+                console.log(`  ${i+1}. ${poi.stopType} at ${poi.time.toLocaleString()} (${poi.isSnapped ? 'snapped' : 'original'})`);
+            });
         }
 
         function identifyPOIs(points) {
