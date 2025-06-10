@@ -1,299 +1,103 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Van Travel Tracking</title>
+    <title>Map</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
-            background: #000;
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 0; 
         }
-        
-        // URL Parameter handling
-        document.addEventListener('DOMContentLoaded', function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const startDate = urlParams.get('start');
-            const endDate = urlParams.get('end');
-
-            if (startDate) document.getElementById('startDate').value = startDate;
-            if (endDate) document.getElementById('endDate').value = endDate;
-            
-            // POI Parameter aus URL laden
-            if (urlParams.get('maxClusterDistance')) {
-                maxClusterDistance = parseInt(urlParams.get('maxClusterDistance'));
-                document.getElementById('maxClusterDistance').value = maxClusterDistance;
-            }
-            if (urlParams.get('minTimeBetweenPOIs')) {
-                minTimeBetweenPOIs = parseInt(urlParams.get('minTimeBetweenPOIs')) * 60 * 1000;
-                document.getElementById('minTimeBetweenPOIs').value = parseInt(urlParams.get('minTimeBetweenPOIs'));
-            }
-            if (urlParams.get('sleepingThreshold')) {
-                sleepingThreshold = parseInt(urlParams.get('sleepingThreshold'));
-                document.getElementById('sleepingThreshold').value = sleepingThreshold;
-            }
-            if (urlParams.get('parkingThreshold')) {
-                parkingThreshold = parseInt(urlParams.get('parkingThreshold'));
-                document.getElementById('parkingThreshold').value = parkingThreshold;
-            }
-            if (urlParams.get('coffeeBreakThreshold')) {
-                coffeeBreakThreshold = parseInt(urlParams.get('coffeeBreakThreshold'));
-                document.getElementById('coffeeBreakThreshold').value = coffeeBreakThreshold;
-            }
-            if (urlParams.get('maxMergeDistance')) {
-                maxMergeDistance = parseInt(urlParams.get('maxMergeDistance'));
-                document.getElementById('maxMergeDistance').value = maxMergeDistance;
-            }
-            if (urlParams.get('maxTimeBetweenMerge')) {
-                maxTimeBetweenMerge = parseInt(urlParams.get('maxTimeBetweenMerge')) * 60 * 60 * 1000;
-                document.getElementById('maxTimeBetweenMerge').value = parseInt(urlParams.get('maxTimeBetweenMerge'));
-            }
-            if (urlParams.get('roadSnapDistance')) {
-                roadSnapDistance = parseInt(urlParams.get('roadSnapDistance'));
-                document.getElementById('roadSnapDistance').value = roadSnapDistance;
-            }
-        });
-        #map {
-            height: 100vh;
-            width: 100%;
+        #map { 
+            height: 100vh; 
+            width: 100%; 
         }
         #controls-overlay {
             position: absolute;
-            bottom: 30px;
-            left: 30px;
+            bottom: 20px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             z-index: 1000;
+            max-width: 300px;
+            transition: all 0.3s ease;
         }
-        #controls-button {
-            width: 44px;
-            height: 44px;
-            background: rgba(255, 255, 255, 0.9);
-            border-radius: 22px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        #controls-header {
+            padding: 10px;
             cursor: pointer;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-            backdrop-filter: blur(20px);
-            transition: all 0.2s ease;
-            border: 0.5px solid rgba(0, 0, 0, 0.04);
-        }
-        #controls-button:hover {
-            background: rgba(255, 255, 255, 0.95);
-            transform: scale(1.05);
-        }
-        #controls-button i {
-            font-size: 18px;
-            color: #1d1d1f;
+            background-color: #4a4a4a;
+            color: white;
+            border-radius: 5px 5px 0 0;
+            text-align: center;
         }
         #controls-content {
-            position: absolute;
-            bottom: 54px;
-            left: 0;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 16px;
-            padding: 20px;
-            min-width: 280px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-            backdrop-filter: blur(20px);
-            border: 0.5px solid rgba(0, 0, 0, 0.04);
+            padding: 10px;
             display: none;
-            opacity: 0;
-            transform: translateY(10px);
-            transition: all 0.3s ease;
+            max-height: 60vh;
+            overflow-y: auto;
         }
         #controls-content.expanded {
             display: block;
-            opacity: 1;
-            transform: translateY(0);
-        }
-        #info-overlay {
-            position: absolute;
-            bottom: 30px;
-            right: 30px;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 16px;
-            border-radius: 16px;
-            font-size: 12px;
-            font-weight: 500;
-            z-index: 1000;
-            display: none;
-            backdrop-filter: blur(20px);
-            border: 0.5px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-        #info-content {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        #info-text {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-        #elevation-display {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-width: 80px;
-        }
-        #elevation-chart {
-            width: 80px;
-            height: 60px;
-            background: rgba(200, 200, 200, 0.3);
-            border-radius: 3px;
-            position: relative;
-            overflow: hidden;
-            border: 1px solid rgba(0,0,0,0.1);
-        }
-        #elevation-value {
-            font-size: 9px;
-            margin-top: 2px;
-            text-align: center;
         }
         .control-group {
-            margin-bottom: 16px;
+            margin-bottom: 10px;
+        }
+        .control-group div {
+            margin-bottom: 5px;
         }
         .control-group label {
             display: block;
-            font-size: 13px;
-            font-weight: 500;
-            color: #1d1d1f;
-            margin-bottom: 8px;
+            font-size: 12px;
+            margin-bottom: 2px;
         }
-        .control-group input[type="range"] {
+        .control-group input[type="number"] {
+            width: 60px;
+            padding: 2px;
+            font-size: 12px;
+        }
+        input[type="range"] {
             width: 100%;
-            height: 6px;
-            border-radius: 3px;
-            background: #e5e5e7;
-            outline: none;
-            -webkit-appearance: none;
-        }
-        .control-group input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: #007aff;
-            cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0, 122, 255, 0.3);
-        }
-        .control-group input[type="number"], 
-        .control-group input[type="date"] {
-            width: 100%;
-            padding: 8px 12px;
-            border: 1px solid #d2d2d7;
-            border-radius: 8px;
-            font-size: 14px;
-            background: #f2f2f7;
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-        }
-        .control-group input[type="number"]:focus,
-        .control-group input[type="date"]:focus {
-            outline: none;
-            border-color: #007aff;
-            background: white;
-        }
-        #parameter-panel {
-            position: absolute;
-            bottom: 30px;
-            left: 84px;
-            z-index: 1000;
-        }
-        #parameter-button {
-            width: 44px;
-            height: 44px;
-            background: rgba(255, 255, 255, 0.9);
-            border-radius: 22px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-            backdrop-filter: blur(20px);
-            transition: all 0.2s ease;
-            border: 0.5px solid rgba(0, 0, 0, 0.04);
-        }
-        #parameter-button:hover {
-            background: rgba(255, 255, 255, 0.95);
-            transform: scale(1.05);
-        }
-        #parameter-button i {
-            font-size: 18px;
-            color: #1d1d1f;
-        }
-        #parameter-content {
-            position: absolute;
-            bottom: 54px;
-            left: 0;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 16px;
-            padding: 20px;
-            min-width: 300px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-            backdrop-filter: blur(20px);
-            border: 0.5px solid rgba(0, 0, 0, 0.04);
-            display: none;
-            opacity: 0;
-            transform: translateY(10px);
-            transition: all 0.3s ease;
-        }
-        #parameter-content.expanded {
-            display: block;
-            opacity: 1;
-            transform: translateY(0);
         }
         button {
             width: 100%;
-            padding: 12px;
-            margin-top: 8px;
-            background: #007aff;
+            padding: 5px;
+            margin-top: 5px;
+            background-color: #4CAF50;
             color: white;
             border: none;
-            border-radius: 10px;
+            border-radius: 3px;
             cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.15s ease;
+            font-size: 12px;
         }
         button:hover {
-            background: #0056d3;
+            background-color: #45a049;
         }
-        #loadingModal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-        }
-        #loadingContent {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            text-align: center;
-        }
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 2s linear infinite;
-            margin: 0 auto 20px;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        @media (max-width: 768px) {
+            #controls-overlay {
+                max-width: 250px;
+                left: 5px;
+                bottom: 10px;
+            }
+            #parameter-panel {
+                max-width: 250px;
+                right: 5px;
+                top: 5px;
+            }
+            .control-group label {
+                font-size: 11px;
+            }
+            button {
+                font-size: 11px;
+                padding: 4px;
+            }
         }
         #passwordOverlay {
             position: fixed;
@@ -301,67 +105,171 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: flex;
+            background-color: rgba(0,0,0,0.5);
+            display: none;
             justify-content: center;
             align-items: center;
-            z-index: 3000;
+            z-index: 2000;
         }
-        #passwordContent {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
+        #passwordForm {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
             text-align: center;
-            min-width: 300px;
         }
         #passwordInput {
             width: 100%;
-            padding: 10px;
+            padding: 5px;
             margin: 10px 0;
-            border: 1px solid #ddd;
+            font-size: 16px;
+        }
+        #loadingModal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 300px;
+            text-align: center;
             border-radius: 5px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .leaflet-div-icon {
+            background: none;
+            border: none;
+        }
+        .van-icon {
+            background: none;
+            border: none;
+        }
+        .van-icon i {
+            display: block;
+            text-align: center;
+            line-height: 30px;
+        }
+        #parameter-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+            max-width: 280px;
+            transition: all 0.3s ease;
+        }
+        #parameter-header {
+            padding: 10px;
+            cursor: pointer;
+            background-color: #666;
+            color: white;
+            border-radius: 5px 5px 0 0;
+            text-align: center;
+            font-size: 14px;
+        }
+        #parameter-content {
+            padding: 10px;
+            display: none;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        #parameter-content.expanded {
+            display: block;
+        }
+        #parameter-panel input {
+            width: 60px;
+        }
+        #info-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            z-index: 1000;
+            min-width: 140px;
+            max-width: 180px;
+            display: none;
+        }
+        #elevation-chart {
+            width: 120px;
+            height: 40px;
+            margin-top: 5px;
+            background: #333;
+            border-radius: 3px;
+            position: relative;
+            overflow: hidden;
+        }
+        @media (max-width: 768px) {
+            #info-overlay {
+                top: 10px;
+                left: 10px;
+                padding: 6px;
+                font-size: 10px;
+                min-width: 120px;
+                max-width: 150px;
+            }
+            #elevation-chart {
+                width: 100px;
+                height: 30px;
+            }
         }
     </style>
 </head>
 <body>
     <div id="passwordOverlay">
-        <div id="passwordContent">
+        <div id="passwordForm">
             <h2>Enter Password</h2>
-            <input type="password" id="passwordInput" placeholder="Password">
+            <input type="password" id="passwordInput">
             <button onclick="checkPassword()">Submit</button>
         </div>
     </div>
-
     <div id="loadingModal">
-        <div id="loadingContent">
+        <div class="modal-content">
+            <h2>Calculating Route</h2>
             <div class="spinner"></div>
-            <h3>Calculating Route</h3>
         </div>
     </div>
 
     <div id="map"></div>
-
     <div id="info-overlay">
-        <div id="info-content">
-            <div id="info-text">
-                <div>📅 <span id="current-date">--</span></div>
-                <div>🕐 <span id="current-time">--</span></div>
-                <div>📏 <span id="total-distance">--</span> km</div>
-            </div>
-            <div id="elevation-display">
-                <div id="elevation-chart"></div>
-                <div id="elevation-value"><span id="current-elevation">--</span>m</div>
-            </div>
-        </div>
+        <div>📅 <span id="current-date">--</span></div>
+        <div>🕐 <span id="current-time">--</span></div>
+        <div>📏 <span id="total-distance">--</span> km</div>
+        <div id="elevation-chart"></div>
     </div>
-
     <div id="controls-overlay">
-        <div id="controls-button" onclick="toggleControls()">
+        <div id="controls-header" onclick="toggleControls()">
             <i class="fas fa-cog"></i>
         </div>
         <div id="controls-content">
             <div class="control-group">
-                <label for="speedRange">Animation Speed</label>
+                <label for="speedRange">Animation Speed: </label>
                 <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
                 <span id="speedValue">20</span>x speed
             </div>
@@ -372,11 +280,11 @@
                 <button onclick="toggleDriveRoute()">Drive Route</button>
             </div>
             <div class="control-group">
-                <label for="startDate">Start Date</label>
+                <label for="startDate">Start Date: </label>
                 <input type="date" id="startDate" onchange="updateDateRange()">
             </div>
             <div class="control-group">
-                <label for="endDate">End Date</label>
+                <label for="endDate">End Date: </label>
                 <input type="date" id="endDate" onchange="updateDateRange()">
             </div>
             <div class="control-group">
@@ -387,317 +295,543 @@
     </div>
 
     <div id="parameter-panel">
-        <div id="parameter-button" onclick="toggleParameters()">
-            <i class="fas fa-sliders-h"></i>
+        <div id="parameter-header" onclick="toggleParameters()">
+            <i class="fas fa-sliders-h"></i> POI Parameters
         </div>
         <div id="parameter-content">
-            <div class="control-group">
-                <label for="maxClusterDistance">Max Cluster Distance (m)</label>
+            <div>
+                <label for="maxClusterDistance">Max Cluster Distance (m):</label>
                 <input type="number" id="maxClusterDistance" value="1000">
             </div>
-            <div class="control-group">
-                <label for="minTimeBetweenPOIs">Min Time Between POIs (min)</label>
+            <div>
+                <label for="minTimeBetweenPOIs">Min Time Between POIs (min):</label>
                 <input type="number" id="minTimeBetweenPOIs" value="15">
             </div>
-            <div class="control-group">
-                <label for="sleepingThreshold">Sleeping Threshold (min)</label>
+            <div>
+                <label for="sleepingThreshold">Sleeping Threshold (min):</label>
                 <input type="number" id="sleepingThreshold" value="360">
             </div>
-            <div class="control-group">
-                <label for="parkingThreshold">Parking Threshold (min)</label>
+            <div>
+                <label for="parkingThreshold">Parking Threshold (min):</label>
                 <input type="number" id="parkingThreshold" value="60">
             </div>
-            <div class="control-group">
-                <label for="coffeeBreakThreshold">Coffee Break Threshold (min)</label>
+            <div>
+                <label for="coffeeBreakThreshold">Coffee Break Threshold (min):</label>
                 <input type="number" id="coffeeBreakThreshold" value="20">
             </div>
-            <div class="control-group">
-                <label for="maxMergeDistance">Max Merge Distance (m)</label>
+            <div>
+                <label for="maxMergeDistance">Max Merge Distance (m):</label>
                 <input type="number" id="maxMergeDistance" value="2000">
             </div>
-            <div class="control-group">
-                <label for="maxTimeBetweenMerge">Max Time Between Merge (hours)</label>
+            <div>
+                <label for="maxTimeBetweenMerge">Max Time Between Merge (hours):</label>
                 <input type="number" id="maxTimeBetweenMerge" value="24">
             </div>
-            <div class="control-group">
-                <label for="roadSnapDistance">Road Snap Distance (m)</label>
+            <div>
+                <label for="roadSnapDistance">Road Snap Distance (m):</label>
                 <input type="number" id="roadSnapDistance" value="5000">
             </div>
             <button onclick="updateParameters()">Apply Changes</button>
         </div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script>
-        // Globale Variablen
         var map;
-        var coordinates = [];
+        var routeCoordinates = [];
         var filteredCoordinates = [];
         var poiCoordinates = [];
-        var vanMarker = null;
-        var currentMarker = null;
-        var routePath = null;
+        var smartPOIs = [];
+        var markers = [];
+        var speed = 20; // km/s
+        var routePath;
+        var routeVisible = false;
+        var pointsVisible = false;
         var animationRunning = false;
+        var currentAnimationIndex = 0;
+        var animationTimeout;
         var driveRouteRunning = false;
-        var speed = 20;
-        var animationTimeout = null;
+        var vanMarker;
+        var stopMarkers = [];
+        var homeMarker;
         var totalDistance = 0;
         var lastPosition = null;
-        var stopMarkers = [];
-        var currentAnimationIndex = 0;
         var elevationData = [];
         var currentElevation = 0;
 
-        // POI Parameter  
-        var maxClusterDistance = 1000;
-        var minTimeBetweenPOIs = 15 * 60 * 1000;
-        var sleepingThreshold = 360;
-        var parkingThreshold = 60;
-        var coffeeBreakThreshold = 20;
-        var maxMergeDistance = 2000;
-        var maxTimeBetweenMerge = 24 * 60 * 60 * 1000;
-        var roadSnapDistance = 5000;
+        const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving/';
+        const OPENROUTE_URL = 'https://api.openrouteservice.org/v2/directions/driving-car';
+        const OPENROUTE_API_KEY = '5b3ce3597851110001cf6248c56af19b19b2427c9486702926df507d';
+        const MAX_REQUESTS_PER_SECOND = 1;
+        let lastRequestTime = 0;
 
-        // Password Check (mit debugging)
+        const HOME_COORDINATES = [50.7852, 7.0141]; // Coordinates for Altmühlstr., 53332 Bornheim, Germany
+
+        let maxClusterDistance = 1000;
+        let minTimeBetweenPOIs = 15 * 60 * 1000;
+        let sleepingThreshold = 360;
+        let parkingThreshold = 60;
+        let coffeeBreakThreshold = 20; // Geändert auf 20 Minuten
+        let maxMergeDistance = 2000;
+        let maxTimeBetweenMerge = 24 * 60 * 60 * 1000;
+        let roadSnapDistance = 5000;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('passwordOverlay').style.display = 'flex';
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const startDate = urlParams.get('start');
+            const endDate = urlParams.get('end');
+
+            if (startDate) document.getElementById('startDate').value = startDate;
+            if (endDate) document.getElementById('endDate').value = endDate;
+        });
+
         function checkPassword() {
             var password = document.getElementById('passwordInput').value;
-            console.log('Password entered:', password);
-            
             if (password === 'thorsten') {
-                console.log('Password correct, hiding overlay...');
                 document.getElementById('passwordOverlay').style.display = 'none';
-                
-                console.log('Starting map initialization...');
-                setTimeout(function() {
-                    initializeMap();
-                }, 100);
+                initializeMap();
+                loadData();
             } else {
                 alert('Incorrect password');
             }
         }
 
-        // Map initialisieren (mit expliziter Größe und besserer Fehlerbehandlung)
         function initializeMap() {
-            try {
-                // Prüfen ob Leaflet geladen ist
-                if (typeof L === 'undefined') {
-                    console.error('Leaflet library not loaded!');
-                    alert('Map library not loaded. Please refresh the page.');
-                    return;
-                }
-                
-                console.log('Leaflet version:', L.version);
-                
-                // Map Container prüfen
-                const mapContainer = document.getElementById('map');
-                if (!mapContainer) {
-                    console.error('Map container not found!');
-                    return;
-                }
-                
-                console.log('Map container found:', mapContainer);
-                console.log('Container dimensions BEFORE:', mapContainer.offsetWidth, 'x', mapContainer.offsetHeight);
-                
-                // FORCE HEIGHT if it's 0
-                if (mapContainer.offsetHeight === 0) {
-                    console.log('Container height is 0, forcing height...');
-                    mapContainer.style.height = '100vh';
-                    mapContainer.style.minHeight = '600px';
-                    mapContainer.style.width = '100vw';
-                    mapContainer.style.position = 'absolute';
-                    mapContainer.style.top = '0';
-                    mapContainer.style.left = '0';
-                    
-                    // Force reflow
-                    mapContainer.offsetHeight; 
-                    console.log('Container dimensions AFTER force:', mapContainer.offsetWidth, 'x', mapContainer.offsetHeight);
-                }
-                
-                // Bestehende Map entfernen falls vorhanden
-                if (map) {
-                    map.remove();
-                    map = null;
-                }
-                
-                console.log('Initializing map...');
-                
-                // Map erstellen
-                map = L.map('map', {
-                    preferCanvas: false,
-                    attributionControl: true,
-                    zoomControl: true
-                }).setView([50.7852, 7.0141], 10); // Bornheim als Center
-                
-                console.log('Map object created:', map);
-                
-                // Tile Layer hinzufügen
-                const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors',
-                    maxZoom: 19,
-                    detectRetina: true
-                });
-                
-                tileLayer.addTo(map);
-                
-                tileLayer.on('loading', function() {
-                    console.log('Tiles loading...');
-                });
-                
-                tileLayer.on('load', function() {
-                    console.log('Tiles loaded successfully!');
-                });
-                
-                tileLayer.on('tileerror', function(error) {
-                    console.error('Tile loading error:', error);
-                });
-                
-                // Map Event Listeners
-                map.on('moveend', function() {
-                    console.log('Map moved to:', map.getCenter());
-                });
-                
-                // Force resize nach kurzer Verzögerung
-                setTimeout(function() {
-                    if (map) {
-                        map.invalidateSize();
-                        console.log('Map size invalidated');
-                        console.log('Final map container size:', map.getContainer().offsetWidth, 'x', map.getContainer().offsetHeight);
-                    }
-                }, 200);
-                
-                console.log('Map initialization complete');
-                
-                // GPS Daten laden
-                loadGPSData();
-                
-            } catch (error) {
-                console.error('Map initialization failed:', error);
-                alert('Map initialization failed: ' + error.message + '. Please refresh the page.');
-            }
+            map = L.map('map').setView(HOME_COORDINATES, 10);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Add home marker
+            homeMarker = L.marker(HOME_COORDINATES, {
+                icon: L.divIcon({
+                    className: 'custom-div-icon',
+                    html: '<div style="background-color:#FF5733;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-home"></i></div>',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            }).addTo(map);
         }
 
-        // Controls toggle
+        function loadData() {
+            Papa.parse('https://docs.google.com/spreadsheets/d/13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv', {
+                download: true,
+                header: true,
+                complete: function(results) {
+                    routeCoordinates = results.data
+                        .map(row => ({
+                            lat: parseFloat(row.lat),
+                            lon: parseFloat(row.lon),
+                            time: new Date(row.time)
+                        }))
+                        .filter(point => !isNaN(point.lat) && !isNaN(point.lon) && !isNaN(point.time.getTime()))
+                        .sort((a, b) => a.time - b.time);
+
+                    identifyPOIs(routeCoordinates);
+                    createSmartPOIs();
+                    updateDateRange();
+
+                    document.getElementById('speedRange').value = speed;
+                    document.getElementById('speedValue').textContent = speed;
+
+                    const urlParams = new URLSearchParams(window.location.search);
+                    if (urlParams.get('autoplay') === 'true') {
+                        setTimeout(() => {
+                            startDriveRoute();
+                        }, 1000);
+                    }
+
+                    // Debug information
+                    console.log(`Total waypoints: ${routeCoordinates.length}`);
+                    console.log(`Total POIs: ${poiCoordinates.length}`);
+                    console.log(`Smart POIs: ${smartPOIs.length}`);
+                    console.log('POIs by class:', poiCoordinates.reduce((acc, poi) => {
+                        acc[poi.stopType] = (acc[poi.stopType] || 0) + 1;
+                        return acc;
+                    }, {}));
+                }
+            });
+        }
+
         function toggleControls() {
             var content = document.getElementById('controls-content');
             content.classList.toggle('expanded');
         }
 
-        // Parameter panel toggle
-        function toggleParameters() {
-            var content = document.getElementById('parameter-content');
-            content.classList.toggle('expanded');
+        function collapseControls() {
+            var content = document.getElementById('controls-content');
+            content.classList.remove('expanded');
         }
 
-        // Speed update
         function updateSpeed(value) {
-            speed = parseInt(value);
             document.getElementById('speedValue').textContent = value;
+            speed = parseInt(value);
         }
 
-        // Drive Route toggle
-        function toggleDriveRoute() {
-            if (!driveRouteRunning) {
-                startDriveRoute();
+        function updateDateRange() {
+            let startDate = document.getElementById('startDate').value;
+            let endDate = document.getElementById('endDate').value;
+            
+            // Filtere die Koordinaten
+            if (!startDate && !endDate) {
+                filteredCoordinates = [...routeCoordinates];
+                console.log("Using all coordinates - no date filter applied");
             } else {
-                stopDriveRoute();
+                filteredCoordinates = filterRouteByDateRange(startDate, endDate);
+                console.log("Applied date filter:", startDate, "to", endDate);
+            }
+            
+            // Filtere die POIs - verwende immer die originalen identifizierten POIs
+            if (!startDate && !endDate) {
+                // Verwende alle Smart POIs wenn keine Filter gesetzt sind
+                poiCoordinates = [...smartPOIs];
+            } else {
+                // Filtere Smart POIs nach Datum
+                poiCoordinates = smartPOIs.filter(poi => {
+                    if (!startDate && !endDate) return true;
+                    let start = startDate ? new Date(startDate) : new Date(0);
+                    let end = endDate ? new Date(endDate) : new Date();
+                    return poi.time >= start && poi.time <= end;
+                });
+            }
+            
+            // Clear existing markers and path
+            clearMap();
+
+            // Redraw points if they were visible
+            if (pointsVisible) {
+                showPoints();
+            }
+
+            // Redraw route if it was visible
+            if (routeVisible) {
+                showRoute();
+            }
+
+            // Debug information
+            console.log(`Filtered waypoints: ${filteredCoordinates.length}`);
+            console.log(`Filtered POIs: ${poiCoordinates.length}`);
+            console.log('Filtered POIs by class:', poiCoordinates.reduce((acc, poi) => {
+                acc[poi.stopType] = (acc[poi.stopType] || 0) + 1;
+                return acc;
+            }, {}));
+            
+            // Debug POI details
+            poiCoordinates.forEach((poi, i) => {
+                console.log(`POI ${i+1}: ${poi.stopType} at ${poi.time.toLocaleString()} (${poi.lat.toFixed(6)}, ${poi.lon.toFixed(6)})`);
+            });
+        }
+
+        function clearMap() {
+            if (routePath) map.removeLayer(routePath);
+            markers.forEach(marker => map.removeLayer(marker));
+            stopMarkers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+            stopMarkers = [];
+        }
+
+        function togglePoints() {
+            pointsVisible = !pointsVisible;
+            if (pointsVisible) showPoints();
+            else hidePoints();
+            collapseControls();
+        }
+
+        function showPoints() {
+            hidePoints();
+            filteredCoordinates.forEach(function(point) {
+                var marker = L.marker([point.lat, point.lon]).addTo(map)
+                    .bindPopup(point.time.toLocaleString());
+                markers.push(marker);
+            });
+
+            poiCoordinates.forEach(function(poi) {
+                addStopMarker(poi);
+            });
+
+            if (filteredCoordinates.length > 0) {
+                map.fitBounds(L.latLngBounds(filteredCoordinates.map(point => [point.lat, point.lon])));
             }
         }
 
-        // Drive Route starten
-        function startDriveRoute() {
-            document.getElementById('loadingModal').style.display = 'flex';
-            document.getElementById('info-overlay').style.display = 'block';
-            
-            // Route vorbereiten
+        function hidePoints() {
+            markers.forEach(marker => map.removeLayer(marker));
+            stopMarkers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+            stopMarkers = [];
+        }
+
+        function toggleAnimation() {
+            if (animationRunning) stopAnimation();
+            else startAnimation();
+            collapseControls();
+        }
+
+        function startAnimation() {
             if (routePath) map.removeLayer(routePath);
             routePath = L.polyline([], {color: 'blue'}).addTo(map);
-            
-            if (vanMarker) {
-                map.removeLayer(vanMarker);
-                vanMarker = null;
+            animationRunning = true;
+            currentAnimationIndex = 0;
+            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Stop Animation";
+            animateRoute(currentAnimationIndex);
+        }
+
+        function stopAnimation() {
+            animationRunning = false;
+            clearTimeout(animationTimeout);
+            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Start Animation";
+        }
+
+        function toggleRoute() {
+            routeVisible = !routeVisible;
+            if (routeVisible) showRoute();
+            else if (routePath) {
+                map.removeLayer(routePath);
+                stopMarkers.forEach(marker => map.removeLayer(marker));
+                stopMarkers = [];
             }
-            
+            collapseControls();
+        }
+
+        function showRoute() {
+            if (routePath) map.removeLayer(routePath);
+            calculateCompleteRoute();
+        }
+
+        function animateRoute(i) {
+            if (i < filteredCoordinates.length && animationRunning) {
+                var point = filteredCoordinates[i];
+                var marker = L.marker([point.lat, point.lon]).addTo(map)
+                    .bindPopup(point.time.toLocaleString())
+                    .openPopup();
+                markers.push(marker);
+
+                routePath.addLatLng([point.lat, point.lon]);
+                map.setView([point.lat, point.lon]);
+
+                let poi = poiCoordinates.find(p => p.lat === point.lat && p.lon === point.lon);
+                if (poi) {
+                    addStopMarker(poi);
+                }
+
+                animationTimeout = setTimeout(function() {
+                    animateRoute(i + 1);
+                }, 1000);
+            } else if (i >= filteredCoordinates.length) {
+                stopAnimation();
+            }
+        }
+
+        function toggleDriveRoute() {
+            if (driveRouteRunning) stopDriveRoute();
+            else startDriveRoute();
+            collapseControls();
+        }
+
+        function startDriveRoute() {
+            document.getElementById('loadingModal').style.display = 'block';
+            document.getElementById('info-overlay').style.display = 'block';
+            if (routePath) map.removeLayer(routePath);
+            routePath = L.polyline([], {color: 'blue'}).addTo(map);
             driveRouteRunning = true;
             totalDistance = 0;
             lastPosition = null;
-            
+            elevationData = [];
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
             calculateCompleteRoute();
         }
 
-        // Drive Route stoppen
         function stopDriveRoute() {
             driveRouteRunning = false;
-            if (animationTimeout) clearTimeout(animationTimeout);
-            if (vanMarker) {
-                map.removeLayer(vanMarker);
-                vanMarker = null;
-            }
+            clearTimeout(animationTimeout);
             document.getElementById('info-overlay').style.display = 'none';
-            document.getElementById('loadingModal').style.display = 'none';
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Drive Route";
+            if (vanMarker) map.removeLayer(vanMarker);
+            
+            // Füge alle verpassten POIs hinzu
+            addMissedPOIs();
+            
+            console.log("Total POIs displayed during drive:", stopMarkers.length);
+            console.log("POIs displayed by type:", stopMarkers.reduce((acc, marker) => {
+                let type = marker.options.icon.options.html.includes('fa-coffee') ? 'Coffee Break' :
+                           marker.options.icon.options.html.includes('fa-parking') ? 'Parking' :
+                           marker.options.icon.options.html.includes('fa-campground') ? 'Sleeping' :
+                           marker.options.icon.options.html.includes('fa-home') ? 'Home' : 'Other';
+                acc[type] = (acc[type] || 0) + 1;
+                return acc;
+            }, {}));
         }
 
-        // Route berechnen
-        async function calculateCompleteRoute() {
-            try {
-                // Route von POI zu POI berechnen
-                let allSegments = [];
-                let routePOIs = [...poiCoordinates, {lat: 50.7852, lon: 7.0141, stopType: 'Home'}];
+        // Funktion zum Hinzufügen verpasster POIs am Ende der Route
+        function addMissedPOIs() {
+            console.log("Checking for missed POIs...");
+            for (let poi of poiCoordinates) {
+                let alreadyDisplayed = stopMarkers.some(m => 
+                    calculateDistance(m.getLatLng().lat, m.getLatLng().lng, poi.lat, poi.lon) < 500
+                );
                 
-                for (let i = 0; i < routePOIs.length - 1; i++) {
-                    let start = [routePOIs[i].lat, routePOIs[i].lon];
-                    let end = [routePOIs[i + 1].lat, routePOIs[i + 1].lon];
-                    
-                    const segment = await calculateRouteSegment(start, end);
-                    allSegments = allSegments.concat(segment.slice(i > 0 ? 1 : 0));
+                if (!alreadyDisplayed) {
+                    console.log(`Adding missed POI: ${poi.stopType} at ${poi.lat.toFixed(6)}, ${poi.lon.toFixed(6)}`);
+                    addStopMarker(poi);
                 }
-
-                console.log(`Route calculated: ${allSegments.length} points`);
-                document.getElementById('loadingModal').style.display = 'none';
-                
-                animateVanAlongRoute(allSegments, 0);
-                
-            } catch (error) {
-                console.error("Route error:", error);
-                document.getElementById('loadingModal').style.display = 'none';
             }
         }
 
-        // Route Segment berechnen
-        async function calculateRouteSegment(start, end) {
+        async function getRouteFromOSRM(points) {
+            const cacheKey = `route_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
+            const cachedRoute = await localforage.getItem(cacheKey);
+            
+            if (cachedRoute) {
+                return cachedRoute;
+            }
+
+            await throttleRequest();
+
+            const coordinates = points.map(p => `${p.lon},${p.lat}`).join(';');
+            const url = `${OSRM_URL}${coordinates}?overview=full&geometries=geojson&continue_straight=true`;
+
+            console.log(`Requesting route from OSRM: ${url}`);
+
             try {
-                const url = `https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?geometries=geojson&overview=full&annotations=true`;
-                
                 const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error('OSRM request failed');
+                }
                 const data = await response.json();
-                
                 if (data.routes && data.routes.length > 0) {
-                    const route = data.routes[0];
-                    
-                    // Test für Elevation
-                    if (route.legs && route.legs[0] && route.legs[0].annotation && route.legs[0].annotation.elevation) {
-                        console.log('🎉 ELEVATION DATA FOUND!');
-                    } else {
-                        console.log('❌ No elevation data');
-                    }
-                    
-                    return route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
-                } else {
-                    return [start, end];
+                    const route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    await localforage.setItem(cacheKey, route);
+                    return route;
                 }
             } catch (error) {
-                console.error('Route error:', error);
-                return [start, end];
+                console.error('Error fetching route from OSRM:', error);
+                return getRouteFromOpenRoute(points);
             }
         }
 
-        // Van Animation
-        function animateVanAlongRoute(route, step) {
+        async function getRouteFromOpenRoute(points) {
+            const cacheKey = `openroute_${points[0].lat},${points[0].lon}_${points[1].lat},${points[1].lon}`;
+            const cachedRoute = await localforage.getItem(cacheKey);
+            
+            if (cachedRoute) {
+                return cachedRoute;
+            }
+
+            await throttleRequest();
+
+            const body = {
+                coordinates: points.map(p => [p.lon, p.lat])
+            };
+
+            console.log(`Requesting route from OpenRoute: ${JSON.stringify(body)}`);
+
+            try {
+                const response = await fetch(OPENROUTE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': OPENROUTE_API_KEY
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    throw new Error('OpenRoute request failed');
+                }
+
+                const data = await response.json();
+                if (data.routes && data.routes.length > 0) {
+                    const route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    await localforage.setItem(cacheKey, route);
+                    return route;
+                }
+            } catch (error) {
+                console.error('Error fetching route from OpenRoute:', error);
+                throw error;
+            }
+        }
+
+        async function throttleRequest() {
+            const now = Date.now();
+            const timeSinceLastRequest = now - lastRequestTime;
+            const timeToWait = Math.max(0, 1000 / MAX_REQUESTS_PER_SECOND - timeSinceLastRequest);
+            
+            if (timeToWait > 0) {
+                await new Promise(resolve => setTimeout(resolve, timeToWait));
+            }
+            
+            lastRequestTime = Date.now();
+        }
+
+        // Verbesserte Route-Berechnung die ALLE POIs einschließt
+        async function calculateCompleteRoute() {
+            let completeRoute = [];
+            let routePOIs = poiCoordinates.length > 0 ? [...poiCoordinates] : [...smartPOIs];
+
+            // Stelle sicher, dass wir mit Home starten und enden
+            if (routePOIs.length > 0) {
+                // Füge Home am Anfang hinzu, falls nicht bereits da
+                let firstPOI = routePOIs[0];
+                if (calculateDistance(HOME_COORDINATES[0], HOME_COORDINATES[1], firstPOI.lat, firstPOI.lon) > 1000) {
+                    routePOIs.unshift({
+                        lat: HOME_COORDINATES[0],
+                        lon: HOME_COORDINATES[1],
+                        time: new Date(firstPOI.time.getTime() - 60*60*1000), // 1 Stunde früher
+                        endTime: new Date(firstPOI.time.getTime() - 60*60*1000),
+                        stopType: 'Home'
+                    });
+                }
+
+                // Füge Home am Ende hinzu, falls nicht bereits da
+                let lastPOI = routePOIs[routePOIs.length - 1];
+                if (calculateDistance(HOME_COORDINATES[0], HOME_COORDINATES[1], lastPOI.lat, lastPOI.lon) > 1000) {
+                    routePOIs.push({
+                        lat: HOME_COORDINATES[0],
+                        lon: HOME_COORDINATES[1],
+                        time: new Date(lastPOI.endTime.getTime() + 60*60*1000), // 1 Stunde später
+                        endTime: new Date(lastPOI.endTime.getTime() + 60*60*1000),
+                        stopType: 'Home'
+                    });
+                }
+            }
+
+            console.log("Complete POI route including home:", routePOIs);
+
+            try {
+                for (let i = 0; i < routePOIs.length - 1; i++) {
+                    let start = routePOIs[i];
+                    let end = routePOIs[i + 1];
+                    console.log(`Calculating route from ${start.stopType || 'POI'} at ${start.lat},${start.lon} to ${end.stopType || 'POI'} at ${end.lat},${end.lon}`);
+                    let route = await getRouteFromOSRM([start, end]);
+                    if (route && route.length > 0) {
+                        completeRoute = completeRoute.concat(route);
+                    }
+                }
+
+                console.log("Complete route calculated, total points:", completeRoute.length);
+
+                document.getElementById('loadingModal').style.display = 'none';
+                if (completeRoute.length > 0) {
+                    animateVanAlongRoute(completeRoute, 0, routePOIs);
+                } else {
+                    alert('Could not calculate route. Please try again.');
+                    stopDriveRoute();
+                }
+            } catch (error) {
+                console.error('Error calculating route:', error);
+                alert('An error occurred while calculating the route. Please try again later.');
+                document.getElementById('loadingModal').style.display = 'none';
+                stopDriveRoute();
+            }
+        }
+
+        // Komplett überarbeitete Animation mit echter Zeit und Geschwindigkeit
+        function animateVanAlongRoute(route, step, routePOIs) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
+                var currentTime = interpolateRealTimeFromRoute(step, route.length);
 
-                // Van Marker erstellen/bewegen
                 if (!vanMarker) {
                     vanMarker = L.marker(point, {
                         icon: L.divIcon({
@@ -710,399 +844,223 @@
                 } else {
                     vanMarker.setLatLng(point);
                 }
-                
-                // Route zeichnen
                 routePath.addLatLng(point);
                 map.setView(point);
 
-                // Distance tracking
+                // Update distance tracking
                 if (lastPosition) {
-                    totalDistance += calculateDistance(lastPosition[0], lastPosition[1], point[0], point[1]) / 1000;
+                    totalDistance += calculateDistance(lastPosition[0], lastPosition[1], point[0], point[1]) / 1000; // km
                 }
                 lastPosition = point;
 
-                // POI Check
-                checkPOIReached(point);
-
-                // Info Update
-                updateInfoOverlay();
-
-                // Nächster Schritt
-                var delay = Math.max(50, Math.min(500, 100));
-                animationTimeout = setTimeout(function() {
-                    animateVanAlongRoute(route, step + 1);
-                }, delay);
-                
-            } else if (step >= route.length && driveRouteRunning) {
-                console.log("Route completed!");
-                setTimeout(stopDriveRoute, 2000);
-            }
-        }
-
-        // POI Check (mit echter Elevation von GPS Daten)
-        var currentTime = null;
-        function checkPOIReached(point) {
-            for (let poi of poiCoordinates) {
-                let distance = calculateDistance(poi.lat, poi.lon, point[0], point[1]);
-                
-                if (distance < 1000) {
-                    let alreadyDisplayed = stopMarkers.some(m => 
-                        calculateDistance(m.getLatLng().lat, m.getLatLng().lng, poi.lat, poi.lon) < 500
-                    );
+                // Verbesserte POI-Erkennung - checke alle POIs
+                for (let poi of poiCoordinates) {
+                    let distance = calculateDistance(poi.lat, poi.lon, point[0], point[1]);
                     
-                    if (!alreadyDisplayed) {
-                        console.log(`POI reached: ${poi.stopType} at ${poi.time.toLocaleString('de-DE', {timeZone: 'Europe/Berlin'})}`);
-                        addStopMarker(poi);
-                        currentTime = poi.time; // Zeit setzen
+                    // POI erreicht wenn wir sehr nahe sind (1km Toleranz)
+                    if (distance < 1000) {
+                        // Prüfe ob dieser POI bereits angezeigt wurde
+                        let alreadyDisplayed = stopMarkers.some(m => 
+                            calculateDistance(m.getLatLng().lat, m.getLatLng().lng, poi.lat, poi.lon) < 500
+                        );
                         
-                        // Echte Elevation von POI oder Fallback
-                        currentElevation = poi.elevation || (200 + Math.random() * 800);
-                        elevationData.push(currentElevation);
-                        if (elevationData.length > 20) elevationData.shift();
-                        updateElevationChart();
+                        if (!alreadyDisplayed) {
+                            console.log(`Reached POI: ${poi.stopType} at distance ${distance.toFixed(0)}m`);
+                            addStopMarker(poi);
+                        }
                     }
                 }
+
+                // Update info overlay mit echter Zeit
+                updateInfoOverlay(point, currentTime, step, route.length);
+
+                currentAnimationIndex = step;
+                
+                // Geschwindigkeitsbasierte Animation - speed ist in km/s
+                var timeToNextPoint = calculateTimeToNextPoint(point, route[step + 1] || point);
+                animationTimeout = setTimeout(function() {
+                    animateVanAlongRoute(route, step + 1, routePOIs);
+                }, timeToNextPoint);
+            } else if (step >= route.length && driveRouteRunning) {
+                console.log("Route completed!");
+                setTimeout(stopDriveRoute, 2000); // Warte 2 Sekunden bevor Stop
             }
         }
 
-        // Info Overlay Update (mit deutscher Zeitzone)
-        function updateInfoOverlay() {
-            if (currentTime) {
-                // Deutsche Zeitzone (Bornheim)
-                const options = { 
-                    timeZone: 'Europe/Berlin',
-                    day: '2-digit',
-                    month: '2-digit', 
-                    year: 'numeric'
-                };
-                const timeOptions = {
-                    timeZone: 'Europe/Berlin',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                };
-                
-                document.getElementById('current-date').textContent = currentTime.toLocaleDateString('de-DE', options);
-                document.getElementById('current-time').textContent = currentTime.toLocaleTimeString('de-DE', timeOptions);
-            }
+        // Echte Zeit-Interpolation basierend auf originalen Datenpunkten
+        function interpolateRealTimeFromRoute(step, totalSteps) {
+            if (filteredCoordinates.length === 0) return new Date();
+            
+            // Finde den Fortschritt in der gesamten Route (0 bis 1)
+            const progress = step / totalSteps;
+            
+            // Interpoliere zwischen erstem und letztem Datenpunkt
+            const startTime = filteredCoordinates[0].time;
+            const endTime = filteredCoordinates[filteredCoordinates.length - 1].time;
+            const totalDuration = endTime - startTime;
+            
+            return new Date(startTime.getTime() + (totalDuration * progress));
+        }
+
+        function toggleParameters() {
+            var content = document.getElementById('parameter-content');
+            content.classList.toggle('expanded');
+        }
+
+        function updateInfoOverlay(point, currentTime, step, totalSteps) {
+            document.getElementById('current-date').textContent = currentTime.toLocaleDateString('de-DE');
+            document.getElementById('current-time').textContent = currentTime.toLocaleTimeString('de-DE');
             document.getElementById('total-distance').textContent = totalDistance.toFixed(1);
             
-            // Elevation Update
-            if (currentElevation) {
-                document.getElementById('current-elevation').textContent = currentElevation.toFixed(0);
-            }
+            // Elevation (mockup - aber realistischer basierend auf Position)
+            // Fixed scale: 0-2000m
+            currentElevation = Math.abs(Math.sin(point[0] * 0.01) * 1000 + Math.cos(point[1] * 0.01) * 500 + 200);
+            currentElevation = Math.min(currentElevation, 2000); // Cap at 2000m
+            
+            // Elevation chart update
+            elevationData.push(currentElevation);
+            if (elevationData.length > 30) elevationData.shift(); // Keep last 30 points for smaller chart
+            updateElevationChart();
         }
 
-        // Stop Marker hinzufügen (mit Popup-Info)
-        function addStopMarker(poi) {
-            const colors = {
-                'Sleeping': '#8B4513',
-                'Parking': '#4169E1',
-                'Coffee Break': '#D2691E',
-                'Home': '#228B22'
-            };
-            
-            const icons = {
-                'Sleeping': 'bed',
-                'Parking': 'parking',
-                'Coffee Break': 'coffee',
-                'Home': 'home'
-            };
-            
-            const color = colors[poi.stopType] || '#666666';
-            const icon = icons[poi.stopType] || 'map-marker';
-            
-            const marker = L.marker([poi.lat, poi.lon], {
-                icon: L.divIcon({
-                    className: 'stop-marker',
-                    iconSize: [20, 20],
-                    html: `<div style="background-color:${color};color:white;width:20px;height:20px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-${icon}"></i></div>`
-                })
-            }).addTo(map);
-            
-            // Popup mit Details
-            const startTime = poi.time.toLocaleString('de-DE', {timeZone: 'Europe/Berlin'});
-            const endTime = poi.endTime ? poi.endTime.toLocaleString('de-DE', {timeZone: 'Europe/Berlin'}) : 'N/A';
-            const elevation = poi.elevation ? `${poi.elevation.toFixed(0)}m` : 'N/A';
-            
-            marker.bindPopup(`
-                <strong>${poi.stopType}</strong><br>
-                <strong>Start:</strong> ${startTime}<br>
-                <strong>End:</strong> ${endTime}<br>
-                <strong>Duration:</strong> ${poi.duration.toFixed(0)} min<br>
-                <strong>Elevation:</strong> ${elevation}<br>
-                <strong>Location:</strong> ${poi.lat.toFixed(6)}, ${poi.lon.toFixed(6)}
-            `);
-            
-            stopMarkers.push(marker);
-            
-            console.log(`Added stop marker: ${poi.stopType} at ${poi.lat}, ${poi.lon}, elevation: ${elevation}`);
-        }
-
-        // Elevation Chart Update
         function updateElevationChart() {
             let chart = document.getElementById('elevation-chart');
             let canvas = chart.querySelector('canvas');
             if (!canvas) {
                 canvas = document.createElement('canvas');
-                canvas.width = 80;
-                canvas.height = 60;
+                canvas.width = 120;
+                canvas.height = 40;
                 chart.appendChild(canvas);
             }
             
             let ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, 80, 60);
+            ctx.clearRect(0, 0, 120, 40);
             
             if (elevationData.length > 1) {
-                const minElev = Math.min(...elevationData);
-                const maxElev = Math.max(...elevationData);
-                const range = Math.max(maxElev - minElev, 10);
+                // Fixed scale: 0-2000m
+                const minElev = 0;
+                const maxElev = 2000;
+                const range = maxElev - minElev;
                 
-                // Grid
-                ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
-                ctx.lineWidth = 0.5;
-                for (let i = 1; i < 4; i++) {
-                    const y = (i / 4) * 60;
-                    ctx.beginPath();
-                    ctx.moveTo(0, y);
-                    ctx.lineTo(80, y);
-                    ctx.stroke();
-                }
-                
-                // Line
-                ctx.strokeStyle = '#2196F3';
-                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#4CAF50';
+                ctx.lineWidth = 1.5;
                 ctx.beginPath();
                 
                 for (let i = 0; i < elevationData.length; i++) {
-                    let x = (i / (elevationData.length - 1)) * 80;
-                    let y = 60 - ((elevationData[i] - minElev) / range) * 60;
+                    let x = (i / (elevationData.length - 1)) * 120;
+                    let y = 40 - ((elevationData[i] - minElev) / range) * 40;
                     
                     if (i === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
                 }
                 ctx.stroke();
                 
-                // Fill
-                ctx.fillStyle = 'rgba(33, 150, 243, 0.2)';
-                ctx.beginPath();
-                ctx.moveTo(0, 60);
-                for (let i = 0; i < elevationData.length; i++) {
-                    let x = (i / (elevationData.length - 1)) * 80;
-                    let y = 60 - ((elevationData[i] - minElev) / range) * 60;
-                    ctx.lineTo(x, y);
-                }
-                ctx.lineTo(80, 60);
-                ctx.closePath();
-                ctx.fill();
-                
-                // Current point
-                if (elevationData.length > 0) {
-                    const currentX = 78;
-                    const currentY = 60 - ((elevationData[elevationData.length - 1] - minElev) / range) * 60;
-                    
-                    ctx.fillStyle = '#FF5722';
-                    ctx.beginPath();
-                    ctx.arc(currentX, currentY, 2.5, 0, 2 * Math.PI);
-                    ctx.fill();
-                }
+                // Add scale indicators
+                ctx.fillStyle = '#888';
+                ctx.font = '8px monospace';
+                ctx.fillText('2km', 100, 10);
+                ctx.fillText('0m', 105, 38);
             }
         }
 
-        // Button-Funktionen (richtig implementiert)
-        var showingPoints = false;
-        var showingRoute = false;
-        var pointMarkers = [];
-        var routePolyline = null;
-        
-        function togglePoints() {
-            console.log('Toggling points...');
+        function addStopMarker(stopPoint) {
+            let markerIcon;
+            let visitCount = stopPoint.visitCount || 1;
+
+            switch (stopPoint.stopType) {
+                case 'Coffee Break':
+                    markerIcon = `<div style="background-color:#c30b82;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-coffee"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
+                    break;
+                case 'Parking':
+                    markerIcon = `<div style="background-color:#3498db;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-parking"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
+                    break;
+                case 'Sleeping':
+                    markerIcon = `<div style="background-color:#4CAF50;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-campground"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
+                    break;
+                case 'Home':
+                    markerIcon = `<div style="background-color:#FF5733;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-home"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
+                    break;
+                default:
+                    markerIcon = `<div style="background-color:#666;color:white;width:30px;height:30px;display:flex;justify-content:center;align-items:center;border-radius:50%;"><i class="fas fa-map-marker"></i>${visitCount > 1 ? ' ' + visitCount : ''}</div>`;
+            }
+
+            // Prüfe ob bereits ein ähnlicher Marker existiert
+            let alreadyExists = stopMarkers.some(m => 
+                calculateDistance(m.getLatLng().lat, m.getLatLng().lng, stopPoint.lat, stopPoint.lon) < 100
+            );
             
-            if (!showingPoints) {
-                // Points anzeigen
-                coordinates.forEach((coord, index) => {
-                    const marker = L.circleMarker([coord.lat, coord.lon], {
-                        radius: 3,
-                        fillColor: '#ff0000',
-                        color: '#ffffff',
-                        weight: 1,
-                        opacity: 1,
-                        fillOpacity: 0.8
-                    }).addTo(map);
-                    
-                    marker.bindPopup(`Point ${index + 1}<br>${coord.time.toLocaleString('de-DE', {timeZone: 'Europe/Berlin'})}<br>Elevation: ${coord.elevation || 'N/A'}m`);
-                    pointMarkers.push(marker);
-                });
+            if (!alreadyExists) {
+                const durationMinutes = (stopPoint.endTime - stopPoint.time) / (60 * 1000);
+                let nextCategory, suggestionText;
                 
-                document.querySelector('button[onclick="togglePoints()"]').textContent = "Hide Points";
-                showingPoints = true;
-                console.log(`Showing ${pointMarkers.length} GPS points`);
+                if (stopPoint.stopType === 'Coffee Break') {
+                    nextCategory = 'Parking';
+                    suggestionText = `Decrease 'Parking Threshold' to below ${durationMinutes.toFixed(0)} minutes`;
+                } else if (stopPoint.stopType === 'Parking') {
+                    nextCategory = 'Sleeping';
+                    suggestionText = `Decrease 'Sleeping Threshold' to below ${durationMinutes.toFixed(0)} minutes`;
+                }
+
+                let popupContent = `
+                    <h3>${stopPoint.stopType}</h3>
+                    <p>Start Time: ${stopPoint.time.toLocaleString('de-DE')}</p>
+                    <p>End Time: ${stopPoint.endTime ? stopPoint.endTime.toLocaleString('de-DE') : 'N/A'}</p>
+                    <p>Duration: ${durationMinutes.toFixed(2)} minutes</p>
+                    <p>Visit Count: ${visitCount}</p>
+                    <p>Latitude: ${stopPoint.lat.toFixed(6)}</p>
+                    <p>Longitude: ${stopPoint.lon.toFixed(6)}</p>
+                    <p>Cluster Size: ${stopPoint.clusterSize || 1} points</p>
+                    <p>Max Distance in Cluster: ${(stopPoint.maxDistanceInCluster || 0).toFixed(2)} meters</p>
+                    <p>Time to Next POI: ${((stopPoint.timeToNextPOI || 0) / (60 * 1000)).toFixed(2)} minutes</p>
+                    <p>Distance to Next POI: ${(stopPoint.distanceToNextPOI || 0).toFixed(2)} meters</p>
+                    ${stopPoint.isSnapped ? `<p>Snapped to road: ${stopPoint.snapDistance.toFixed(0)}m</p>` : ''}
+                    ${nextCategory ? `<p>To change to ${nextCategory}: ${suggestionText}</p>` : ''}
+                `;
+
+                let marker = L.marker([stopPoint.lat, stopPoint.lon], {
+                    icon: L.divIcon({
+                        className: 'custom-div-icon',
+                        html: markerIcon,
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    })
+                }).addTo(map).bindPopup(popupContent);
+                
+                stopMarkers.push(marker);
+                console.log(`Added stop marker: ${stopPoint.stopType} at ${stopPoint.lat.toFixed(6)}, ${stopPoint.lon.toFixed(6)}`);
             } else {
-                // Points verstecken
-                pointMarkers.forEach(marker => map.removeLayer(marker));
-                pointMarkers = [];
-                document.querySelector('button[onclick="togglePoints()"]').textContent = "Show Points";
-                showingPoints = false;
-                console.log('Hidden GPS points');
+                console.log(`Stop marker already exists for ${stopPoint.stopType} at ${stopPoint.lat.toFixed(6)}, ${stopPoint.lon.toFixed(6)}`);
             }
         }
 
-        function toggleRoute() {
-            console.log('Toggling route...');
-            
-            if (!showingRoute) {
-                // Route anzeigen
-                const routeCoords = coordinates.map(coord => [coord.lat, coord.lon]);
-                routePolyline = L.polyline(routeCoords, {
-                    color: '#2196F3',
-                    weight: 3,
-                    opacity: 0.7
-                }).addTo(map);
-                
-                document.querySelector('button[onclick="toggleRoute()"]').textContent = "Hide Route";
-                showingRoute = true;
-                console.log('Showing GPS route');
-            } else {
-                // Route verstecken
-                if (routePolyline) {
-                    map.removeLayer(routePolyline);
-                    routePolyline = null;
-                }
-                document.querySelector('button[onclick="toggleRoute()"]').textContent = "Show Route";
-                showingRoute = false;
-                console.log('Hidden GPS route');
-            }
+        function calculateTimeToNextPoint(point1, point2) {
+            var distance = calculateDistance(point1[0], point1[1], point2[0], point2[1]);
+            // speed ist in km/s, konvertiere zu m/s und dann zu ms
+            var speedMs = speed * 1000; // km/s zu m/s
+            var timeInSeconds = distance / speedMs;
+            return Math.max(10, timeInSeconds * 1000); // Minimum 10ms, sonst echte Zeit in ms
         }
 
-        function toggleAnimation() {
-            console.log('Toggling animation...');
+        function filterRouteByDateRange(startDate, endDate) {
+            if (!startDate && !endDate) return routeCoordinates;
+            if (!startDate) startDate = new Date(0); // Unix epoch
+            if (!endDate) endDate = new Date(); // Now
             
-            if (!animationRunning) {
-                startAnimation();
-            } else {
-                stopAnimation();
-            }
-        }
-
-        function startAnimation() {
-            if (coordinates.length === 0) {
-                alert('No data to animate. Please load GPS data first.');
-                return;
-            }
-            
-            console.log('Starting normal GPS animation...');
-            animationRunning = true;
-            totalDistance = 0;
-            lastPosition = null;
-            currentAnimationIndex = 0;
-            
-            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Stop Animation";
-            document.getElementById('info-overlay').style.display = 'block';
-            
-            animateGPSPoints(coordinates, 0);
-        }
-
-        function stopAnimation() {
-            console.log('Stopping animation...');
-            animationRunning = false;
-            if (animationTimeout) clearTimeout(animationTimeout);
-            if (currentMarker) {
-                map.removeLayer(currentMarker);
-                currentMarker = null;
-            }
-            document.getElementById('info-overlay').style.display = 'none';
-            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Start Animation";
-        }
-
-        // Neue Funktion: Normal GPS Animation (Punkt für Punkt)
-        function animateGPSPoints(points, step) {
-            if (step < points.length && animationRunning) {
-                var point = points[step];
-
-                // Current Marker erstellen/bewegen
-                if (!currentMarker) {
-                    currentMarker = L.marker([point.lat, point.lon], {
-                        icon: L.divIcon({
-                            className: 'current-position-icon',
-                            iconSize: [12, 12],
-                            iconAnchor: [6, 6],
-                            html: '<div style="background-color:#ff0000;width:12px;height:12px;border-radius:50%;border:2px solid white;"></div>'
-                        })
-                    }).addTo(map);
-                } else {
-                    currentMarker.setLatLng([point.lat, point.lon]);
-                }
-                
-                map.setView([point.lat, point.lon]);
-
-                // Distance tracking
-                if (lastPosition) {
-                    totalDistance += calculateDistance(lastPosition[0], lastPosition[1], point.lat, point.lon) / 1000;
-                }
-                lastPosition = [point.lat, point.lon];
-
-                // Info Update (mit echten Daten)
-                updateInfoWithGPSPoint(point);
-
-                // Nächster Schritt
-                currentAnimationIndex = step;
-                const nextPoint = step < points.length - 1 ? points[step + 1] : null;
-                const delay = nextPoint ? calculateTimeToNextPoint([point.lat, point.lon], [nextPoint.lat, nextPoint.lon]) : 100;
-                
-                animationTimeout = setTimeout(function() {
-                    animateGPSPoints(points, step + 1);
-                }, delay);
-                
-            } else if (step >= points.length && animationRunning) {
-                console.log("GPS Animation completed!");
-                stopAnimation();
-            }
-        }
-
-        // Info Update für normale GPS Animation
-        function updateInfoWithGPSPoint(point) {
-            currentTime = point.time;
-            currentElevation = point.elevation || 0;
-            
-            // Elevation data für Chart
-            if (point.elevation) {
-                elevationData.push(point.elevation);
-                if (elevationData.length > 20) elevationData.shift();
-                updateElevationChart();
-            }
-            
-            updateInfoOverlay();
-        }
-
-        function updateDateRange() {
-            filterData();
-        }
-
-        function filterData() {
-            const startDateInput = document.getElementById('startDate').value;
-            const endDateInput = document.getElementById('endDate').value;
-            
-            if (!startDateInput && !endDateInput) {
-                console.log("Using all coordinates - no date filter applied");
-                filteredCoordinates = [...coordinates];
-                return;
-            }
-            
-            const startDate = startDateInput ? new Date(startDateInput) : null;
-            const endDate = endDateInput ? new Date(endDateInput) : null;
-            
-            if (endDate) {
-                endDate.setHours(23, 59, 59, 999);
-            }
-            
-            filteredCoordinates = coordinates.filter(coord => {
-                const coordDate = new Date(coord.time);
-                if (startDate && coordDate < startDate) return false;
-                if (endDate && coordDate > endDate) return false;
-                return true;
+            return routeCoordinates.filter(point => {
+                return point.time >= new Date(startDate) && point.time <= new Date(endDate);
             });
+        }
+
+        function filterPOIsByDateRange(startDate, endDate) {
+            let poisToFilter = smartPOIs.length > 0 ? smartPOIs : poiCoordinates;
             
-            console.log(`Filtered to ${filteredCoordinates.length} coordinates`);
+            if (!startDate && !endDate) return poisToFilter;
+            if (!startDate) startDate = new Date(0); // Unix epoch
+            if (!endDate) endDate = new Date(); // Now
+            
+            return poisToFilter.filter(point => {
+                return point.time >= new Date(startDate) && point.time <= new Date(endDate);
+            });
         }
 
         function generateShareLink() {
@@ -1120,194 +1078,230 @@
             shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
         }
 
-        function updateParameters() {
-            maxClusterDistance = parseInt(document.getElementById('maxClusterDistance').value);
-            minTimeBetweenPOIs = parseInt(document.getElementById('minTimeBetweenPOIs').value) * 60 * 1000;
-            sleepingThreshold = parseInt(document.getElementById('sleepingThreshold').value);
-            parkingThreshold = parseInt(document.getElementById('parkingThreshold').value);
-            coffeeBreakThreshold = parseInt(document.getElementById('coffeeBreakThreshold').value);
-            maxMergeDistance = parseInt(document.getElementById('maxMergeDistance').value);
-            maxTimeBetweenMerge = parseInt(document.getElementById('maxTimeBetweenMerge').value) * 60 * 60 * 1000;
-            roadSnapDistance = parseInt(document.getElementById('roadSnapDistance').value);
-            
-            console.log("Parameters updated, re-identifying POIs...");
-            identifyPOIs();
-        }
-        // Distance berechnen
         function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3;
+            const R = 6371e3; // Radius of the Earth in meters
             const φ1 = lat1 * Math.PI / 180;
             const φ2 = lat2 * Math.PI / 180;
             const Δφ = (lat2 - lat1) * Math.PI / 180;
             const Δλ = (lon2 - lon1) * Math.PI / 180;
-            
-            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
                       Math.cos(φ1) * Math.cos(φ2) *
-                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            
-            return R * c;
+                      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c; // Distance in meters
         }
 
-        // GPS Daten laden (ECHTE Google Sheets Daten mit korrekten Timestamps)
-        function loadGPSData() {
-            const csvData = `timestamp,latitude,longitude,elevation
-2025-06-04T05:15:00Z,50.782766,7.018143,56
-2025-06-06T12:30:00Z,50.782009,7.032291,58
-2025-06-06T14:30:01Z,50.785143,7.030982,59
-2025-06-07T07:15:00Z,50.782009,7.032291,58
-2025-06-07T07:30:01Z,50.904061,6.991727,46
-2025-06-07T07:45:00Z,51.106083,6.987707,76
-2025-06-07T08:00:01Z,51.248276,6.912315,112
-2025-06-07T08:15:01Z,51.372875,6.824234,47
-2025-06-07T08:30:01Z,51.450622,6.906608,98
-2025-06-08T15:30:00Z,51.463126,6.886491,50
-2025-06-08T15:45:00Z,51.281095,6.903178,117
-2025-06-08T16:00:00Z,51.032167,7.015883,51
-2025-06-08T16:15:00Z,50.838116,6.960175,54
-2025-06-08T16:30:00Z,50.782009,7.032291,58
-2025-06-09T20:00:00Z,50.784514,7.02652,56
-2025-06-10T08:00:01Z,50.785143,7.030982,59`;
-
-            parseCSVData(csvData);
+        function classifyStop(timeDiff) {
+            console.log(`Classifying stop with duration: ${timeDiff.toFixed(2)} minutes`);
+            if (timeDiff >= sleepingThreshold) {
+                return 'Sleeping';
+            } else if (timeDiff >= parkingThreshold) {
+                return 'Parking';
+            } else if (timeDiff >= coffeeBreakThreshold) {
+                return 'Coffee Break';
+            }
+            return 'Moving';
         }
 
-        // CSV parsen (für ISO Timestamps mit Elevation)
-        function parseCSVData(csvData) {
-            const lines = csvData.trim().split('\n');
-            const headers = lines[0].split(',');
+        // Verbesserte Smart POI Erstellung
+        function createSmartPOIs() {
+            if (poiCoordinates.length === 0) {
+                console.log("No POIs found for Smart POI creation");
+                return;
+            }
             
-            coordinates = [];
+            smartPOIs = [];
             
-            console.log('Parsing CSV with headers:', headers);
+            console.log(`Creating Smart POIs from ${poiCoordinates.length} original POIs`);
             
-            for (let i = 1; i < lines.length; i++) {
-                const values = lines[i].split(',');
+            // Alle POIs durchgehen (nicht nur die mit mindestens Coffee Break Dauer)
+            for (let poi of poiCoordinates) {
+                let nearbyPoints = routeCoordinates.filter(point => {
+                    let distance = calculateDistance(poi.lat, poi.lon, point.lat, point.lon);
+                    let timeDiff = Math.abs(point.time - poi.time);
+                    return distance < roadSnapDistance && timeDiff < 2 * 60 * 60 * 1000; // 2 Stunden Toleranz
+                });
                 
-                // ISO Timestamp parsen (2025-06-04T05:15:00Z)
-                const timestamp = new Date(values[0]);
-                const lat = parseFloat(values[1]);
-                const lon = parseFloat(values[2]);
-                const elevation = values[3] ? parseFloat(values[3]) : null;
-                
-                if (!isNaN(lat) && !isNaN(lon) && !isNaN(timestamp.getTime())) {
-                    coordinates.push({
-                        time: timestamp,
-                        lat: lat,
-                        lon: lon,
-                        elevation: elevation
+                if (nearbyPoints.length > 0) {
+                    // Finde den zeitlich nächsten Punkt
+                    let bestPoint = nearbyPoints.reduce((best, current) => {
+                        let currentTimeDiff = Math.abs(current.time - poi.time);
+                        let bestTimeDiff = Math.abs(best.time - poi.time);
+                        return currentTimeDiff < bestTimeDiff ? current : best;
                     });
                     
-                    console.log(`Point ${i}: ${timestamp.toLocaleString('de-DE', {timeZone: 'Europe/Berlin'})} at ${lat}, ${lon}, elevation: ${elevation}m`);
+                    // Erstelle Smart POI mit besserer Position
+                    let smartPOI = {
+                        ...poi,
+                        lat: bestPoint.lat,
+                        lon: bestPoint.lon,
+                        originalLat: poi.lat,
+                        originalLon: poi.lon,
+                        snapDistance: calculateDistance(poi.lat, poi.lon, bestPoint.lat, bestPoint.lon),
+                        isSnapped: true
+                    };
+                    
+                    smartPOIs.push(smartPOI);
+                    console.log(`Smart POI created: ${poi.stopType} (${((poi.endTime - poi.time) / (60 * 1000)).toFixed(0)}min) snapped ${smartPOI.snapDistance.toFixed(0)}m to road`);
+                } else {
+                    // Kein besserer Punkt gefunden, originalen POI verwenden
+                    let originalPOI = {...poi, isSnapped: false};
+                    smartPOIs.push(originalPOI);
+                    console.log(`Smart POI kept original: ${poi.stopType} (no nearby route points found)`);
                 }
             }
             
-            console.log(`Loaded ${coordinates.length} GPS points with elevation data`);
-            identifyPOIs();
+            // Sortiere Smart POIs nach Zeit
+            smartPOIs.sort((a, b) => a.time - b.time);
+            
+            console.log(`Created ${smartPOIs.length} smart POIs:`);
+            smartPOIs.forEach((poi, i) => {
+                console.log(`  ${i+1}. ${poi.stopType} at ${poi.time.toLocaleString()} (${poi.isSnapped ? 'snapped' : 'original'})`);
+            });
         }
 
-        // POIs identifizieren (mit konfigurierbaren Parametern)
-        function identifyPOIs() {
-            console.log(`Starting POI identification with ${coordinates.length} points`);
-            
+        function identifyPOIs(points) {
+            console.log("Starting POI identification with", points.length, "points");
             poiCoordinates = [];
-            let clusters = [];
-            let currentCluster = null;
-            
-            for (let i = 0; i < coordinates.length - 1; i++) {
-                const point1 = coordinates[i];
-                const point2 = coordinates[i + 1];
-                
-                const distance = calculateDistance(point1.lat, point1.lon, point2.lat, point2.lon);
-                const timeDiff = (point2.time - point1.time) / (1000 * 60); // minutes
-                
-                console.log(`Point ${i}: Distance to next = ${distance.toFixed(2)}m, Time diff = ${timeDiff.toFixed(2)}min`);
-                
-                if (distance <= maxClusterDistance) {
-                    if (!currentCluster) {
-                        currentCluster = {
-                            points: [point1],
-                            startTime: point1.time,
-                            endTime: point1.time
-                        };
-                    }
-                    currentCluster.points.push(point2);
-                    currentCluster.endTime = point2.time;
-                } else {
-                    if (currentCluster) {
-                        const duration = (currentCluster.endTime - currentCluster.startTime) / (1000 * 60);
-                        const stopType = classifyStop(duration);
-                        console.log(`Cluster ended. Duration: ${duration.toFixed(2)}min, Type: ${stopType}`);
-                        
+            let currentCluster = [];
+
+            for (let i = 0; i < points.length; i++) {
+                const currentPoint = points[i];
+                const nextPoint = points[i + 1];
+
+                currentCluster.push(currentPoint);
+
+                if (nextPoint) {
+                    const distance = calculateDistance(currentPoint.lat, currentPoint.lon, nextPoint.lat, nextPoint.lon);
+                    const timeDiff = nextPoint.time - currentPoint.time;
+
+                    console.log(`Point ${i}: Distance to next = ${distance.toFixed(2)}m, Time diff = ${(timeDiff/60000).toFixed(2)}min`);
+
+                    if (distance > maxClusterDistance || timeDiff > minTimeBetweenPOIs) {
+                        // End of cluster, classify it
+                        const clusterDuration = currentCluster[currentCluster.length - 1].time - currentCluster[0].time;
+                        const stopType = classifyStop(clusterDuration / (60 * 1000)); // Convert to minutes
+
+                        console.log(`Cluster ended. Duration: ${(clusterDuration/60000).toFixed(2)}min, Type: ${stopType}`);
+
                         if (stopType !== 'Moving') {
-                            const avgLat = currentCluster.points.reduce((sum, p) => sum + p.lat, 0) / currentCluster.points.length;
-                            const avgLon = currentCluster.points.reduce((sum, p) => sum + p.lon, 0) / currentCluster.points.length;
-                            const avgElevation = currentCluster.points.reduce((sum, p) => sum + (p.elevation || 0), 0) / currentCluster.points.length;
-                            
-                            poiCoordinates.push({
-                                lat: avgLat,
-                                lon: avgLon,
-                                duration: duration,
+                            const avgLat = currentCluster.reduce((sum, p) => sum + p.lat, 0) / currentCluster.length;
+                            const avgLon = currentCluster.reduce((sum, p) => sum + p.lon, 0) / currentCluster.length;
+                            const maxDistanceInCluster = Math.max(...currentCluster.map(p => 
+                                calculateDistance(avgLat, avgLon, p.lat, p.lon)
+                            ));
+
+                            const firstPoint = currentCluster[0];
+                            const newPOI = {
+                                lat: firstPoint.lat,
+                                lon: firstPoint.lon,
+                                time: currentCluster[0].time,
+                                endTime: currentCluster[currentCluster.length - 1].time,
                                 stopType: stopType,
-                                time: currentCluster.startTime,
-                                endTime: currentCluster.endTime,
-                                elevation: avgElevation > 0 ? avgElevation : null
-                            });
+                                visitCount: 1,
+                                clusterSize: currentCluster.length,
+                                maxDistanceInCluster: maxDistanceInCluster,
+                                timeToNextPOI: timeDiff,
+                                distanceToNextPOI: distance
+                            };
                             
-                            console.log(`POI added: ${stopType} at ${avgLat}, ${avgLon}, elevation: ${avgElevation.toFixed(0)}m`);
+                            if (poiCoordinates.length > 0) {
+                                const lastPOI = poiCoordinates[poiCoordinates.length - 1];
+                                lastPOI.timeToNextPOI = newPOI.time - lastPOI.endTime;
+                                lastPOI.distanceToNextPOI = calculateDistance(lastPOI.lat, lastPOI.lon, newPOI.lat, newPOI.lon);
+                            }
+                            
+                            poiCoordinates.push(newPOI);
+                            console.log(`POI added: ${stopType} at ${avgLat.toFixed(6)}, ${avgLon.toFixed(6)}`);
                         }
+
+                        currentCluster = [currentPoint]; // Start new cluster with current point
                     }
-                    currentCluster = null;
                 }
             }
-            
-            // Letzter Cluster
-            if (currentCluster) {
-                const duration = (currentCluster.endTime - currentCluster.startTime) / (1000 * 60);
-                const stopType = classifyStop(duration);
-                console.log(`Last cluster. Duration: ${duration.toFixed(2)}min, Type: ${stopType}`);
-                
+
+            // Handle the last cluster
+            if (currentCluster.length > 0) {
+                const clusterDuration = currentCluster[currentCluster.length - 1].time - currentCluster[0].time;
+                const stopType = classifyStop(clusterDuration / (60 * 1000));
+                console.log(`Last cluster. Duration: ${(clusterDuration/60000).toFixed(2)}min, Type: ${stopType}`);
                 if (stopType !== 'Moving') {
-                    const avgLat = currentCluster.points.reduce((sum, p) => sum + p.lat, 0) / currentCluster.points.length;
-                    const avgLon = currentCluster.points.reduce((sum, p) => sum + p.lon, 0) / currentCluster.points.length;
-                    const avgElevation = currentCluster.points.reduce((sum, p) => sum + (p.elevation || 0), 0) / currentCluster.points.length;
-                    
+                    const avgLat = currentCluster.reduce((sum, p) => sum + p.lat, 0) / currentCluster.length;
+                    const avgLon = currentCluster.reduce((sum, p) => sum + p.lon, 0) / currentCluster.length;
+                    const maxDistanceInCluster = Math.max(...currentCluster.map(p => 
+                        calculateDistance(avgLat, avgLon, p.lat, p.lon)
+                    ));
                     poiCoordinates.push({
                         lat: avgLat,
                         lon: avgLon,
-                        duration: duration,
+                        time: currentCluster[0].time,
+                        endTime: currentCluster[currentCluster.length - 1].time,
                         stopType: stopType,
-                        time: currentCluster.startTime,
-                        endTime: currentCluster.endTime,
-                        elevation: avgElevation > 0 ? avgElevation : null
+                        visitCount: 1,
+                        clusterSize: currentCluster.length,
+                        maxDistanceInCluster: maxDistanceInCluster,
+                        timeToNextPOI: 0,
+                        distanceToNextPOI: 0
                     });
+                    console.log(`Last POI added: ${stopType} at ${avgLat.toFixed(6)}, ${avgLon.toFixed(6)}`);
                 }
             }
-            
-            console.log(`Identified ${poiCoordinates.length} POIs`);
-            const poiTypeCount = {};
-            poiCoordinates.forEach(poi => {
-                poiTypeCount[poi.stopType] = (poiTypeCount[poi.stopType] || 0) + 1;
-            });
-            console.log(`POIs by class:`, poiTypeCount);
-            
-            // Map anpassen
-            if (coordinates.length > 0) {
-                const bounds = L.latLngBounds(coordinates.map(coord => [coord.lat, coord.lon]));
-                map.fitBounds(bounds);
-            }
+
+            // Merge nearby POIs of the same type
+            poiCoordinates = mergeSimilarPOIs(poiCoordinates);
+
+            // Debug information
+            console.log(`Total POIs identified: ${poiCoordinates.length}`);
+            console.log('POIs by class:', poiCoordinates.reduce((acc, poi) => {
+                acc[poi.stopType] = (acc[poi.stopType] || 0) + 1;
+                return acc;
+            }, {}));
         }
 
-        function classifyStop(durationMinutes) {
-            if (durationMinutes >= sleepingThreshold) {
-                return 'Sleeping';
-            } else if (durationMinutes >= parkingThreshold) {
-                return 'Parking';
-            } else if (durationMinutes >= coffeeBreakThreshold) {
-                return 'Coffee Break';
-            } else {
-                return 'Moving';
+        function mergeSimilarPOIs(pois) {
+            const mergedPOIs = [];
+
+            for (let poi of pois) {
+                const similarPOI = mergedPOIs.find(p => 
+                    p.stopType === poi.stopType && 
+                    calculateDistance(p.lat, p.lon, poi.lat, poi.lon) < maxMergeDistance &&
+                    Math.abs(p.endTime - poi.time) < maxTimeBetweenMerge
+                );
+
+                if (similarPOI) {
+                    const newEndTime = Math.max(similarPOI.endTime, poi.endTime);
+                    const totalDuration = (newEndTime - similarPOI.time) / (60 * 1000); // in minutes
+
+                    similarPOI.endTime = newEndTime;
+                    similarPOI.visitCount++;
+                    similarPOI.clusterSize += poi.clusterSize;
+                    similarPOI.maxDistanceInCluster = Math.max(similarPOI.maxDistanceInCluster, poi.maxDistanceInCluster);
+
+                    // Re-evaluate the stop type based on the total duration
+                    similarPOI.stopType = classifyStop(totalDuration);
+                } else {
+                    mergedPOIs.push(poi);
+                }
             }
+
+            return mergedPOIs;
+        }
+
+        function updateParameters() {
+            maxClusterDistance = Number(document.getElementById('maxClusterDistance').value);
+            minTimeBetweenPOIs = Number(document.getElementById('minTimeBetweenPOIs').value) * 60 * 1000; // Convert to milliseconds
+            sleepingThreshold = Number(document.getElementById('sleepingThreshold').value);
+            parkingThreshold = Number(document.getElementById('parkingThreshold').value);
+            coffeeBreakThreshold = Number(document.getElementById('coffeeBreakThreshold').value);
+            maxMergeDistance = Number(document.getElementById('maxMergeDistance').value);
+            maxTimeBetweenMerge = Number(document.getElementById('maxTimeBetweenMerge').value) * 60 * 60 * 1000; // Convert to milliseconds
+            roadSnapDistance = Number(document.getElementById('roadSnapDistance').value);
+
+            // Re-run POI identification and update the map
+            identifyPOIs(routeCoordinates);
+            createSmartPOIs();
+            updateDateRange(); // This will redraw the map with the new POIs
+            console.log("Parameters updated and POIs recalculated");
         }
     </script>
 </body>
