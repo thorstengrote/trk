@@ -739,7 +739,7 @@
             }
         }
 
-        // POI Check (mit Elevation Update)
+        // POI Check (mit echter Elevation von GPS Daten)
         var currentTime = null;
         function checkPOIReached(point) {
             for (let poi of poiCoordinates) {
@@ -751,11 +751,11 @@
                     );
                     
                     if (!alreadyDisplayed) {
-                        console.log(`POI reached: ${poi.stopType}`);
+                        console.log(`POI reached: ${poi.stopType} at ${poi.time.toLocaleString('de-DE', {timeZone: 'Europe/Berlin'})}`);
                         addStopMarker(poi);
                         currentTime = poi.time; // Zeit setzen
                         
-                        // Elevation für POI setzen (mockup da OSRM keine hat)
+                        // Echte Elevation von POI oder Fallback
                         currentElevation = poi.elevation || (200 + Math.random() * 800);
                         elevationData.push(currentElevation);
                         if (elevationData.length > 20) elevationData.shift();
@@ -793,7 +793,7 @@
             }
         }
 
-        // Stop Marker hinzufügen
+        // Stop Marker hinzufügen (mit Popup-Info)
         function addStopMarker(poi) {
             const colors = {
                 'Sleeping': '#8B4513',
@@ -820,7 +820,23 @@
                 })
             }).addTo(map);
             
+            // Popup mit Details
+            const startTime = poi.time.toLocaleString('de-DE', {timeZone: 'Europe/Berlin'});
+            const endTime = poi.endTime ? poi.endTime.toLocaleString('de-DE', {timeZone: 'Europe/Berlin'}) : 'N/A';
+            const elevation = poi.elevation ? `${poi.elevation.toFixed(0)}m` : 'N/A';
+            
+            marker.bindPopup(`
+                <strong>${poi.stopType}</strong><br>
+                <strong>Start:</strong> ${startTime}<br>
+                <strong>End:</strong> ${endTime}<br>
+                <strong>Duration:</strong> ${poi.duration.toFixed(0)} min<br>
+                <strong>Elevation:</strong> ${elevation}<br>
+                <strong>Location:</strong> ${poi.lat.toFixed(6)}, ${poi.lon.toFixed(6)}
+            `);
+            
             stopMarkers.push(marker);
+            
+            console.log(`Added stop marker: ${poi.stopType} at ${poi.lat}, ${poi.lon}, elevation: ${elevation}`);
         }
 
         // Elevation Chart Update
@@ -893,13 +909,74 @@
             }
         }
 
-        // Fehlende Control-Funktionen
+        // Button-Funktionen (richtig implementiert)
+        var showingPoints = false;
+        var showingRoute = false;
+        var pointMarkers = [];
+        var routePolyline = null;
+        
         function togglePoints() {
-            // Placeholder - zeige alle GPS Punkte
-            console.log('Toggle Points - Feature coming soon');
+            console.log('Toggling points...');
+            
+            if (!showingPoints) {
+                // Points anzeigen
+                coordinates.forEach((coord, index) => {
+                    const marker = L.circleMarker([coord.lat, coord.lon], {
+                        radius: 3,
+                        fillColor: '#ff0000',
+                        color: '#ffffff',
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    }).addTo(map);
+                    
+                    marker.bindPopup(`Point ${index + 1}<br>${coord.time.toLocaleString('de-DE', {timeZone: 'Europe/Berlin'})}<br>Elevation: ${coord.elevation || 'N/A'}m`);
+                    pointMarkers.push(marker);
+                });
+                
+                document.querySelector('button[onclick="togglePoints()"]').textContent = "Hide Points";
+                showingPoints = true;
+                console.log(`Showing ${pointMarkers.length} GPS points`);
+            } else {
+                // Points verstecken
+                pointMarkers.forEach(marker => map.removeLayer(marker));
+                pointMarkers = [];
+                document.querySelector('button[onclick="togglePoints()"]').textContent = "Show Points";
+                showingPoints = false;
+                console.log('Hidden GPS points');
+            }
+        }
+
+        function toggleRoute() {
+            console.log('Toggling route...');
+            
+            if (!showingRoute) {
+                // Route anzeigen
+                const routeCoords = coordinates.map(coord => [coord.lat, coord.lon]);
+                routePolyline = L.polyline(routeCoords, {
+                    color: '#2196F3',
+                    weight: 3,
+                    opacity: 0.7
+                }).addTo(map);
+                
+                document.querySelector('button[onclick="toggleRoute()"]').textContent = "Hide Route";
+                showingRoute = true;
+                console.log('Showing GPS route');
+            } else {
+                // Route verstecken
+                if (routePolyline) {
+                    map.removeLayer(routePolyline);
+                    routePolyline = null;
+                }
+                document.querySelector('button[onclick="toggleRoute()"]').textContent = "Show Route";
+                showingRoute = false;
+                console.log('Hidden GPS route');
+            }
         }
 
         function toggleAnimation() {
+            console.log('Toggling animation...');
+            
             if (!animationRunning) {
                 startAnimation();
             } else {
@@ -913,16 +990,20 @@
                 return;
             }
             
+            console.log('Starting normal GPS animation...');
             animationRunning = true;
             totalDistance = 0;
             lastPosition = null;
+            currentAnimationIndex = 0;
+            
             document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Stop Animation";
             document.getElementById('info-overlay').style.display = 'block';
-            // Normale Animation - simplified
-            console.log('Normal animation started');
+            
+            animateGPSPoints(coordinates, 0);
         }
 
         function stopAnimation() {
+            console.log('Stopping animation...');
             animationRunning = false;
             if (animationTimeout) clearTimeout(animationTimeout);
             if (currentMarker) {
@@ -933,9 +1014,64 @@
             document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Start Animation";
         }
 
-        function toggleRoute() {
-            // Placeholder - zeige Route
-            console.log('Toggle Route - Feature coming soon');
+        // Neue Funktion: Normal GPS Animation (Punkt für Punkt)
+        function animateGPSPoints(points, step) {
+            if (step < points.length && animationRunning) {
+                var point = points[step];
+
+                // Current Marker erstellen/bewegen
+                if (!currentMarker) {
+                    currentMarker = L.marker([point.lat, point.lon], {
+                        icon: L.divIcon({
+                            className: 'current-position-icon',
+                            iconSize: [12, 12],
+                            iconAnchor: [6, 6],
+                            html: '<div style="background-color:#ff0000;width:12px;height:12px;border-radius:50%;border:2px solid white;"></div>'
+                        })
+                    }).addTo(map);
+                } else {
+                    currentMarker.setLatLng([point.lat, point.lon]);
+                }
+                
+                map.setView([point.lat, point.lon]);
+
+                // Distance tracking
+                if (lastPosition) {
+                    totalDistance += calculateDistance(lastPosition[0], lastPosition[1], point.lat, point.lon) / 1000;
+                }
+                lastPosition = [point.lat, point.lon];
+
+                // Info Update (mit echten Daten)
+                updateInfoWithGPSPoint(point);
+
+                // Nächster Schritt
+                currentAnimationIndex = step;
+                const nextPoint = step < points.length - 1 ? points[step + 1] : null;
+                const delay = nextPoint ? calculateTimeToNextPoint([point.lat, point.lon], [nextPoint.lat, nextPoint.lon]) : 100;
+                
+                animationTimeout = setTimeout(function() {
+                    animateGPSPoints(points, step + 1);
+                }, delay);
+                
+            } else if (step >= points.length && animationRunning) {
+                console.log("GPS Animation completed!");
+                stopAnimation();
+            }
+        }
+
+        // Info Update für normale GPS Animation
+        function updateInfoWithGPSPoint(point) {
+            currentTime = point.time;
+            currentElevation = point.elevation || 0;
+            
+            // Elevation data für Chart
+            if (point.elevation) {
+                elevationData.push(point.elevation);
+                if (elevationData.length > 20) elevationData.shift();
+                updateElevationChart();
+            }
+            
+            updateInfoOverlay();
         }
 
         function updateDateRange() {
@@ -1013,48 +1149,60 @@
             return R * c;
         }
 
-        // GPS Daten laden
+        // GPS Daten laden (ECHTE Google Sheets Daten mit korrekten Timestamps)
         function loadGPSData() {
-            const csvData = `timestamp,latitude,longitude
-2025-06-04 07:15:00,50.782766,7.018143
-2025-06-04 08:30:00,50.782387,7.025217
-2025-06-04 10:00:00,50.783576,7.031636
-2025-06-04 18:45:00,50.783576,7.031636
-2025-06-05 02:15:00,50.782009,7.032291
-2025-06-05 15:30:00,50.782009,7.032291
-2025-06-06 14:30:00,50.782009,7.032291
-2025-06-07 09:15:00,51.456874,6.896550
-2025-06-07 10:30:01,51.450622,6.906608
-2025-06-07 16:45:00,51.450622,6.906608
-2025-06-08 08:00:00,50.785200,7.014100
-2025-06-08 12:30:00,50.785200,7.014100
-2025-06-08 18:00:00,50.785200,7.014100
-2025-06-09 09:00:00,50.785200,7.014100`;
+            const csvData = `timestamp,latitude,longitude,elevation
+2025-06-04T05:15:00Z,50.782766,7.018143,56
+2025-06-06T12:30:00Z,50.782009,7.032291,58
+2025-06-06T14:30:01Z,50.785143,7.030982,59
+2025-06-07T07:15:00Z,50.782009,7.032291,58
+2025-06-07T07:30:01Z,50.904061,6.991727,46
+2025-06-07T07:45:00Z,51.106083,6.987707,76
+2025-06-07T08:00:01Z,51.248276,6.912315,112
+2025-06-07T08:15:01Z,51.372875,6.824234,47
+2025-06-07T08:30:01Z,51.450622,6.906608,98
+2025-06-08T15:30:00Z,51.463126,6.886491,50
+2025-06-08T15:45:00Z,51.281095,6.903178,117
+2025-06-08T16:00:00Z,51.032167,7.015883,51
+2025-06-08T16:15:00Z,50.838116,6.960175,54
+2025-06-08T16:30:00Z,50.782009,7.032291,58
+2025-06-09T20:00:00Z,50.784514,7.02652,56
+2025-06-10T08:00:01Z,50.785143,7.030982,59`;
 
             parseCSVData(csvData);
         }
 
-        // CSV parsen
+        // CSV parsen (für ISO Timestamps mit Elevation)
         function parseCSVData(csvData) {
             const lines = csvData.trim().split('\n');
+            const headers = lines[0].split(',');
+            
             coordinates = [];
+            
+            console.log('Parsing CSV with headers:', headers);
             
             for (let i = 1; i < lines.length; i++) {
                 const values = lines[i].split(',');
+                
+                // ISO Timestamp parsen (2025-06-04T05:15:00Z)
                 const timestamp = new Date(values[0]);
                 const lat = parseFloat(values[1]);
                 const lon = parseFloat(values[2]);
+                const elevation = values[3] ? parseFloat(values[3]) : null;
                 
-                if (!isNaN(lat) && !isNaN(lon)) {
+                if (!isNaN(lat) && !isNaN(lon) && !isNaN(timestamp.getTime())) {
                     coordinates.push({
                         time: timestamp,
                         lat: lat,
-                        lon: lon
+                        lon: lon,
+                        elevation: elevation
                     });
+                    
+                    console.log(`Point ${i}: ${timestamp.toLocaleString('de-DE', {timeZone: 'Europe/Berlin'})} at ${lat}, ${lon}, elevation: ${elevation}m`);
                 }
             }
             
-            console.log(`Loaded ${coordinates.length} GPS points`);
+            console.log(`Loaded ${coordinates.length} GPS points with elevation data`);
             identifyPOIs();
         }
 
@@ -1094,6 +1242,7 @@
                         if (stopType !== 'Moving') {
                             const avgLat = currentCluster.points.reduce((sum, p) => sum + p.lat, 0) / currentCluster.points.length;
                             const avgLon = currentCluster.points.reduce((sum, p) => sum + p.lon, 0) / currentCluster.points.length;
+                            const avgElevation = currentCluster.points.reduce((sum, p) => sum + (p.elevation || 0), 0) / currentCluster.points.length;
                             
                             poiCoordinates.push({
                                 lat: avgLat,
@@ -1101,10 +1250,11 @@
                                 duration: duration,
                                 stopType: stopType,
                                 time: currentCluster.startTime,
-                                endTime: currentCluster.endTime
+                                endTime: currentCluster.endTime,
+                                elevation: avgElevation > 0 ? avgElevation : null
                             });
                             
-                            console.log(`POI added: ${stopType} at ${avgLat}, ${avgLon}`);
+                            console.log(`POI added: ${stopType} at ${avgLat}, ${avgLon}, elevation: ${avgElevation.toFixed(0)}m`);
                         }
                     }
                     currentCluster = null;
@@ -1120,6 +1270,7 @@
                 if (stopType !== 'Moving') {
                     const avgLat = currentCluster.points.reduce((sum, p) => sum + p.lat, 0) / currentCluster.points.length;
                     const avgLon = currentCluster.points.reduce((sum, p) => sum + p.lon, 0) / currentCluster.points.length;
+                    const avgElevation = currentCluster.points.reduce((sum, p) => sum + (p.elevation || 0), 0) / currentCluster.points.length;
                     
                     poiCoordinates.push({
                         lat: avgLat,
@@ -1127,7 +1278,8 @@
                         duration: duration,
                         stopType: stopType,
                         time: currentCluster.startTime,
-                        endTime: currentCluster.endTime
+                        endTime: currentCluster.endTime,
+                        elevation: avgElevation > 0 ? avgElevation : null
                     });
                 }
             }
