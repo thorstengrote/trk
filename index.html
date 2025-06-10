@@ -496,7 +496,22 @@
                 }
                 
                 console.log('Map container found:', mapContainer);
-                console.log('Container dimensions:', mapContainer.offsetWidth, 'x', mapContainer.offsetHeight);
+                console.log('Container dimensions BEFORE:', mapContainer.offsetWidth, 'x', mapContainer.offsetHeight);
+                
+                // FORCE HEIGHT if it's 0
+                if (mapContainer.offsetHeight === 0) {
+                    console.log('Container height is 0, forcing height...');
+                    mapContainer.style.height = '100vh';
+                    mapContainer.style.minHeight = '600px';
+                    mapContainer.style.width = '100vw';
+                    mapContainer.style.position = 'absolute';
+                    mapContainer.style.top = '0';
+                    mapContainer.style.left = '0';
+                    
+                    // Force reflow
+                    mapContainer.offsetHeight; 
+                    console.log('Container dimensions AFTER force:', mapContainer.offsetWidth, 'x', mapContainer.offsetHeight);
+                }
                 
                 // Bestehende Map entfernen falls vorhanden
                 if (map) {
