@@ -21,55 +21,22 @@
         }
         #controls-overlay {
             position: absolute;
-            bottom: 30px;
-            left: 30px;
+            bottom: 20px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             z-index: 1000;
-        }
-        #controls-button {
-            width: 44px;
-            height: 44px;
-            background: rgba(255, 255, 255, 0.9);
-            border-radius: 22px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-            backdrop-filter: blur(20px);
-            transition: all 0.2s ease;
-            border: 0.5px solid rgba(0, 0, 0, 0.04);
-        }
-        #controls-button:hover {
-            background: rgba(255, 255, 255, 0.95);
-            transform: scale(1.05);
-        }
-        #controls-button:active {
-            transform: scale(0.95);
-        }
-        #controls-button i {
-            font-size: 18px;
-            color: #1d1d1f;
-        }
-        #controls-content {
-            position: absolute;
-            bottom: 54px;
-            left: 0;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 16px;
-            padding: 20px;
-            min-width: 280px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-            backdrop-filter: blur(20px);
-            border: 0.5px solid rgba(0, 0, 0, 0.04);
-            display: none;
-            opacity: 0;
-            transform: translateY(10px);
+            max-width: 300px;
             transition: all 0.3s ease;
         }
-        #controls-content.expanded {
-            display: block;
-            opacity: 1;
-            transform: translateY(0);
+        #controls-header {
+            padding: 10px;
+            cursor: pointer;
+            background-color: #4a4a4a;
+            color: white;
+            border-radius: 5px 5px 0 0;
+            text-align: center;
         }
         #controls-content {
             padding: 10px;
@@ -81,70 +48,23 @@
             display: block;
         }
         .control-group {
-            margin-bottom: 16px;
+            margin-bottom: 10px;
         }
-        .control-group label {
-            display: block;
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-            font-size: 13px;
-            font-weight: 500;
-            color: #1d1d1f;
-            margin-bottom: 8px;
-        }
-        .control-group input[type="range"] {
+        input[type="range"] {
             width: 100%;
-            height: 6px;
-            border-radius: 3px;
-            background: #e5e5e7;
-            outline: none;
-            -webkit-appearance: none;
-        }
-        .control-group input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: #007aff;
-            cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0, 122, 255, 0.3);
-        }
-        .control-group input[type="number"], 
-        .control-group input[type="date"] {
-            width: 100%;
-            padding: 8px 12px;
-            border: 1px solid #d2d2d7;
-            border-radius: 8px;
-            font-size: 14px;
-            background: #f2f2f7;
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-        }
-        .control-group input[type="number"]:focus,
-        .control-group input[type="date"]:focus {
-            outline: none;
-            border-color: #007aff;
-            background: white;
         }
         button {
             width: 100%;
-            padding: 12px;
-            margin-top: 8px;
-            background: #007aff;
+            padding: 5px;
+            margin-top: 5px;
+            background-color: #4CAF50;
             color: white;
             border: none;
-            border-radius: 10px;
+            border-radius: 3px;
             cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-            transition: all 0.15s ease;
         }
         button:hover {
-            background: #0056d3;
-            transform: translateY(-1px);
-        }
-        button:active {
-            transform: translateY(0);
-            background: #004bb8;
+            background-color: #45a049;
         }
         #passwordOverlay {
             position: fixed;
@@ -218,129 +138,39 @@
         }
         #parameter-panel {
             position: absolute;
-            bottom: 30px;
-            left: 84px;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
             z-index: 1000;
         }
-        #parameter-button {
-            width: 44px;
-            height: 44px;
-            background: rgba(255, 255, 255, 0.9);
-            border-radius: 22px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-            backdrop-filter: blur(20px);
-            transition: all 0.2s ease;
-            border: 0.5px solid rgba(0, 0, 0, 0.04);
-        }
-        #parameter-button:hover {
-            background: rgba(255, 255, 255, 0.95);
-            transform: scale(1.05);
-        }
-        #parameter-button:active {
-            transform: scale(0.95);
-        }
-        #parameter-button i {
-            font-size: 18px;
-            color: #1d1d1f;
-        }
-        #parameter-content {
-            position: absolute;
-            bottom: 54px;
-            left: 0;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 16px;
-            padding: 20px;
-            min-width: 300px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-            backdrop-filter: blur(20px);
-            border: 0.5px solid rgba(0, 0, 0, 0.04);
-            display: none;
-            opacity: 0;
-            transform: translateY(10px);
-            transition: all 0.3s ease;
-        }
-        #parameter-content.expanded {
-            display: block;
-            opacity: 1;
-            transform: translateY(0);
-        }
-        #parameter-content {
-            padding: 10px;
-            display: none;
-            max-height: 60vh;
-            overflow-y: auto;
-        }
-        #parameter-content.expanded {
-            display: block;
+        #parameter-panel input {
+            width: 60px;
         }
         #info-overlay {
             position: absolute;
-            bottom: 30px;
-            right: 30px;
-            background: rgba(0, 0, 0, 0.7);
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.8);
             color: white;
-            padding: 16px;
-            border-radius: 16px;
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
-            font-size: 12px;
-            font-weight: 500;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
             z-index: 1000;
+            min-width: 250px;
             display: none;
-            backdrop-filter: blur(20px);
-            border: 0.5px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-        #info-content {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        #info-text {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-        #elevation-display {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-width: 80px;
         }
         #elevation-chart {
-            width: 80px;
-            height: 60px;
-            background: rgba(200, 200, 200, 0.3);
-            border-radius: 3px;
+            width: 200px;
+            height: 80px;
+            margin-top: 10px;
+            background: #333;
+            border-radius: 4px;
             position: relative;
             overflow: hidden;
-            border: 1px solid rgba(0,0,0,0.1);
-        }
-        #elevation-value {
-            font-size: 9px;
-            margin-top: 2px;
-            text-align: center;
-        }
-        @media (max-width: 768px) {
-            #info-overlay {
-                bottom: 10px;
-                right: 10px;
-                padding: 6px;
-                font-size: 10px;
-            }
-            #info-content {
-                gap: 8px;
-            }
-            #elevation-display {
-                min-width: 70px;
-            }
-            #elevation-chart {
-                width: 70px;
-                height: 50px;
-            }
         }
     </style>
 </head>
@@ -361,25 +191,23 @@
 
     <div id="map"></div>
     <div id="info-overlay">
-        <div id="info-content">
-            <div id="info-text">
-                <div>📅 <span id="current-date">--</span></div>
-                <div>🕐 <span id="current-time">--</span></div>
-                <div>📏 <span id="total-distance">--</span> km</div>
-            </div>
-            <div id="elevation-display">
-                <div id="elevation-chart"></div>
-                <div id="elevation-value"><span id="current-elevation">--</span>m</div>
-            </div>
-        </div>
+        <div><strong>Van Tracking Info</strong></div>
+        <div>📅 <span id="current-date">--</span></div>
+        <div>🕐 <span id="current-time">--</span></div>
+        <div>📍 Lat: <span id="current-lat">--</span></div>
+        <div>📍 Lon: <span id="current-lon">--</span></div>
+        <div>⚡ Speed: <span id="current-speed">--</span> km/h</div>
+        <div>📏 Distance: <span id="total-distance">--</span> km</div>
+        <div id="elevation-chart"></div>
+        <div>📈 Elevation: <span id="current-elevation">--</span> m</div>
     </div>
     <div id="controls-overlay">
-        <div id="controls-button" onclick="toggleControls()">
+        <div id="controls-header" onclick="toggleControls()">
             <i class="fas fa-cog"></i>
         </div>
         <div id="controls-content">
             <div class="control-group">
-                <label for="speedRange">Animation Speed</label>
+                <label for="speedRange">Animation Speed: </label>
                 <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
                 <span id="speedValue">20</span>x speed
             </div>
@@ -390,11 +218,11 @@
                 <button onclick="toggleDriveRoute()">Drive Route</button>
             </div>
             <div class="control-group">
-                <label for="startDate">Start Date</label>
+                <label for="startDate">Start Date: </label>
                 <input type="date" id="startDate" onchange="updateDateRange()">
             </div>
             <div class="control-group">
-                <label for="endDate">End Date</label>
+                <label for="endDate">End Date: </label>
                 <input type="date" id="endDate" onchange="updateDateRange()">
             </div>
             <div class="control-group">
@@ -405,44 +233,40 @@
     </div>
 
     <div id="parameter-panel">
-        <div id="parameter-button" onclick="toggleParameters()">
-            <i class="fas fa-cogs"></i>
+        <h3>POI Detection Parameters</h3>
+        <div>
+            <label for="maxClusterDistance">Max Cluster Distance (m):</label>
+            <input type="number" id="maxClusterDistance" value="1000">
         </div>
-        <div id="parameter-content">
-            <div class="control-group">
-                <label for="maxClusterDistance">Max Cluster Distance (m)</label>
-                <input type="number" id="maxClusterDistance" value="1000">
-            </div>
-            <div class="control-group">
-                <label for="minTimeBetweenPOIs">Min Time Between POIs (min)</label>
-                <input type="number" id="minTimeBetweenPOIs" value="15">
-            </div>
-            <div class="control-group">
-                <label for="sleepingThreshold">Sleeping Threshold (min)</label>
-                <input type="number" id="sleepingThreshold" value="360">
-            </div>
-            <div class="control-group">
-                <label for="parkingThreshold">Parking Threshold (min)</label>
-                <input type="number" id="parkingThreshold" value="60">
-            </div>
-            <div class="control-group">
-                <label for="coffeeBreakThreshold">Coffee Break Threshold (min)</label>
-                <input type="number" id="coffeeBreakThreshold" value="20">
-            </div>
-            <div class="control-group">
-                <label for="maxMergeDistance">Max Merge Distance (m)</label>
-                <input type="number" id="maxMergeDistance" value="2000">
-            </div>
-            <div class="control-group">
-                <label for="maxTimeBetweenMerge">Max Time Between Merge (hours)</label>
-                <input type="number" id="maxTimeBetweenMerge" value="24">
-            </div>
-            <div class="control-group">
-                <label for="roadSnapDistance">Road Snap Distance (m)</label>
-                <input type="number" id="roadSnapDistance" value="5000">
-            </div>
-            <button onclick="updateParameters()">Apply Changes</button>
+        <div>
+            <label for="minTimeBetweenPOIs">Min Time Between POIs (min):</label>
+            <input type="number" id="minTimeBetweenPOIs" value="15">
         </div>
+        <div>
+            <label for="sleepingThreshold">Sleeping Threshold (min):</label>
+            <input type="number" id="sleepingThreshold" value="360">
+        </div>
+        <div>
+            <label for="parkingThreshold">Parking Threshold (min):</label>
+            <input type="number" id="parkingThreshold" value="60">
+        </div>
+        <div>
+            <label for="coffeeBreakThreshold">Coffee Break Threshold (min):</label>
+            <input type="number" id="coffeeBreakThreshold" value="20">
+        </div>
+        <div>
+            <label for="maxMergeDistance">Max Merge Distance (m):</label>
+            <input type="number" id="maxMergeDistance" value="2000">
+        </div>
+        <div>
+            <label for="maxTimeBetweenMerge">Max Time Between Merge (hours):</label>
+            <input type="number" id="maxTimeBetweenMerge" value="24">
+        </div>
+        <div>
+            <label for="roadSnapDistance">Road Snap Distance (m):</label>
+            <input type="number" id="roadSnapDistance" value="5000">
+        </div>
+        <button onclick="updateParameters()">Apply Changes</button>
     </div>
 
     <script>
@@ -461,11 +285,6 @@
         var animationTimeout;
         var driveRouteRunning = false;
         var vanMarker;
-        var currentPOIIndex = 0;
-        var lastPOITime = null;
-        var nextPOITime = null;
-        var lastPOIPosition = null;
-        var nextPOIPosition = null;
         var stopMarkers = [];
         var homeMarker;
         var totalDistance = 0;
@@ -499,40 +318,6 @@
 
             if (startDate) document.getElementById('startDate').value = startDate;
             if (endDate) document.getElementById('endDate').value = endDate;
-            
-            // POI Parameter aus URL laden
-            if (urlParams.get('maxClusterDistance')) {
-                maxClusterDistance = parseInt(urlParams.get('maxClusterDistance'));
-                document.getElementById('maxClusterDistance').value = maxClusterDistance;
-            }
-            if (urlParams.get('minTimeBetweenPOIs')) {
-                minTimeBetweenPOIs = parseInt(urlParams.get('minTimeBetweenPOIs')) * 60 * 1000; // Convert to ms
-                document.getElementById('minTimeBetweenPOIs').value = parseInt(urlParams.get('minTimeBetweenPOIs'));
-            }
-            if (urlParams.get('sleepingThreshold')) {
-                sleepingThreshold = parseInt(urlParams.get('sleepingThreshold'));
-                document.getElementById('sleepingThreshold').value = sleepingThreshold;
-            }
-            if (urlParams.get('parkingThreshold')) {
-                parkingThreshold = parseInt(urlParams.get('parkingThreshold'));
-                document.getElementById('parkingThreshold').value = parkingThreshold;
-            }
-            if (urlParams.get('coffeeBreakThreshold')) {
-                coffeeBreakThreshold = parseInt(urlParams.get('coffeeBreakThreshold'));
-                document.getElementById('coffeeBreakThreshold').value = coffeeBreakThreshold;
-            }
-            if (urlParams.get('maxMergeDistance')) {
-                maxMergeDistance = parseInt(urlParams.get('maxMergeDistance'));
-                document.getElementById('maxMergeDistance').value = maxMergeDistance;
-            }
-            if (urlParams.get('maxTimeBetweenMerge')) {
-                maxTimeBetweenMerge = parseInt(urlParams.get('maxTimeBetweenMerge')) * 60 * 60 * 1000; // Convert to ms
-                document.getElementById('maxTimeBetweenMerge').value = parseInt(urlParams.get('maxTimeBetweenMerge'));
-            }
-            if (urlParams.get('roadSnapDistance')) {
-                roadSnapDistance = parseInt(urlParams.get('roadSnapDistance'));
-                document.getElementById('roadSnapDistance').value = roadSnapDistance;
-            }
         });
 
         function checkPassword() {
@@ -783,22 +568,10 @@
             document.getElementById('info-overlay').style.display = 'block';
             if (routePath) map.removeLayer(routePath);
             routePath = L.polyline([], {color: 'blue'}).addTo(map);
-            
-            // Van Marker richtig zurücksetzen
-            if (vanMarker) {
-                map.removeLayer(vanMarker);
-                vanMarker = null;
-            }
-            
             driveRouteRunning = true;
             totalDistance = 0;
             lastPosition = null;
             elevationData = [];
-            currentPOIIndex = 0;
-            lastPOITime = null;
-            nextPOITime = null;
-            lastPOIPosition = null;
-            nextPOIPosition = null;
             document.querySelector('button[onclick="toggleDriveRoute()"]').textContent = "Stop Driving";
             calculateCompleteRoute();
         }
@@ -987,13 +760,11 @@
             }
         }
 
-        // Hybrid-Zeit-System: POI-basiert + Interpolation
+        // Komplett überarbeitete Animation mit echter Zeit und Geschwindigkeit
         function animateVanAlongRoute(route, step, routePOIs) {
             if (step < route.length && driveRouteRunning) {
                 var point = route[step];
-                
-                // Berechne aktuelle Zeit mit Hybrid-System
-                var currentTime = calculateHybridTime(point, step, route.length);
+                var currentTime = interpolateRealTimeFromRoute(step, route.length);
 
                 if (!vanMarker) {
                     vanMarker = L.marker(point, {
@@ -1016,11 +787,13 @@
                 }
                 lastPosition = point;
 
-                // POI-Erkennung
+                // Verbesserte POI-Erkennung - checke alle POIs
                 for (let poi of poiCoordinates) {
                     let distance = calculateDistance(poi.lat, poi.lon, point[0], point[1]);
                     
+                    // POI erreicht wenn wir sehr nahe sind (1km Toleranz)
                     if (distance < 1000) {
+                        // Prüfe ob dieser POI bereits angezeigt wurde
                         let alreadyDisplayed = stopMarkers.some(m => 
                             calculateDistance(m.getLatLng().lat, m.getLatLng().lng, poi.lat, poi.lon) < 500
                         );
@@ -1032,96 +805,55 @@
                     }
                 }
 
-                // Update info overlay
+                // Update info overlay mit echter Zeit
                 updateInfoOverlay(point, currentTime, step, route.length);
 
                 currentAnimationIndex = step;
                 
+                // Geschwindigkeitsbasierte Animation - speed ist in km/s
                 var timeToNextPoint = calculateTimeToNextPoint(point, route[step + 1] || point);
                 animationTimeout = setTimeout(function() {
                     animateVanAlongRoute(route, step + 1, routePOIs);
                 }, timeToNextPoint);
             } else if (step >= route.length && driveRouteRunning) {
                 console.log("Route completed!");
-                setTimeout(stopDriveRoute, 2000);
+                setTimeout(stopDriveRoute, 2000); // Warte 2 Sekunden bevor Stop
             }
         }
 
-        // Hybrid-Zeit-Berechnung: POI-basiert + Interpolation
-        function calculateHybridTime(currentPoint, step, totalSteps) {
-            // 1. Prüfe ob POI erreicht (harte Zeitvorgabe)
-            for (let poi of poiCoordinates) {
-                let distance = calculateDistance(poi.lat, poi.lon, currentPoint[0], currentPoint[1]);
-                if (distance < 1000) {
-                    console.log(`Time set to POI: ${poi.time.toLocaleString('de-DE')}`);
-                    updatePOIAnchors(poi);
-                    return poi.time;
-                }
-            }
+        // Echte Zeit-Interpolation basierend auf originalen Datenpunkten
+        function interpolateRealTimeFromRoute(step, totalSteps) {
+            if (filteredCoordinates.length === 0) return new Date();
             
-            // 2. Interpoliere zwischen bekannten POI-Zeiten
-            if (lastPOITime && nextPOITime && lastPOIPosition && nextPOIPosition) {
-                let totalDistance = calculateDistance(
-                    lastPOIPosition[0], lastPOIPosition[1], 
-                    nextPOIPosition[0], nextPOIPosition[1]
-                );
-                let currentDistance = calculateDistance(
-                    lastPOIPosition[0], lastPOIPosition[1], 
-                    currentPoint[0], currentPoint[1]
-                );
-                let progress = Math.min(currentDistance / totalDistance, 1);
-                
-                let timeDiff = nextPOITime - lastPOITime;
-                return new Date(lastPOITime.getTime() + (timeDiff * progress));
-            }
+            // Finde den Fortschritt in der gesamten Route (0 bis 1)
+            const progress = step / totalSteps;
             
-            // 3. Fallback: Linear über gesamte Route
-            if (filteredCoordinates.length > 0) {
-                let routeProgress = step / totalSteps;
-                let startTime = filteredCoordinates[0].time;
-                let endTime = filteredCoordinates[filteredCoordinates.length - 1].time;
-                let timeDiff = endTime - startTime;
-                return new Date(startTime.getTime() + (timeDiff * routeProgress));
-            }
+            // Interpoliere zwischen erstem und letztem Datenpunkt
+            const startTime = filteredCoordinates[0].time;
+            const endTime = filteredCoordinates[filteredCoordinates.length - 1].time;
+            const totalDuration = endTime - startTime;
             
-            return new Date();
-        }
-
-        // Aktualisiere POI-Anker für Interpolation
-        function updatePOIAnchors(currentPOI) {
-            lastPOITime = currentPOI.time;
-            lastPOIPosition = [currentPOI.lat, currentPOI.lon];
-            
-            // Finde nächsten POI
-            let currentIndex = poiCoordinates.findIndex(poi => poi.time === currentPOI.time);
-            if (currentIndex >= 0 && currentIndex < poiCoordinates.length - 1) {
-                let nextPOI = poiCoordinates[currentIndex + 1];
-                nextPOITime = nextPOI.time;
-                nextPOIPosition = [nextPOI.lat, nextPOI.lon];
-            } else {
-                nextPOITime = null;
-                nextPOIPosition = null;
-            }
-        }
-
-        function toggleParameters() {
-            var content = document.getElementById('parameter-content');
-            content.classList.toggle('expanded');
+            return new Date(startTime.getTime() + (totalDuration * progress));
         }
 
         function updateInfoOverlay(point, currentTime, step, totalSteps) {
             document.getElementById('current-date').textContent = currentTime.toLocaleDateString('de-DE');
             document.getElementById('current-time').textContent = currentTime.toLocaleTimeString('de-DE');
+            document.getElementById('current-lat').textContent = point[0].toFixed(6);
+            document.getElementById('current-lon').textContent = point[1].toFixed(6);
             document.getElementById('total-distance').textContent = totalDistance.toFixed(1);
             
-            // Realistische Elevation basierend auf Position (0-2000m)
-            currentElevation = Math.abs(Math.sin(point[0] * 0.01) * 800 + Math.cos(point[1] * 0.01) * 400 + 200);
-            currentElevation = Math.min(currentElevation, 2000);
+            // Realistische Reisegeschwindigkeit (50-120 km/h je nach speed setting)
+            let realisticSpeed = 50 + (speed / 100) * 70; // 50-120 km/h
+            document.getElementById('current-speed').textContent = realisticSpeed.toFixed(0);
+            
+            // Elevation (mockup - aber realistischer basierend auf Position)
+            currentElevation = 50 + Math.sin(point[0] * 0.01) * 100 + Math.cos(point[1] * 0.01) * 50;
             document.getElementById('current-elevation').textContent = currentElevation.toFixed(0);
             
-            // Elevation chart update mit intelligenter Skalierung
+            // Elevation chart update
             elevationData.push(currentElevation);
-            if (elevationData.length > 20) elevationData.shift(); // Keep last 20 points
+            if (elevationData.length > 50) elevationData.shift(); // Keep last 50 points
             updateElevationChart();
         }
 
@@ -1130,83 +862,31 @@
             let canvas = chart.querySelector('canvas');
             if (!canvas) {
                 canvas = document.createElement('canvas');
-                canvas.width = 80;
-                canvas.height = 60;
+                canvas.width = 200;
+                canvas.height = 80;
                 chart.appendChild(canvas);
             }
             
             let ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, 80, 60);
+            ctx.clearRect(0, 0, 200, 80);
             
             if (elevationData.length > 1) {
-                // Einfache relative Skalierung für Höhenänderungen
-                const minElev = Math.min(...elevationData);
-                const maxElev = Math.max(...elevationData);
-                const range = Math.max(maxElev - minElev, 10); // Minimum 10m für Sichtbarkeit
-                
-                // Zeichne subtiles Gitternetz
-                ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
-                ctx.lineWidth = 0.5;
-                for (let i = 1; i < 4; i++) {
-                    const y = (i / 4) * 60;
-                    ctx.beginPath();
-                    ctx.moveTo(0, y);
-                    ctx.lineTo(80, y);
-                    ctx.stroke();
-                }
-                
-                // Zeichne Elevation-Kurve
-                ctx.strokeStyle = '#2196F3';
+                ctx.strokeStyle = '#4CAF50';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
                 
+                let minElev = Math.min(...elevationData);
+                let maxElev = Math.max(...elevationData);
+                let range = maxElev - minElev || 1;
+                
                 for (let i = 0; i < elevationData.length; i++) {
-                    let x = (i / (elevationData.length - 1)) * 80;
-                    let y = 60 - ((elevationData[i] - minElev) / range) * 60;
+                    let x = (i / (elevationData.length - 1)) * 200;
+                    let y = 80 - ((elevationData[i] - minElev) / range) * 80;
                     
                     if (i === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
                 }
                 ctx.stroke();
-                
-                // Zeichne gefüllte Fläche unter der Kurve
-                ctx.fillStyle = 'rgba(33, 150, 243, 0.2)';
-                ctx.beginPath();
-                ctx.moveTo(0, 60);
-                for (let i = 0; i < elevationData.length; i++) {
-                    let x = (i / (elevationData.length - 1)) * 80;
-                    let y = 60 - ((elevationData[i] - minElev) / range) * 60;
-                    ctx.lineTo(x, y);
-                }
-                ctx.lineTo(80, 60);
-                ctx.closePath();
-                ctx.fill();
-                
-                // Zeichne aktuellen Punkt
-                if (elevationData.length > 0) {
-                    const currentX = 78;
-                    const currentY = 60 - ((elevationData[elevationData.length - 1] - minElev) / range) * 60;
-                    
-                    ctx.fillStyle = '#FF5722';
-                    ctx.beginPath();
-                    ctx.arc(currentX, currentY, 2.5, 0, 2 * Math.PI);
-                    ctx.fill();
-                }
-                
-                // Zeige Höhenänderung seit Start
-                const heightChange = elevationData[elevationData.length - 1] - elevationData[0];
-                let changeText;
-                if (Math.abs(heightChange) < 1) {
-                    changeText = "±0m";
-                } else if (heightChange > 0) {
-                    changeText = `+${heightChange.toFixed(0)}m`;
-                } else {
-                    changeText = `${heightChange.toFixed(0)}m`;
-                }
-                
-                ctx.fillStyle = heightChange >= 0 ? '#4CAF50' : '#F44336';
-                ctx.font = '9px monospace';
-                ctx.fillText(changeText, 2, 12);
             }
         }
 
@@ -1319,16 +999,6 @@
             
             if (startDate) shareUrl += `start=${startDate}&`;
             if (endDate) shareUrl += `end=${endDate}&`;
-            
-            // POI Parameter hinzufügen
-            shareUrl += `maxClusterDistance=${maxClusterDistance}&`;
-            shareUrl += `minTimeBetweenPOIs=${minTimeBetweenPOIs / (60 * 1000)}&`; // Convert back to minutes
-            shareUrl += `sleepingThreshold=${sleepingThreshold}&`;
-            shareUrl += `parkingThreshold=${parkingThreshold}&`;
-            shareUrl += `coffeeBreakThreshold=${coffeeBreakThreshold}&`;
-            shareUrl += `maxMergeDistance=${maxMergeDistance}&`;
-            shareUrl += `maxTimeBetweenMerge=${maxTimeBetweenMerge / (60 * 60 * 1000)}&`; // Convert back to hours
-            shareUrl += `roadSnapDistance=${roadSnapDistance}&`;
             shareUrl += 'autoplay=true';
             
             var shareLinkElement = document.getElementById('shareLink');
