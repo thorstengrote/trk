@@ -458,24 +458,107 @@
         var maxTimeBetweenMerge = 24 * 60 * 60 * 1000;
         var roadSnapDistance = 5000;
 
-        // Password Check
+        // Password Check (mit debugging)
         function checkPassword() {
             var password = document.getElementById('passwordInput').value;
+            console.log('Password entered:', password);
+            
             if (password === 'thorsten') {
+                console.log('Password correct, hiding overlay...');
                 document.getElementById('passwordOverlay').style.display = 'none';
-                initializeMap();
+                
+                console.log('Starting map initialization...');
+                setTimeout(function() {
+                    initializeMap();
+                }, 100);
             } else {
                 alert('Incorrect password');
             }
         }
 
-        // Map initialisieren
+        // Map initialisieren (mit expliziter Größe und besserer Fehlerbehandlung)
         function initializeMap() {
-            map = L.map('map').setView([51.505, -0.09], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(map);
-            loadGPSData();
+            try {
+                // Prüfen ob Leaflet geladen ist
+                if (typeof L === 'undefined') {
+                    console.error('Leaflet library not loaded!');
+                    alert('Map library not loaded. Please refresh the page.');
+                    return;
+                }
+                
+                console.log('Leaflet version:', L.version);
+                
+                // Map Container prüfen
+                const mapContainer = document.getElementById('map');
+                if (!mapContainer) {
+                    console.error('Map container not found!');
+                    return;
+                }
+                
+                console.log('Map container found:', mapContainer);
+                console.log('Container dimensions:', mapContainer.offsetWidth, 'x', mapContainer.offsetHeight);
+                
+                // Bestehende Map entfernen falls vorhanden
+                if (map) {
+                    map.remove();
+                    map = null;
+                }
+                
+                console.log('Initializing map...');
+                
+                // Map erstellen
+                map = L.map('map', {
+                    preferCanvas: false,
+                    attributionControl: true,
+                    zoomControl: true
+                }).setView([50.7852, 7.0141], 10); // Bornheim als Center
+                
+                console.log('Map object created:', map);
+                
+                // Tile Layer hinzufügen
+                const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19,
+                    detectRetina: true
+                });
+                
+                tileLayer.addTo(map);
+                
+                tileLayer.on('loading', function() {
+                    console.log('Tiles loading...');
+                });
+                
+                tileLayer.on('load', function() {
+                    console.log('Tiles loaded successfully!');
+                });
+                
+                tileLayer.on('tileerror', function(error) {
+                    console.error('Tile loading error:', error);
+                });
+                
+                // Map Event Listeners
+                map.on('moveend', function() {
+                    console.log('Map moved to:', map.getCenter());
+                });
+                
+                // Force resize nach kurzer Verzögerung
+                setTimeout(function() {
+                    if (map) {
+                        map.invalidateSize();
+                        console.log('Map size invalidated');
+                        console.log('Final map container size:', map.getContainer().offsetWidth, 'x', map.getContainer().offsetHeight);
+                    }
+                }, 200);
+                
+                console.log('Map initialization complete');
+                
+                // GPS Daten laden
+                loadGPSData();
+                
+            } catch (error) {
+                console.error('Map initialization failed:', error);
+                alert('Map initialization failed: ' + error.message + '. Please refresh the page.');
+            }
         }
 
         // Controls toggle
