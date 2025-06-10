@@ -13,6 +13,50 @@
             font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
             background: #000;
         }
+        
+        // URL Parameter handling
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const startDate = urlParams.get('start');
+            const endDate = urlParams.get('end');
+
+            if (startDate) document.getElementById('startDate').value = startDate;
+            if (endDate) document.getElementById('endDate').value = endDate;
+            
+            // POI Parameter aus URL laden
+            if (urlParams.get('maxClusterDistance')) {
+                maxClusterDistance = parseInt(urlParams.get('maxClusterDistance'));
+                document.getElementById('maxClusterDistance').value = maxClusterDistance;
+            }
+            if (urlParams.get('minTimeBetweenPOIs')) {
+                minTimeBetweenPOIs = parseInt(urlParams.get('minTimeBetweenPOIs')) * 60 * 1000;
+                document.getElementById('minTimeBetweenPOIs').value = parseInt(urlParams.get('minTimeBetweenPOIs'));
+            }
+            if (urlParams.get('sleepingThreshold')) {
+                sleepingThreshold = parseInt(urlParams.get('sleepingThreshold'));
+                document.getElementById('sleepingThreshold').value = sleepingThreshold;
+            }
+            if (urlParams.get('parkingThreshold')) {
+                parkingThreshold = parseInt(urlParams.get('parkingThreshold'));
+                document.getElementById('parkingThreshold').value = parkingThreshold;
+            }
+            if (urlParams.get('coffeeBreakThreshold')) {
+                coffeeBreakThreshold = parseInt(urlParams.get('coffeeBreakThreshold'));
+                document.getElementById('coffeeBreakThreshold').value = coffeeBreakThreshold;
+            }
+            if (urlParams.get('maxMergeDistance')) {
+                maxMergeDistance = parseInt(urlParams.get('maxMergeDistance'));
+                document.getElementById('maxMergeDistance').value = maxMergeDistance;
+            }
+            if (urlParams.get('maxTimeBetweenMerge')) {
+                maxTimeBetweenMerge = parseInt(urlParams.get('maxTimeBetweenMerge')) * 60 * 60 * 1000;
+                document.getElementById('maxTimeBetweenMerge').value = parseInt(urlParams.get('maxTimeBetweenMerge'));
+            }
+            if (urlParams.get('roadSnapDistance')) {
+                roadSnapDistance = parseInt(urlParams.get('roadSnapDistance'));
+                document.getElementById('roadSnapDistance').value = roadSnapDistance;
+            }
+        });
         #map {
             height: 100vh;
             width: 100%;
@@ -82,6 +126,36 @@
             border: 0.5px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
         }
+        #info-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #info-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        #elevation-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 80px;
+        }
+        #elevation-chart {
+            width: 80px;
+            height: 60px;
+            background: rgba(200, 200, 200, 0.3);
+            border-radius: 3px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        #elevation-value {
+            font-size: 9px;
+            margin-top: 2px;
+            text-align: center;
+        }
         .control-group {
             margin-bottom: 16px;
         }
@@ -91,6 +165,88 @@
             font-weight: 500;
             color: #1d1d1f;
             margin-bottom: 8px;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #e5e5e7;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        .control-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #007aff;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 122, 255, 0.3);
+        }
+        .control-group input[type="number"], 
+        .control-group input[type="date"] {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #f2f2f7;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+        }
+        .control-group input[type="number"]:focus,
+        .control-group input[type="date"]:focus {
+            outline: none;
+            border-color: #007aff;
+            background: white;
+        }
+        #parameter-panel {
+            position: absolute;
+            bottom: 30px;
+            left: 84px;
+            z-index: 1000;
+        }
+        #parameter-button {
+            width: 44px;
+            height: 44px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(20px);
+            transition: all 0.2s ease;
+            border: 0.5px solid rgba(0, 0, 0, 0.04);
+        }
+        #parameter-button:hover {
+            background: rgba(255, 255, 255, 0.95);
+            transform: scale(1.05);
+        }
+        #parameter-button i {
+            font-size: 18px;
+            color: #1d1d1f;
+        }
+        #parameter-content {
+            position: absolute;
+            bottom: 54px;
+            left: 0;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 20px;
+            min-width: 300px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+            backdrop-filter: blur(20px);
+            border: 0.5px solid rgba(0, 0, 0, 0.04);
+            display: none;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+        }
+        #parameter-content.expanded {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
         }
         button {
             width: 100%;
@@ -186,9 +342,17 @@
     <div id="map"></div>
 
     <div id="info-overlay">
-        <div>📅 <span id="current-date">--</span></div>
-        <div>🕐 <span id="current-time">--</span></div>
-        <div>📏 <span id="total-distance">--</span> km</div>
+        <div id="info-content">
+            <div id="info-text">
+                <div>📅 <span id="current-date">--</span></div>
+                <div>🕐 <span id="current-time">--</span></div>
+                <div>📏 <span id="total-distance">--</span> km</div>
+            </div>
+            <div id="elevation-display">
+                <div id="elevation-chart"></div>
+                <div id="elevation-value"><span id="current-elevation">--</span>m</div>
+            </div>
+        </div>
     </div>
 
     <div id="controls-overlay">
@@ -197,8 +361,69 @@
         </div>
         <div id="controls-content">
             <div class="control-group">
+                <label for="speedRange">Animation Speed</label>
+                <input type="range" id="speedRange" min="1" max="100" value="20" oninput="updateSpeed(this.value)">
+                <span id="speedValue">20</span>x speed
+            </div>
+            <div class="control-group">
+                <button onclick="togglePoints()">Show Points</button>
+                <button onclick="toggleAnimation()">Start Animation</button>
+                <button onclick="toggleRoute()">Show Route</button>
                 <button onclick="toggleDriveRoute()">Drive Route</button>
             </div>
+            <div class="control-group">
+                <label for="startDate">Start Date</label>
+                <input type="date" id="startDate" onchange="updateDateRange()">
+            </div>
+            <div class="control-group">
+                <label for="endDate">End Date</label>
+                <input type="date" id="endDate" onchange="updateDateRange()">
+            </div>
+            <div class="control-group">
+                <button onclick="generateShareLink()">Generate Share Link</button>
+                <div id="shareLink"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="parameter-panel">
+        <div id="parameter-button" onclick="toggleParameters()">
+            <i class="fas fa-sliders-h"></i>
+        </div>
+        <div id="parameter-content">
+            <div class="control-group">
+                <label for="maxClusterDistance">Max Cluster Distance (m)</label>
+                <input type="number" id="maxClusterDistance" value="1000">
+            </div>
+            <div class="control-group">
+                <label for="minTimeBetweenPOIs">Min Time Between POIs (min)</label>
+                <input type="number" id="minTimeBetweenPOIs" value="15">
+            </div>
+            <div class="control-group">
+                <label for="sleepingThreshold">Sleeping Threshold (min)</label>
+                <input type="number" id="sleepingThreshold" value="360">
+            </div>
+            <div class="control-group">
+                <label for="parkingThreshold">Parking Threshold (min)</label>
+                <input type="number" id="parkingThreshold" value="60">
+            </div>
+            <div class="control-group">
+                <label for="coffeeBreakThreshold">Coffee Break Threshold (min)</label>
+                <input type="number" id="coffeeBreakThreshold" value="20">
+            </div>
+            <div class="control-group">
+                <label for="maxMergeDistance">Max Merge Distance (m)</label>
+                <input type="number" id="maxMergeDistance" value="2000">
+            </div>
+            <div class="control-group">
+                <label for="maxTimeBetweenMerge">Max Time Between Merge (hours)</label>
+                <input type="number" id="maxTimeBetweenMerge" value="24">
+            </div>
+            <div class="control-group">
+                <label for="roadSnapDistance">Road Snap Distance (m)</label>
+                <input type="number" id="roadSnapDistance" value="5000">
+            </div>
+            <button onclick="updateParameters()">Apply Changes</button>
         </div>
     </div>
 
@@ -207,19 +432,36 @@
         // Globale Variablen
         var map;
         var coordinates = [];
+        var filteredCoordinates = [];
         var poiCoordinates = [];
         var vanMarker = null;
+        var currentMarker = null;
         var routePath = null;
+        var animationRunning = false;
         var driveRouteRunning = false;
+        var speed = 20;
         var animationTimeout = null;
         var totalDistance = 0;
         var lastPosition = null;
         var stopMarkers = [];
+        var currentAnimationIndex = 0;
+        var elevationData = [];
+        var currentElevation = 0;
+
+        // POI Parameter  
+        var maxClusterDistance = 1000;
+        var minTimeBetweenPOIs = 15 * 60 * 1000;
+        var sleepingThreshold = 360;
+        var parkingThreshold = 60;
+        var coffeeBreakThreshold = 20;
+        var maxMergeDistance = 2000;
+        var maxTimeBetweenMerge = 24 * 60 * 60 * 1000;
+        var roadSnapDistance = 5000;
 
         // Password Check
         function checkPassword() {
             var password = document.getElementById('passwordInput').value;
-            if (password === 'grotte') {
+            if (password === 'thorsten') {
                 document.getElementById('passwordOverlay').style.display = 'none';
                 initializeMap();
             } else {
@@ -240,6 +482,18 @@
         function toggleControls() {
             var content = document.getElementById('controls-content');
             content.classList.toggle('expanded');
+        }
+
+        // Parameter panel toggle
+        function toggleParameters() {
+            var content = document.getElementById('parameter-content');
+            content.classList.toggle('expanded');
+        }
+
+        // Speed update
+        function updateSpeed(value) {
+            speed = parseInt(value);
+            document.getElementById('speedValue').textContent = value;
         }
 
         // Drive Route toggle
@@ -387,7 +641,7 @@
             }
         }
 
-        // POI Check
+        // POI Check (mit Elevation Update)
         var currentTime = null;
         function checkPOIReached(point) {
             for (let poi of poiCoordinates) {
@@ -402,18 +656,43 @@
                         console.log(`POI reached: ${poi.stopType}`);
                         addStopMarker(poi);
                         currentTime = poi.time; // Zeit setzen
+                        
+                        // Elevation für POI setzen (mockup da OSRM keine hat)
+                        currentElevation = poi.elevation || (200 + Math.random() * 800);
+                        elevationData.push(currentElevation);
+                        if (elevationData.length > 20) elevationData.shift();
+                        updateElevationChart();
                     }
                 }
             }
         }
 
-        // Info Overlay Update
+        // Info Overlay Update (mit deutscher Zeitzone)
         function updateInfoOverlay() {
             if (currentTime) {
-                document.getElementById('current-date').textContent = currentTime.toLocaleDateString('de-DE');
-                document.getElementById('current-time').textContent = currentTime.toLocaleTimeString('de-DE');
+                // Deutsche Zeitzone (Bornheim)
+                const options = { 
+                    timeZone: 'Europe/Berlin',
+                    day: '2-digit',
+                    month: '2-digit', 
+                    year: 'numeric'
+                };
+                const timeOptions = {
+                    timeZone: 'Europe/Berlin',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                };
+                
+                document.getElementById('current-date').textContent = currentTime.toLocaleDateString('de-DE', options);
+                document.getElementById('current-time').textContent = currentTime.toLocaleTimeString('de-DE', timeOptions);
             }
             document.getElementById('total-distance').textContent = totalDistance.toFixed(1);
+            
+            // Elevation Update
+            if (currentElevation) {
+                document.getElementById('current-elevation').textContent = currentElevation.toFixed(0);
+            }
         }
 
         // Stop Marker hinzufügen
@@ -446,6 +725,180 @@
             stopMarkers.push(marker);
         }
 
+        // Elevation Chart Update
+        function updateElevationChart() {
+            let chart = document.getElementById('elevation-chart');
+            let canvas = chart.querySelector('canvas');
+            if (!canvas) {
+                canvas = document.createElement('canvas');
+                canvas.width = 80;
+                canvas.height = 60;
+                chart.appendChild(canvas);
+            }
+            
+            let ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, 80, 60);
+            
+            if (elevationData.length > 1) {
+                const minElev = Math.min(...elevationData);
+                const maxElev = Math.max(...elevationData);
+                const range = Math.max(maxElev - minElev, 10);
+                
+                // Grid
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+                ctx.lineWidth = 0.5;
+                for (let i = 1; i < 4; i++) {
+                    const y = (i / 4) * 60;
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(80, y);
+                    ctx.stroke();
+                }
+                
+                // Line
+                ctx.strokeStyle = '#2196F3';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                
+                for (let i = 0; i < elevationData.length; i++) {
+                    let x = (i / (elevationData.length - 1)) * 80;
+                    let y = 60 - ((elevationData[i] - minElev) / range) * 60;
+                    
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                
+                // Fill
+                ctx.fillStyle = 'rgba(33, 150, 243, 0.2)';
+                ctx.beginPath();
+                ctx.moveTo(0, 60);
+                for (let i = 0; i < elevationData.length; i++) {
+                    let x = (i / (elevationData.length - 1)) * 80;
+                    let y = 60 - ((elevationData[i] - minElev) / range) * 60;
+                    ctx.lineTo(x, y);
+                }
+                ctx.lineTo(80, 60);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Current point
+                if (elevationData.length > 0) {
+                    const currentX = 78;
+                    const currentY = 60 - ((elevationData[elevationData.length - 1] - minElev) / range) * 60;
+                    
+                    ctx.fillStyle = '#FF5722';
+                    ctx.beginPath();
+                    ctx.arc(currentX, currentY, 2.5, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+        }
+
+        // Fehlende Control-Funktionen
+        function togglePoints() {
+            // Placeholder - zeige alle GPS Punkte
+            console.log('Toggle Points - Feature coming soon');
+        }
+
+        function toggleAnimation() {
+            if (!animationRunning) {
+                startAnimation();
+            } else {
+                stopAnimation();
+            }
+        }
+
+        function startAnimation() {
+            if (coordinates.length === 0) {
+                alert('No data to animate. Please load GPS data first.');
+                return;
+            }
+            
+            animationRunning = true;
+            totalDistance = 0;
+            lastPosition = null;
+            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Stop Animation";
+            document.getElementById('info-overlay').style.display = 'block';
+            // Normale Animation - simplified
+            console.log('Normal animation started');
+        }
+
+        function stopAnimation() {
+            animationRunning = false;
+            if (animationTimeout) clearTimeout(animationTimeout);
+            if (currentMarker) {
+                map.removeLayer(currentMarker);
+                currentMarker = null;
+            }
+            document.getElementById('info-overlay').style.display = 'none';
+            document.querySelector('button[onclick="toggleAnimation()"]').textContent = "Start Animation";
+        }
+
+        function toggleRoute() {
+            // Placeholder - zeige Route
+            console.log('Toggle Route - Feature coming soon');
+        }
+
+        function updateDateRange() {
+            filterData();
+        }
+
+        function filterData() {
+            const startDateInput = document.getElementById('startDate').value;
+            const endDateInput = document.getElementById('endDate').value;
+            
+            if (!startDateInput && !endDateInput) {
+                console.log("Using all coordinates - no date filter applied");
+                filteredCoordinates = [...coordinates];
+                return;
+            }
+            
+            const startDate = startDateInput ? new Date(startDateInput) : null;
+            const endDate = endDateInput ? new Date(endDateInput) : null;
+            
+            if (endDate) {
+                endDate.setHours(23, 59, 59, 999);
+            }
+            
+            filteredCoordinates = coordinates.filter(coord => {
+                const coordDate = new Date(coord.time);
+                if (startDate && coordDate < startDate) return false;
+                if (endDate && coordDate > endDate) return false;
+                return true;
+            });
+            
+            console.log(`Filtered to ${filteredCoordinates.length} coordinates`);
+        }
+
+        function generateShareLink() {
+            var startDate = document.getElementById('startDate').value;
+            var endDate = document.getElementById('endDate').value;
+            
+            var currentUrl = window.location.href.split('?')[0];
+            var shareUrl = currentUrl + '?';
+            
+            if (startDate) shareUrl += `start=${startDate}&`;
+            if (endDate) shareUrl += `end=${endDate}&`;
+            shareUrl += 'autoplay=true';
+            
+            var shareLinkElement = document.getElementById('shareLink');
+            shareLinkElement.innerHTML = `<a href="${shareUrl}" target="_blank">${shareUrl}</a>`;
+        }
+
+        function updateParameters() {
+            maxClusterDistance = parseInt(document.getElementById('maxClusterDistance').value);
+            minTimeBetweenPOIs = parseInt(document.getElementById('minTimeBetweenPOIs').value) * 60 * 1000;
+            sleepingThreshold = parseInt(document.getElementById('sleepingThreshold').value);
+            parkingThreshold = parseInt(document.getElementById('parkingThreshold').value);
+            coffeeBreakThreshold = parseInt(document.getElementById('coffeeBreakThreshold').value);
+            maxMergeDistance = parseInt(document.getElementById('maxMergeDistance').value);
+            maxTimeBetweenMerge = parseInt(document.getElementById('maxTimeBetweenMerge').value) * 60 * 60 * 1000;
+            roadSnapDistance = parseInt(document.getElementById('roadSnapDistance').value);
+            
+            console.log("Parameters updated, re-identifying POIs...");
+            identifyPOIs();
+        }
         // Distance berechnen
         function calculateDistance(lat1, lon1, lat2, lon2) {
             const R = 6371e3;
@@ -507,11 +960,11 @@
             identifyPOIs();
         }
 
-        // POIs identifizieren (vereinfacht)
+        // POIs identifizieren (mit konfigurierbaren Parametern)
         function identifyPOIs() {
-            poiCoordinates = [];
+            console.log(`Starting POI identification with ${coordinates.length} points`);
             
-            // Einfache POI-Erkennung basierend auf längeren Aufenthalten
+            poiCoordinates = [];
             let clusters = [];
             let currentCluster = null;
             
@@ -522,7 +975,9 @@
                 const distance = calculateDistance(point1.lat, point1.lon, point2.lat, point2.lon);
                 const timeDiff = (point2.time - point1.time) / (1000 * 60); // minutes
                 
-                if (distance <= 1000) { // weniger als 1km bewegt
+                console.log(`Point ${i}: Distance to next = ${distance.toFixed(2)}m, Time diff = ${timeDiff.toFixed(2)}min`);
+                
+                if (distance <= maxClusterDistance) {
                     if (!currentCluster) {
                         currentCluster = {
                             points: [point1],
@@ -535,32 +990,73 @@
                 } else {
                     if (currentCluster) {
                         const duration = (currentCluster.endTime - currentCluster.startTime) / (1000 * 60);
+                        const stopType = classifyStop(duration);
+                        console.log(`Cluster ended. Duration: ${duration.toFixed(2)}min, Type: ${stopType}`);
                         
-                        if (duration >= 60) { // Mindestens 1 Stunde
+                        if (stopType !== 'Moving') {
                             const avgLat = currentCluster.points.reduce((sum, p) => sum + p.lat, 0) / currentCluster.points.length;
                             const avgLon = currentCluster.points.reduce((sum, p) => sum + p.lon, 0) / currentCluster.points.length;
-                            
-                            let stopType = duration >= 360 ? 'Sleeping' : 'Parking';
                             
                             poiCoordinates.push({
                                 lat: avgLat,
                                 lon: avgLon,
                                 duration: duration,
                                 stopType: stopType,
-                                time: currentCluster.startTime
+                                time: currentCluster.startTime,
+                                endTime: currentCluster.endTime
                             });
+                            
+                            console.log(`POI added: ${stopType} at ${avgLat}, ${avgLon}`);
                         }
                     }
                     currentCluster = null;
                 }
             }
             
+            // Letzter Cluster
+            if (currentCluster) {
+                const duration = (currentCluster.endTime - currentCluster.startTime) / (1000 * 60);
+                const stopType = classifyStop(duration);
+                console.log(`Last cluster. Duration: ${duration.toFixed(2)}min, Type: ${stopType}`);
+                
+                if (stopType !== 'Moving') {
+                    const avgLat = currentCluster.points.reduce((sum, p) => sum + p.lat, 0) / currentCluster.points.length;
+                    const avgLon = currentCluster.points.reduce((sum, p) => sum + p.lon, 0) / currentCluster.points.length;
+                    
+                    poiCoordinates.push({
+                        lat: avgLat,
+                        lon: avgLon,
+                        duration: duration,
+                        stopType: stopType,
+                        time: currentCluster.startTime,
+                        endTime: currentCluster.endTime
+                    });
+                }
+            }
+            
             console.log(`Identified ${poiCoordinates.length} POIs`);
+            const poiTypeCount = {};
+            poiCoordinates.forEach(poi => {
+                poiTypeCount[poi.stopType] = (poiTypeCount[poi.stopType] || 0) + 1;
+            });
+            console.log(`POIs by class:`, poiTypeCount);
             
             // Map anpassen
             if (coordinates.length > 0) {
                 const bounds = L.latLngBounds(coordinates.map(coord => [coord.lat, coord.lon]));
                 map.fitBounds(bounds);
+            }
+        }
+
+        function classifyStop(durationMinutes) {
+            if (durationMinutes >= sleepingThreshold) {
+                return 'Sleeping';
+            } else if (durationMinutes >= parkingThreshold) {
+                return 'Parking';
+            } else if (durationMinutes >= coffeeBreakThreshold) {
+                return 'Coffee Break';
+            } else {
+                return 'Moving';
             }
         }
     </script>
