@@ -372,7 +372,7 @@ update_missing_elevations() {
     check_and_refresh_token
     ACCESS_TOKEN=$(cat "$TOKEN_FILE")
     # Get all data from the sheet
-    RESPONSE=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+    RESPONSE=$(vb_curl -H "Authorization: Bearer $ACCESS_TOKEN" \
         "https://sheets.googleapis.com/v4/spreadsheets/$SPREADSHEET_ID/values/$RANGE_NAME")
     
     # Check if we got a valid response
@@ -406,7 +406,7 @@ update_missing_elevations() {
                 UPDATE_RANGE="Tabellenblatt1!D$ROW"
                 UPDATE_DATA="{\"values\":[[\"$ELEVATION\"]]}"
                 
-                UPDATE_RESPONSE=$(curl -s -X PUT \
+                UPDATE_RESPONSE=$(vb_curl -X PUT \
                     -H "Authorization: Bearer $ACCESS_TOKEN" \
                     -H "Content-Type: application/json" \
                     -d "$UPDATE_DATA" \
