@@ -27,29 +27,23 @@ stehendem Van nicht waechst.
 Woche lang nicht erneut abgefragt. Und pro Tag gibt es ein Hoechstmass an Abfragen. Beides ist
 neu, siehe unten.
 
-**3. Aufloesen, zuerst lokal.** `/etc/vanbox/celldb_lookup.py` schlaegt die Zelle in einem
-OpenCelliD-Abzug auf dem USB-Stick nach. Ein Treffer kostet kein Kontingent und braucht keine
-Datenverbindung. Das ist der Unterschied in Laendern ohne Datenroaming: die Position steht
-sofort fest, gepuffert werden muss nur noch das Schreiben ins Sheet.
+**3. Aufloesen.** POST an `us1.unwiredlabs.com/v2/process.php` mit der Zellkennung, zurueck
+kommen `lat` und `lon`. Begrenzt durch Sperrliste und Tagesbudget, siehe unten.
 
-**4. Aufloesen, sonst online.** Erst wenn lokal nichts drinsteht, geht ein POST an
-`us1.unwiredlabs.com/v2/process.php`, begrenzt durch Sperrliste und Tagesbudget. Zurueck
-kommen `lat` und `lon`.
+Ein lokaler OpenCelliD-Abzug auf dem USB-Stick wurde gebaut, gemessen und wieder verworfen.
+Warum, steht im Schwesterprojekt vanbox unter docs/CELLDB.md.
 
-Der Aufbau der Datenbank ist im Schwesterprojekt vanbox beschrieben. Ohne sie funktioniert
-alles wie bisher, nur eben mit Kontingent.
+**4. Hoehe holen.** `api.open-elevation.com` zu den Koordinaten.
 
-**5. Hoehe holen.** `api.open-elevation.com` zu den Koordinaten.
-
-**6. Schreiben.** Anhaengen an das Google Sheet ueber die Sheets-API. Die Authentifizierung
+**5. Schreiben.** Anhaengen an das Google Sheet ueber die Sheets-API. Die Authentifizierung
 laeuft ohne Google-Bibliothek: das Script baut den JWT selbst aus dem Service-Account-Schluessel
 (`openssl dgst -sha256 -sign`), tauscht ihn bei `oauth2.googleapis.com/token` gegen ein
 Access Token und legt das fuer eine Stunde in `/tmp` ab. Das ist der Grund, warum auf dem
 Router kein Python mehr noetig ist.
 
-**7. Melden.** Bei Bedarf eine Telegram-Nachricht.
+**6. Melden.** Bei Bedarf eine Telegram-Nachricht.
 
-**6a. Spalten.** Geschrieben werden lat, lon, Zeit, Hoehe, und seit dem 15.09.2026 zusaetzlich
+**5a. Spalten.** Geschrieben werden lat, lon, Zeit, Hoehe, und seit dem 15.09.2026 zusaetzlich
 die Zellkennung und die Empfangsstaerke RSRP. Damit laesst sich hinterher unterscheiden, ob die
 Karte springt oder der Van gefahren ist.
 

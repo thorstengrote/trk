@@ -25,9 +25,6 @@ UNWIRED_DAILY_MAX="${UNWIRED_DAILY_MAX:-60}"
 UNWIRED_DENY_TTL="${UNWIRED_DENY_TTL:-604800}"
 # Hoechstens so viele gepufferte Punkte pro Lauf nachreichen.
 OFFLINE_BATCH_MAX="${OFFLINE_BATCH_MAX:-8}"
-# Lokale Zelldatenbank. Trifft sie, kostet die Ortung nichts und braucht kein Netz.
-CELLDB_LOOKUP="${CELLDB_LOOKUP:-/etc/vanbox/celldb_lookup.py}"
-CELLDB_FILE="${CELLDB:-/mnt/extroot/vanbox/celldb.sqlite}"
 UNWIRED_API_KEY="${UNWIRED_API_KEY:?fehlt in /etc/vanbox/secrets.env}"
 UNWIRED_URL="https://us1.unwiredlabs.com/v2/process.php"
 OPEN_ELEVATION_URL="https://api.open-elevation.com/api/v1/lookup"
@@ -298,36 +295,6 @@ process_location_data() {
     # Zelle dieses Datensatzes, fuer Sperrliste und Protokoll
     CELL_KEY=$(echo "$JSON_PAYLOAD" | jq -r '"\(.mcc),\(.mnc),\(.cells[0].lac),\(.cells[0].cid)"' 2>/dev/null)
 
-    # --- Schritt 1: lokale Datenbank. Kostet kein Kontingent und funktioniert
-    # ohne jede Datenverbindung, also auch in Laendern ohne Datenroaming.
-    LAT=""
-    LON=""
-    POS_SRC=""
-    _mcc=$(echo "$JSON_PAYLOAD" | jq -r '.mcc // empty' 2>/dev/null)
-    _net=$(echo "$JSON_PAYLOAD" | jq -r '.mnc // empty' 2>/dev/null)
-    _area=$(echo "$JSON_PAYLOAD" | jq -r '.cells[0].lac // empty' 2>/dev/null)
-    _cid=$(echo "$JSON_PAYLOAD" | jq -r '.cells[0].cid // empty' 2>/dev/null)
-    # Ohne Datenbank wird stillschweigend uebersprungen. Eine Warnung alle
-    # 15 Minuten waere nur Laerm.
-    if [ -n "$_mcc" ] && [ -f "$CELLDB_LOOKUP" ] && [ -f "$CELLDB_FILE" ]; then
-        LOCAL=$(python3 "$CELLDB_LOOKUP" "$_mcc" "$_net" "$_area" "$_cid" 2>/dev/null)
-        case $? in
-            0)
-                LAT=$(echo "$LOCAL" | cut -d' ' -f1)
-                LON=$(echo "$LOCAL" | cut -d' ' -f2)
-                POS_SRC="lokal"
-                log_verbose "Zelle lokal gefunden: $LAT $LON"
-                ;;
-            2)
-                vb_log WARN "Lokale Zelldatenbank ist vorhanden, aber nicht lesbar"
-                ;;
-        esac
-    fi
-
-    # --- Schritt 2: nur wenn lokal nichts da war, online fragen
-    if [ -n "$LAT" ]; then
-        vb_log INFO "Ortung aus der lokalen Datenbank fuer $CELL_KEY"
-    else
     if vb_deny_has zellen "$CELL_KEY" "$UNWIRED_DENY_TTL"; then
         vb_log INFO "Zelle $CELL_KEY steht auf der Sperrliste, keine Abfrage"
         return 1
@@ -359,9 +326,7 @@ process_location_data() {
 
     LAT=$(echo $RESPONSE | jq -r '.lat')
     LON=$(echo $RESPONSE | jq -r '.lon')
-    POS_SRC="online"
     log_verbose "Received position: LAT=$LAT, LON=$LON"
-    fi
 
     # Get elevation data DIRECTLY for new entry
     get_elevation $LAT $LON
@@ -389,7 +354,7 @@ process_location_data() {
         "https://sheets.googleapis.com/v4/spreadsheets/$SPREADSHEET_ID/values/$RANGE_NAME:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS")
 
     if echo "$RESPONSE" | jq -e .updates > /dev/null 2>&1; then
-        vb_log INFO "Punkt geschrieben ($POS_SRC): $LAT,$LON ($ROW_CELL, RSRP $ROW_RSRP, Hoehe $ELEVATION)"
+        vb_log INFO "Punkt geschrieben: $LAT,$LON ($ROW_CELL, RSRP $ROW_RSRP, Hoehe $ELEVATION)"
         echo "$LAT,$LON,$ELEVATION" > "$LAST_ENTRY_FILE"
         echo "$CURRENT_CELL_INFO" > "$LAST_CELL_INFO_FILE"
         return 0
