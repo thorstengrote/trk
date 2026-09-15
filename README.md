@@ -9,74 +9,100 @@ Live: <https://thorstengrote.github.io/trk/>
 
 ```
  GL-X750 im Van
- │
- │  alle 15 Minuten:  AT+QENG="servingcell"  ──> Funkzelle (MCC, MNC, TAC, ECI)
- │                                │
- │                    UnwiredLabs ┴──> lat / lon
+ │  alle 15 Minuten:  AT+QENG="servingcell"  ──> Funkzelle
+ │                    UnwiredLabs ──> lat/lon + Genauigkeitsradius
  │                    open-elevation ──> Hoehe
- │                                │
- └────────────────────────────────┴──> Google Sheets API (Service Account)
-                                              │
-                                     Google Sheet, als CSV veroeffentlicht
-                                              │
-                            PapaParse laedt es im Browser
-                                              │
-                                    Leaflet zeichnet Spur und Hoehenprofil
+ └──────────────────> Google Sheet (als CSV veroeffentlicht)
+                                │
+                        index.html + analyse.js im Browser
+                                │
+                        OSRM ──> Strassenroute je Abschnitt
+                                │
+                        Karte, Aufenthalte, Fahrt abspielen
 ```
 
-Kein eigener Server. Der Router schreibt, das Sheet haelt, der Browser liest.
+Kein eigener Server. Der Router schreibt, das Sheet haelt, der Browser rechnet.
 
 ## Die Dateien
 
 | Datei | Was es ist |
 |---|---|
-| `van.html` | die eigentliche App. Routen-Replay mit Animation, Stopp-Erkennung, Zeitraumfilter, Teilen-Links. 89 KB, alles inline. |
-| `index.html` + `map.js`, `elevation.js`, `utils.js`, `styles.css` | die aeltere, modular aufgeteilte Fassung |
-| `index2.html` | Zwischenstand einer ueberarbeiteten Karte |
-| `ng.html` | Ansatz fuer eine Neufassung, unfertig |
-| `widget-test.html` | Testseite fuer ein eingebundenes Chat-Widget, gehoert nicht zur App |
+| `index.html` | die App: Karte, Bedienfeld, Aufenthaltsliste, Fahrtanimation |
+| `analyse.js` | die Auswertung. Hier steckt die eigentliche Arbeit. |
 | `router/update_location_and_sheet.sh` | der Teil, der im Van laeuft |
+| `alt/` | die vier Vorgaengerfassungen, nur noch als Nachschlagewerk |
 
-Wer etwas aendern will, aendert `van.html`. Der Rest ist Historie.
+## Warum neu gebaut
 
-Ausfuehrlich: [docs/APP.md](docs/APP.md) und [docs/ROUTER.md](docs/ROUTER.md).
+Die Vorgaengerfassung fand auf der Sommerreise 2026 **null** Aufenthalte, obwohl in den Daten
+dreizehn stecken. Auf der dichtesten Fahrt (75 Punkte in vier Tagen) fand sie genau einen.
 
-## Stopp-Erkennung
+Die Ursache: sie mass die Standzeit **innerhalb** einer Punktgruppe. Die Daten speichern die
+Standzeit aber **zwischen** den Punkten, weil der Collector nur bei einem Zellwechsel schreibt.
+Ein Halt erzeugt genau einen Punkt, die Gruppe hat damit die Dauer null, und es entstand kein
+Eintrag. 68 Prozent aller Gruppen bestanden aus einem einzigen Punkt.
 
-Die App leitet aus Standzeiten ab, was fuer ein Halt es war. Schwellen sind einstellbar:
+Kein Wert im damaligen Parameterdialog konnte das aendern. Deshalb ist der Dialog weg.
 
-| Symbol | Standzeit | Bedeutung |
-|---|---|---|
-| ☕ | ab 15 Minuten | Pause |
-| 🅿️ | ab 60 Minuten | laengerer Halt |
-| 🛏️ | ab 360 Minuten | Uebernachtung |
+Zwei weitere Fehler der alten Fassung: sie holte die Daten ueber `export?format=csv`, was im
+Browser an CORS scheitert, und fiel dann still auf eingebaute Beispieldaten vom Februar 2025
+zurueck. Und sie zog Aufenthalte per `roadSnapDistance = 5000` bis zu fuenf Kilometer weit auf
+"nahe" Punkte, was an einer Kueste im Wasser endet.
 
-Aus 419 Positionspunkten wird so eine lesbare Reise statt einer Punktwolke.
+## Wie die Auswertung arbeitet
+
+**1. Ping-Pong entfernen.** Zwei benachbarte Masten uebernehmen abwechselnd, ohne dass der Van
+sich bewegt. Gemessen: 14 solche Spruenge mit im Mittel 8,2 km Ausschlag. Punkte, deren
+Vorgaenger und Nachfolger am selben Ort liegen, werden verworfen und ihre Zeit dem Vorgaenger
+zugeschlagen.
+
+**2. Abschnitte klassifizieren.** Fuer jeden Abschnitt wird die Strassenroute berechnet. Der
+Vergleich von vergangener Zeit und Sollfahrzeit sagt, was passiert ist:
+
+```
+Luftlinie < 1,5 km                 -> gestanden
+vergangen − Sollfahrzeit < 15 min  -> durchgefahren
+vergangen − Sollfahrzeit > 15 min  -> gefahren und unterwegs gehalten
+```
+
+**3. Halte zusammenfassen.** Aufeinanderfolgende Halte am selben Ort werden zu einem
+Aufenthalt. Ohne das zerfiel eine zweitaegige Pause in "2,2 h" plus "71,9 h".
+
+**4. Position schaetzen.** Bei einem Halt unterwegs ist der Funkturm nicht der Aufenthaltsort.
+Genommen wird der Punkt auf der berechneten Route, der dem Turm am naechsten liegt, typisch
+15 bis 300 Meter daneben. **Ab sechs Stunden Aufenthalt wird nicht mehr auf die Route gezogen**:
+wer drei Tage steht, steht nicht auf der Durchgangsstrasse. Dann bleibt die Zellposition, und
+die Karte sagt dazu, dass sie nur auf Funkzelle genau ist.
+
+Ergebnis auf derselben Sommerreise: 21 Aufenthalte statt null, 3434 km ueber Strassen statt
+2246 km Luftlinie.
+
+## Bedienung
+
+Zeitraum waehlen, **Anzeigen**. Die Umschalter blenden Strecke, Messpunkte und
+Genauigkeitskreise ein. **Fahrt abspielen** laesst den Van die Strecke ablaufen, das Tempo
+regelt der Schieber. Ein Klick auf einen Aufenthalt in der Liste springt dorthin.
+
+Zeitraum im Link: `?start=2026-07-18&end=2026-08-06`.
+Ohne Parameter sucht die Seite selbst einen Zeitraum, in dem genug Bewegung liegt.
+
+Die Routen werden nach der ersten Berechnung im Browser zwischengespeichert. Der erste Aufruf
+eines Zeitraums dauert daher laenger als der zweite.
 
 ## Was man wissen sollte
 
-**Die Genauigkeit ist die einer Funkzelle.** Je nach Mastdichte einige hundert Meter bis
-mehrere Kilometer. Fuer die Frage, in welchem Ort der Van stand, reicht das. Eine Fahrspur im
-Sinne einer GPS-Aufzeichnung ist es nicht. Das Modem im Router koennte GNSS, es fehlt die
-Antenne. Details im Schwesterprojekt vanbox.
+**Die Genauigkeit ist die einer Funkzelle**, je nach Mastdichte einige hundert Meter bis
+mehrere Kilometer. Seit dem 15.09.2026 schreibt der Collector den Genauigkeitsradius mit, den
+der Ortungsdienst liefert; der Umschalter "Genauigkeit" zeigt ihn als Kreis.
 
 **Neue Punkte entstehen nur beim Zellwechsel.** Steht der Van, schreibt der Collector nichts.
-Das haelt das Sheet klein und spart Datenvolumen, erzeugt aber Luecken, die keine Ausfaelle sind.
-Eine Luecke im Sheet und ein ausgeschalteter Router sehen gleich aus. Wer wissen will, was
-wirklich war, schaut ins Protokoll auf dem Router.
+Eine Luecke im Sheet und ein ausgeschalteter Router sehen darin gleich aus. Wer wissen will,
+was wirklich war, schaut ins Protokoll auf dem Router.
 
-**Seit dem 15.09.2026 hat das Sheet zwei Spalten mehr:** die Zellkennung und die
-Empfangsstaerke RSRP. Alte Zeilen haben sie nicht. Fuer die Kopfzeile bietet sich `cell` und
-`rsrp` in E1 und F1 an.
-
-**Das Passwortfeld in `van.html` ist ein Vorhang, kein Schloss.** Der Vergleich steht im
-Quelltext dieser Seite, und das Google Sheet dahinter ist ohne Anmeldung abrufbar. Wer die
-Sheet-URL hat, sieht die vollstaendige Bewegungshistorie. Das ist bewusst so.
-
-**Die Commit-Historie taugt nichts.** 164 Commits, fast alle "Update index.html", entstanden im
-GitHub-Web-Editor. Ab hier gibt es sprechende Nachrichten.
+**Das Passwortfeld ist ein Vorhang, kein Schloss.** Der Vergleich steht im Quelltext, und das
+Google Sheet dahinter ist ohne Anmeldung abrufbar.
 
 ## Schwesterprojekt
 
 Der Router selbst, sein Accounting und alle Abweichungen vom Auslieferungszustand liegen in
-**vanbox** (privat). Dort steht auch, wie man auf das Geraet kommt und wie ausgerollt wird.
+**vanbox** (privat).

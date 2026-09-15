@@ -17,7 +17,7 @@ LAST_ENTRY_FILE=$(vb_state last_google_sheet_entry)
 LAST_CELL_INFO_FILE=$(vb_state last_cell_info)
 LAST_NOTIFICATION_FILE=$(vb_state last_telegram_notification)
 SPREADSHEET_ID="${SPREADSHEET_ID:?fehlt in /etc/vanbox/secrets.env}"
-RANGE_NAME='Tabellenblatt1!A:F'
+RANGE_NAME='Tabellenblatt1!A:G'
 # Hoechstens so viele Unwired-Abfragen pro Tag. Der freie Tarif hat ein
 # Tages- und ein Monatslimit, und bis heute hat das Script es blind leergefahren.
 UNWIRED_DAILY_MAX="${UNWIRED_DAILY_MAX:-60}"
@@ -326,7 +326,10 @@ process_location_data() {
 
     LAT=$(echo $RESPONSE | jq -r '.lat')
     LON=$(echo $RESPONSE | jq -r '.lon')
-    log_verbose "Received position: LAT=$LAT, LON=$LON"
+    # Genauigkeitsradius in Metern. Sagt der Auswertung, ob diese Zelle auf
+    # 500 m oder auf 5 km genau ist, statt ueberall dasselbe anzunehmen.
+    ACCURACY=$(echo "$RESPONSE" | jq -r '.accuracy // empty')
+    log_verbose "Received position: LAT=$LAT, LON=$LON, Genauigkeit ${ACCURACY:-unbekannt} m"
 
     # Get elevation data DIRECTLY for new entry
     get_elevation $LAT $LON
@@ -344,7 +347,7 @@ process_location_data() {
     ROW_CELL=$(echo "$JSON_PAYLOAD" | jq -r '.cell_key // empty' 2>/dev/null)
     [ -n "$ROW_CELL" ] || ROW_CELL="$CELL_KEY"
     ROW_RSRP=$(echo "$JSON_PAYLOAD" | jq -r '.rsrp // empty' 2>/dev/null)
-    DATA="{\"values\":[[\"$LAT\",\"$LON\",\"$ORIGINAL_TIME\",\"$ELEVATION\",\"$ROW_CELL\",\"$ROW_RSRP\"]]}"
+    DATA="{\"values\":[[\"$LAT\",\"$LON\",\"$ORIGINAL_TIME\",\"$ELEVATION\",\"$ROW_CELL\",\"$ROW_RSRP\",\"$ACCURACY\"]]}"
 
     log_verbose "Sending data to Google Sheets (LAT=$LAT, LON=$LON, ELEVATION=$ELEVATION)"
     RESPONSE=$(vb_curl -X POST \
@@ -354,7 +357,7 @@ process_location_data() {
         "https://sheets.googleapis.com/v4/spreadsheets/$SPREADSHEET_ID/values/$RANGE_NAME:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS")
 
     if echo "$RESPONSE" | jq -e .updates > /dev/null 2>&1; then
-        vb_log INFO "Punkt geschrieben: $LAT,$LON ($ROW_CELL, RSRP $ROW_RSRP, Hoehe $ELEVATION)"
+        vb_log INFO "Punkt geschrieben: $LAT,$LON +-${ACCURACY:-?} m ($ROW_CELL, RSRP $ROW_RSRP, Hoehe $ELEVATION)"
         echo "$LAT,$LON,$ELEVATION" > "$LAST_ENTRY_FILE"
         echo "$CURRENT_CELL_INFO" > "$LAST_CELL_INFO_FILE"
         return 0
