@@ -1,0 +1,4 @@
+.DS_Store
+secrets.env
+*.json.key
+google-sa.json
