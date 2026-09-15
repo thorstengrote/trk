@@ -19,9 +19,13 @@ eine Zeile wie:
 Daraus werden Netztyp, MCC, MNC und je nach Typ LAC/CID (GSM, WCDMA) oder TAC/ECI (LTE)
 gezogen. Die Hex-Werte werden nach dezimal gewandelt, weil UnwiredLabs das so erwartet.
 
-**2. Vergleichen.** Der Bezeichner `LTE,262,01,425,1FC2F00` wird gegen `/tmp/last_cell_info`
+**2. Vergleichen.** Der Bezeichner `LTE,262,01,425,1FC2F00` wird gegen den zuletzt gesehenen
 gehalten. Ist die Zelle dieselbe, endet der Lauf hier. Das ist der Grund, warum das Sheet bei
 stehendem Van nicht waechst.
+
+**2a. Sperrliste und Budget.** Stand die Zelle schon einmal ohne Ergebnis da, wird sie eine
+Woche lang nicht erneut abgefragt. Und pro Tag gibt es ein Hoechstmass an Abfragen. Beides ist
+neu, siehe unten.
 
 **3. Aufloesen.** POST an `us1.unwiredlabs.com/v2/process.php` mit der Zellkennung, zurueck
 kommen `lat` und `lon`.
@@ -36,13 +40,46 @@ Router kein Python mehr noetig ist.
 
 **6. Melden.** Bei Bedarf eine Telegram-Nachricht.
 
+**5a. Spalten.** Geschrieben werden lat, lon, Zeit, Hoehe, und seit dem 15.09.2026 zusaetzlich
+die Zellkennung und die Empfangsstaerke RSRP. Damit laesst sich hinterher unterscheiden, ob die
+Karte springt oder der Van gefahren ist.
+
 ## Ohne Netz
 
-Faellt der Uplink aus, landet der Datensatz in `/tmp/offline_location_data`. Der naechste Lauf
-mit Verbindung schiebt die gepufferten Punkte nach. Positionen, deren Hoehe beim Schreiben
-fehlte, holt `update_missing_elevations` spaeter nach.
+Faellt der Uplink aus, landet der Datensatz im Puffer unter
+`/mnt/extroot/vanbox/state/offline_location_data`. Der naechste Lauf mit Verbindung schiebt
+nach, aeltester zuerst und gedeckelt auf acht Punkte pro Lauf.
 
-`/tmp` ist ein tmpfs. Ein Neustart ohne Netz verwirft den Puffer.
+Der Puffer lag frueher in `/tmp`. Im Van haengt der Router an einem Kippschalter, und damit war
+alles Gepufferte nach jedem Ausschalten weg. Genau die Punkte aus Laendern ohne Roaming.
+
+## Was am 15.09.2026 repariert wurde
+
+Aus 419 Datensaetzen und den Verlaufsdateien des Routers liess sich rekonstruieren, warum die
+Aufzeichnung ueber Monate lueckenhaft war. An 105 Tagen lief der Router nachweislich, ohne dass
+ein Punkt entstand. Elf davon am Stueck im Juli 2025, mit dem Van in Como.
+
+**Die Endlosschleife.** Der Zellbezeichner wurde nur im Erfolgsfall fortgeschrieben. Schlug die
+Ortung fehl, hielt das Script die Zelle 15 Minuten spaeter erneut fuer neu und fragte wieder an.
+96 Mal am Tag, gegen ein Kontingent von rund 100. Dazu ging der komplette Offline-Puffer bei
+jedem Lauf durch, jeder Eintrag eine weitere Abfrage. Ein voller Puffer hat das Tageskontingent
+in einem einzigen Lauf aufgebraucht, und danach schlug alles fehl, was funktioniert haette.
+
+Gemessen am 15.09.2026: `"balance": 3`. Drei Abfragen uebrig.
+
+Jetzt wird der Bezeichner immer fortgeschrieben, Zellen ohne Treffer kommen auf eine Sperrliste
+mit einer Woche Verfall, es gibt ein Tagesbudget (Voreinstellung 60), und der Puffer wird
+gedeckelt abgearbeitet.
+
+**`set -e` ist raus.** Es hat das Script beim ersten Schluckauf still beendet und die
+Fehlerbehandlung darunter zu totem Code gemacht.
+
+**Timeouts.** Keiner der sieben curl-Aufrufe hatte einen. Auf einer Verbindung mit 400 ms
+Latenz blieb dadurch regelmaessig ein Cronlauf haengen.
+
+**Protokoll.** Es gab keins. Jetzt schreibt das Script nach
+`/mnt/extroot/vanbox/log/vanbox.log`, und der naechste Ausfall ist nachlesbar statt
+rekonstruierbar.
 
 ## Bedienung
 
@@ -63,11 +100,17 @@ Im Repository stehen keine. Das Script liest beim Start:
 
 Gebraucht werden `SPREADSHEET_ID`, `UNWIRED_API_KEY`, `BOT_TOKEN`, `CHAT_ID` und ein Pfad
 `CREDENTIALS_JSON` auf den Google-Service-Account-Schluessel. Vorlage:
-`router/secrets.env.example`. Auf dem Geraet gehoert die Datei mit `chmod 600` nach
-`/etc/vanbox/secrets.env`, der Schluessel nach `/etc/vanbox/google-sa.json`.
+`router/secrets.env.example`. Auf dem Geraet liegt die Datei mit `chmod 600` unter
+`/etc/vanbox/secrets.env`, der Schluessel unter `/etc/vanbox/google-sa.json`.
 
-Auf dem laufenden Geraet stehen diese Werte bis heute im Klartext in `/root`. Der Austausch
-ist im Schwesterprojekt vanbox beschrieben.
+## Ausrollen
+
+```
+router/deploy.sh [ssh-ziel]
+```
+
+Sichert den alten Stand auf dem Geraet, spielt das Script ein und prueft die Syntax. Setzt
+voraus, dass `/etc/vanbox/lib.sh` schon liegt, die kommt aus dem vanbox-Projekt.
 
 ## Grenzen
 

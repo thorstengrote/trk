@@ -62,6 +62,12 @@ Antenne. Details im Schwesterprojekt vanbox.
 
 **Neue Punkte entstehen nur beim Zellwechsel.** Steht der Van, schreibt der Collector nichts.
 Das haelt das Sheet klein und spart Datenvolumen, erzeugt aber Luecken, die keine Ausfaelle sind.
+Eine Luecke im Sheet und ein ausgeschalteter Router sehen gleich aus. Wer wissen will, was
+wirklich war, schaut ins Protokoll auf dem Router.
+
+**Seit dem 15.09.2026 hat das Sheet zwei Spalten mehr:** die Zellkennung und die
+Empfangsstaerke RSRP. Alte Zeilen haben sie nicht. Fuer die Kopfzeile bietet sich `cell` und
+`rsrp` in E1 und F1 an.
 
 **Das Passwortfeld in `van.html` ist ein Vorhang, kein Schloss.** Der Vergleich steht im
 Quelltext dieser Seite, und das Google Sheet dahinter ist ohne Anmeldung abrufbar. Wer die
