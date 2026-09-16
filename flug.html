@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Van-Spur, Flug</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.6.1/maplibre-gl.css">
 <style>
   html,body{margin:0;height:100%;background:#12141a;
             font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#e9e9e4}
@@ -47,6 +47,7 @@
   .balken{width:240px;height:4px;background:#333842;border-radius:3px;overflow:hidden}
   .balken i{display:block;height:100%;width:0;background:#4d9463;transition:width .25s}
   .hinw{font-size:12px;color:#9b9b93;max-width:420px;text-align:center;padding:0 20px}
+  #planstand{ font-size:12px; color:#9fb3c8; margin-top:8px; min-height:14px; }
 </style>
 </head>
 <body>
@@ -61,6 +62,7 @@
     <button id="start">Flug starten</button>
     <button class="still" id="stopp">Stopp</button>
     <button class="still" id="zeigen">Strecke einblenden</button>
+  <div id="planstand"></div>
   </div>
 </div>
 
@@ -104,7 +106,7 @@
   <div class="hinw" id="ladehinweis"></div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.6.1/maplibre-gl.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
 <script src="analyse.js"></script>
@@ -139,7 +141,7 @@
   const $ = id => document.getElementById(id);
   const P = new URLSearchParams(location.search);
 
-  let karte, pfad = [], stops = [], faehrten = [], raf = null, laeuft = false, gelaendeDaGlobal = true;
+  let karte, pfad = [], stops = [], faehrten = [], profilVersprechen = null, raf = null, laeuft = false, gelaendeDaGlobal = true;
   let verdeckt = true;
 
   const fmtUhr = d => d.toLocaleString('de-DE',
@@ -381,6 +383,192 @@
     return { lat: a.lat + (b.lat-a.lat)*f, lon: a.lon + (b.lon-a.lon)*f, i: lo };
   }
 
+  // Grobe Bahn: ein Stuetzpunkt etwa alle 3,5 Prozent der Strecke, mindestens
+  // alle 12 km. Je weiter auseinander, desto weniger Seitwaertsbewegung.
+  function bahnBauen(){
+    const gesamtKm = pfad.length ? pfad[pfad.length-1].km || 1 : 1;
+    return drohnenbahn(pfad, Math.max(gesamtKm / 28, 12));
+  }
+
+  /* ---------- Flugplan ---------- */
+
+  /* Eine Drohne fliegt nicht das Hoehenprofil unter sich nach. Sie haelt eine
+     Hoehe, solange nichts im Weg ist, und steigt nur vor einem Hindernis.
+
+     Jede Regelung, die waehrend des Flugs auf das Gelaende unter der Kamera
+     reagiert, erzeugt genau das Gegenteil: sie steigt ueber jede Kuppe und
+     sinkt dahinter wieder. Deshalb wird die Hoehe vorher geplant, ueber das
+     ganze Gelaendeprofil auf einmal. Waehrend des Flugs wird der Plan nur
+     noch abgelesen. Ohne Rueckkopplung gibt es auch kein Aufschaukeln.
+
+     Das Gelaende kommt aus denselben Terrarium-Kacheln wie die Landschaft,
+     nur auf einer groben Zoomstufe. Fuer eine Reiseflughoehe reichen ein paar
+     hundert Meter Aufloesung. */
+
+  const PLAN_ZOOM = 9;
+
+  const kachelBild = new Map();
+  function kachelHolen(z, x, y){
+    const k = `${z}/${x}/${y}`;
+    if (kachelBild.has(k)) return kachelBild.get(k);
+    const versprechen = new Promise(fertig => {
+      const bild = new Image();
+      bild.crossOrigin = 'anonymous';
+      bild.onload = () => {
+        const fl = document.createElement('canvas');
+        fl.width = fl.height = bild.width;
+        const ctx = fl.getContext('2d', { willReadFrequently:true });
+        ctx.drawImage(bild, 0, 0);
+        try { fertig({ daten: ctx.getImageData(0,0,fl.width,fl.height).data, breite: fl.width }); }
+        catch(e){ fertig(null); }
+      };
+      bild.onerror = () => fertig(null);
+      bild.src = DEM.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+    });
+    kachelBild.set(k, versprechen);
+    return versprechen;
+  }
+
+  // Terrarium: Hoehe = (R*256 + G + B/256) - 32768
+  function hoeheAusKachel(kachel, px, py){
+    if (!kachel) return null;
+    const b = kachel.breite;
+    let hoch = -Infinity;
+    // Kleine Umgebung mitnehmen, sonst faellt ein schmaler Grat durchs Raster
+    for (let dy = -1; dy <= 1; dy++){
+      for (let dx = -1; dx <= 1; dx++){
+        const x = Math.max(0, Math.min(px+dx, b-1)), y = Math.max(0, Math.min(py+dy, b-1));
+        const i = (y*b + x) * 4;
+        const h = kachel.daten[i]*256 + kachel.daten[i+1] + kachel.daten[i+2]/256 - 32768;
+        if (h > hoch && h > -500 && h < 9000) hoch = h;
+      }
+    }
+    return hoch === -Infinity ? null : hoch;
+  }
+
+  async function gelaendeprofil(bahn, gesamtKm, melde){
+    const SCHRITT = Math.max(gesamtKm / 1200, 1);          // km je Stuetzpunkt
+    const stellen = [];
+    for (let km = 0; km <= gesamtKm; km += SCHRITT){
+      const p = aufBahn(bahn, km);
+      const n = 2 ** PLAN_ZOOM;
+      const wx = (p.lon + 180) / 360 * n;
+      const r = p.lat * Math.PI / 180;
+      const wy = (1 - Math.log(Math.tan(r) + 1/Math.cos(r)) / Math.PI) / 2 * n;
+      stellen.push({ km, tx: Math.floor(wx), ty: Math.floor(wy),
+                     px: Math.floor((wx % 1) * 256), py: Math.floor((wy % 1) * 256) });
+    }
+
+    const noetig = [...new Set(stellen.map(s => `${s.tx}/${s.ty}`))];
+    const kacheln = new Map();
+    let fertig = 0;
+    const PAR = 8;
+    let naechste = 0;
+    await Promise.all(Array.from({ length: Math.min(PAR, noetig.length) }, async () => {
+      while (true){
+        const i = naechste++;
+        if (i >= noetig.length) return;
+        const [tx, ty] = noetig[i].split('/').map(Number);
+        kacheln.set(noetig[i], await kachelHolen(PLAN_ZOOM, tx, ty));
+        if (melde) melde(++fertig, noetig.length);
+      }
+    }));
+
+    let letzte = null, treffer = 0;
+    const profil = stellen.map(s => {
+      const h = hoeheAusKachel(kacheln.get(`${s.tx}/${s.ty}`), s.px, s.py);
+      if (h != null){ letzte = h; treffer++; }
+      return { km: s.km, boden: h != null ? h : (letzte ?? 0) };
+    });
+    return treffer > profil.length * 0.6 ? profil : null;
+  }
+
+  /* Aus dem Gelaendeprofil eine Flughoehe planen.
+
+     Erst das laufende Maximum ueber ein breites Fenster: damit verschwinden
+     alle Kuppen, die kleiner sind als das Fenster, und uebrig bleibt die
+     Huellkurve des Gebirges. Dann eine symmetrische Glaettung, die nach vorn
+     und nach hinten schaut. Weil offline gerechnet wird, gibt es keinen
+     Nachlauf und damit auch keinen Saegezahn. */
+  function laufMax(werte, halb){
+    const n = werte.length, raus = new Float64Array(n);
+    const schlange = [];            // Indizes, Werte absteigend
+    let kopf = 0, rein = 0;
+    for (let mitte = 0; mitte < n; mitte++){
+      const bis = Math.min(mitte + halb, n - 1);
+      while (rein <= bis){
+        while (schlange.length > kopf && werte[schlange[schlange.length-1]] <= werte[rein]) schlange.pop();
+        schlange.push(rein); rein++;
+      }
+      const von = Math.max(0, mitte - halb);
+      while (schlange[kopf] < von) kopf++;
+      raus[mitte] = werte[schlange[kopf]];
+    }
+    return raus;
+  }
+
+  // Mehrfacher gleitender Mittelwert, symmetrisch. Drei Durchgaenge kommen
+  // einer Gauss-Glaettung nahe. Symmetrisch heisst: kein Nachlauf, und damit
+  // kein Saegezahn, anders als bei jeder Regelung im Flug.
+  function glaetten(feld, halb, durchgaenge){
+    let a = Float64Array.from(feld);
+    if (halb < 1) return a;
+    for (let d = 0; d < durchgaenge; d++){
+      const b = new Float64Array(a.length);
+      for (let i = 0; i < a.length; i++){
+        const von = Math.max(0, i-halb), bis = Math.min(a.length-1, i+halb);
+        let summe = 0;
+        for (let k = von; k <= bis; k++) summe += a[k];
+        b[i] = summe / (bis - von + 1);
+      }
+      a = b;
+    }
+    return a;
+  }
+
+  /* Aus dem Gelaendeprofil eine Flughoehe planen.
+
+     Erst das laufende Maximum ueber ein breites Fenster: damit verschwinden
+     alle Kuppen, die schmaler sind als das Fenster, und uebrig bleibt die
+     Huellkurve des Gebirges. Dann symmetrisch glaetten. Zum Schluss die
+     Mindesthoehe ueber der Huellkurve erzwingen, damit die Glaettung nirgends
+     in einen Berg hineinlaeuft. */
+  function flugplan(profil, reiseHoehe, fensterKm){
+    const n = profil.length;
+    const proSchritt = n > 1 ? (profil[n-1].km - profil[0].km) / (n-1) : 1;
+    const w = Math.max(Math.round(fensterKm / proSchritt), 2);
+
+    const werte = Float64Array.from(profil, p => p.boden);
+    const huelle = laufMax(werte, w);
+    const glatt = glaetten(huelle, w, 3);
+
+    const hoehen = new Float64Array(n);
+    for (let i = 0; i < n; i++)
+      hoehen[i] = Math.max(glatt[i] + reiseHoehe, huelle[i] + reiseHoehe * 0.7);
+    const fein = glaetten(hoehen, Math.max(w >> 3, 1), 1);
+    for (let i = 0; i < n; i++)
+      fein[i] = Math.max(fein[i], huelle[i] + reiseHoehe * 0.7);
+
+    // Wie zerklueftet es ringsum ist, ebenfalls geplant statt geregelt.
+    // Sonst zappelt die Neigung mit dem Boden unter der Kamera.
+    const mittel = glaetten(werte, w, 2);
+    const relief = new Float64Array(n);
+    for (let i = 0; i < n; i++) relief[i] = Math.max(0, huelle[i] - mittel[i]);
+
+    return { km0: profil[0].km, proSchritt, hoehen: fein,
+             relief: glaetten(relief, w, 2) };
+  }
+
+  const planAbfragen = (plan, km, feld) => {
+    if (!plan) return null;
+    const a = plan[feld || 'hoehen'];
+    const x = (km - plan.km0) / plan.proSchritt;
+    const i = Math.max(0, Math.min(Math.floor(x), a.length - 1));
+    const j = Math.min(i + 1, a.length - 1);
+    const f = Math.max(0, Math.min(x - i, 1));
+    return a[i] + (a[j] - a[i]) * f;
+  };
+
   function peilung(a, b){
     const y = Math.sin((b.lon-a.lon)*Math.PI/180) * Math.cos(b.lat*Math.PI/180);
     const x = Math.cos(a.lat*Math.PI/180)*Math.sin(b.lat*Math.PI/180) -
@@ -471,7 +659,7 @@
   const zoomAusHoehe = (hoehe, lat, hPx) =>
     Math.log2(156543.03 * Math.cos(lat * Math.PI/180) * 1.5 * hPx / Math.max(hoehe, 50));
 
-  function flugStart(){
+  async function flugStart(){
     flugStopp();
     if (pfad.length < 2) return;
     laeuft = true;
@@ -483,9 +671,7 @@
     const dauerMs = DAUERN[+$('dauer').value - 1] * 1000;
     const tempo = gesamtKm * 1000 / (dauerMs / 1000);       // Meter je Sekunde
 
-    // Grobe Bahn: ein Stuetzpunkt etwa alle 3,5 Prozent der Strecke, mindestens
-    // alle 12 km. Je weiter auseinander, desto weniger Seitwaertsbewegung.
-    const bahn = drohnenbahn(pfad, Math.max(gesamtKm / 28, 12));
+    const bahn = bahnBauen();
 
     // Grundhoehe der Kamera aus dem Tempo: die Landschaft soll immer mit
     // rund derselben Pixelzahl je Sekunde vorbeiziehen.
@@ -498,6 +684,33 @@
     let t0 = 0, letzteKamera = 0, letzterStrich = 0, erreicht = 0;
     let grundAkt = null, grundHart = null, grundGlatt = null;
     let zielGrund = null, flugNN = null;
+
+    /* Hoehe planen, bevor der erste Bildschritt laeuft.
+
+       Das Gelaendeprofil haengt nur an der Strecke und wird einmal geholt.
+       Der Plan selbst haengt am Tempo, weil daraus die Reisehoehe folgt, und
+       wird deshalb bei jedem Start neu gerechnet. Das kostet Millisekunden. */
+    const mittLat = bahn[bahn.length >> 1].lat;
+    const REISE = hoeheAusZoom(basisZoom, mittLat, bildHoehe);
+    let plan = null;
+    if (!profilVersprechen) profilVersprechen = gelaendeprofil(bahn, gesamtKm);
+    const profil = await profilVersprechen;
+    if (!laeuft) return;                       // zwischenzeitlich gestoppt
+    if (profil) plan = flugplan(profil, REISE, Math.max(gesamtKm / 60, 25));
+    $('start').textContent = plan ? 'Fliegt …' : 'Fliegt (ohne Plan) …';
+
+    /* Der eigentliche Grund fuer das Auf und Ab.
+
+       MaplibreGL heftet den Kartenmittelpunkt ans Gelaende. Die Kamera haengt
+       daran und steigt zwangslaeufig mit jedem Huegel darunter, ganz gleich,
+       welche Zoomstufe man setzt. Ueber den Zoom laesst sich das nicht
+       ausgleichen, der aendert den Massstab und nicht die Lage im Bild.
+
+       Seit Fassung 5 laesst sich die Kopplung loesen: die Hoehe des
+       Mittelpunkts wird selbst gesetzt. Sie bekommt den geplanten Verlauf,
+       nicht das echte Gelaende, und damit liegt die Kamera ruhig. */
+    const loesbar = plan && typeof karte.setCenterClampedToGround === 'function';
+    if (loesbar) karte.setCenterClampedToGround(false);
 
     // Aus der genordeten Startansicht in die Fluglage kippen, statt zu
     // springen. Der erste Kurs kommt aus den ersten Kilometern der Bahn.
@@ -549,44 +762,51 @@
         const boden = grundGlatt ?? 0;
         const bodenJetzt = grundHart ?? boden;
 
-        /* Reiseflughoehe.
+        /* Reiseflughoehe: aus dem Plan abgelesen, nicht geregelt.
 
-           Vorher ging der Boden direkt unter der Kamera in das Hoehenziel ein.
-           Jede Kuppe unter der Drohnenbahn hob es damit sofort an, und die
-           Sperrklinke liess es zuegig steigen und nur langsam sinken. Ueber
-           welligem Gelaende kam dabei ein Saegezahn heraus: die Drohne hoppelte
-           ueber jeden Huegel, auch wenn die Strasse unten flach im Tal lag.
-
-           Jetzt bestimmt allein das Gelaende weit voraus die Reisehoehe, stark
-           getraegt. Einzelne Kuppen fallen dabei unter den Tisch. Dazu eine
-           harte Untergrenze: kommt der Boden naeher als der Mindestabstand,
-           wird zuegig nachgesteuert. Steigen also nur, wenn es sonst eng wird. */
-        const REISE = hoeheAusZoom(basisZoom, kam.lat, bildHoehe);
-
-        let vorn = 0, gesehen = false;
-        for (const f of [.2, .5, .9, 1.4, 2.0, 2.8]){
-          const g = grund(aufBahn(bahn, Math.min(km + VORLAUF * f, gesamtKm)));
-          if (g != null){ gesehen = true; if (g > vorn) vorn = g; }
+           Jede Regelung, die im Flug auf das Gelaende unter der Kamera
+           reagiert, steigt ueber jede Kuppe und sinkt dahinter wieder. Der
+           Plan kennt die ganze Strecke im Voraus und ist deshalb ueber
+           welligem Land einfach flach. */
+        const geplant = planAbfragen(plan, km);
+        if (geplant != null){
+          flugNN = flugNN === null ? geplant : flugNN + (geplant - flugNN) * 0.2;
+        } else {
+          // Rueckfall ohne Plan: Gelaende voraus, stark getraegt
+          let vorn = 0, gesehen = false;
+          for (const f of [.2, .5, .9, 1.4, 2.0, 2.8]){
+            const g = grund(aufBahn(bahn, Math.min(km + VORLAUF * f, gesamtKm)));
+            if (g != null){ gesehen = true; if (g > vorn) vorn = g; }
+          }
+          if (gesehen){
+            zielGrund = zielGrund === null ? vorn
+                      : zielGrund + (vorn - zielGrund) * (vorn > zielGrund ? 0.010 : 0.002);
+          }
+          const reiseNN = (zielGrund ?? boden) + REISE;
+          flugNN = flugNN === null ? reiseNN
+                 : flugNN + (reiseNN - flugNN) * (reiseNN > flugNN ? 0.010 : 0.002);
         }
-        if (gesehen){
-          zielGrund = zielGrund === null ? vorn
-                    : zielGrund + (vorn - zielGrund) * (vorn > zielGrund ? 0.010 : 0.002);
-        }
-        const reiseNN = (zielGrund ?? boden) + REISE;
-        flugNN = flugNN === null ? reiseNN
-               : flugNN + (reiseNN - flugNN) * (reiseNN > flugNN ? 0.010 : 0.002);
 
-        // Untergrenze: nie naeher als knapp die Haelfte der Reisehoehe
+        // Untergrenze gegen das echte Gelaende. Der Plan ist grob abgetastet,
+        // ein einzelner Grat kann darin fehlen.
         const mindestNN = bodenJetzt + REISE * 0.45;
         if (flugNN < mindestNN) flugNN += (mindestNN - flugNN) * 0.08;
 
-        // Zoomstufe so waehlen, dass die absolute Hoehe gehalten wird.
-        // Gegen den echten Boden gerechnet, sonst bleibt der Hoehenschlag.
-        const ueberGrund = Math.max(flugNN - bodenJetzt, 120);
-        const zoomAkt = Math.max(8.5, Math.min(
-          zoomAusHoehe(ueberGrund, kam.lat, bildHoehe), 15));
+        /* Zoomstufe.
 
-        const relief = Math.max(0, (zielGrund ?? boden) - bodenJetzt);
+           Mit geloester Kamera bleibt sie fest: die Hoehe steckt im
+           Mittelpunkt, der Massstab muss sich dafuer nicht aendern. Erst das
+           gibt ein wirklich ruhiges Bild.
+
+           Ohne die Entkopplung bleibt der alte Weg, die Hoehe indirekt ueber
+           den Zoom zu halten. */
+        const ueberGrund = Math.max(flugNN - bodenJetzt, 120);
+        const zoomAkt = loesbar ? basisZoom : Math.max(8.5, Math.min(
+          zoomAusHoehe(ueberGrund, kam.lat, bildHoehe), 15));
+        if (loesbar) karte.setCenterElevation(flugNN - REISE);
+
+        const relief = planAbfragen(plan, km, 'relief')
+                    ?? Math.max(0, (zielGrund ?? boden) - bodenJetzt);
         const zielPitch = basisPitch - Math.min(relief / 160, 7);
         pitchAkt += (zielPitch - pitchAkt) * (zielPitch < pitchAkt ? 0.02 : 0.004);
 
@@ -598,7 +818,7 @@
         // Messpunkt fuer die Pruefung des Hoehenhalts. Wird nur gefuellt,
         // wenn jemand window.flugMessung anlegt.
         if (window.flugMessung) window.flugMessung.push(
-          { km, boden:bodenJetzt, glatt:boden, vorn, zielGrund, flugNN, ueberGrund, zoom:zoomAkt, pitch:pitchAkt });
+          { km, boden:bodenJetzt, glatt:boden, geplant, flugNN, ueberGrund, zoom:zoomAkt, pitch:pitchAkt });
       }
 
       if (jetzt - letzterStrich > 45){
@@ -642,6 +862,8 @@
 
   function flugEnde(){
     laeuft = false;
+    if (karte && typeof karte.setCenterClampedToGround === 'function')
+      karte.setCenterClampedToGround(true);
     if (raf){ cancelAnimationFrame(raf); raf = null; }
     $('anzeige').classList.remove('an');
     $('start').textContent = 'Flug starten';
@@ -696,6 +918,15 @@
       if (karte.getLayer('halte')) karte.setFilter('halte', ['<=', ['get','km'], -1]);
       $('lade').style.display = 'none';
       if (!gelaendeDa) $('fehlt').hidden = false;
+
+      // Gelaendeprofil im Hintergrund holen, damit der erste Flug sofort
+      // startet. Ein paar Dutzend grobe Kacheln, wenige hundert Kilobyte.
+      if (pfad.length > 1){
+        const gesamtKm = pfad[pfad.length-1].km || 1;
+        profilVersprechen = gelaendeprofil(bahnBauen(), gesamtKm, (n, von) => {
+          $('planstand').textContent = n < von ? `Gelände wird gelesen … ${n}/${von}` : '';
+        }).then(pr => { $('planstand').textContent = pr ? '' : 'ohne Höhenplan'; return pr; });
+      }
     } catch(e){
       $('ladetext').textContent = 'Fehlgeschlagen: ' + e.message;
       return;
@@ -734,7 +965,8 @@
         fach.hidden = offen;
         r.classList.toggle('auf', !offen);
       };
-    window.flug = { karte, pfad, stops, faehrten };
+    window.flug = { karte, pfad, stops, faehrten, get profil(){ return profilVersprechen; },
+                  gelaendeprofil, flugplan, planAbfragen, bahnBauen, hoeheAusZoom };
   })();
 })();
 </script>

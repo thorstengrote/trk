@@ -166,6 +166,66 @@ neu                   264 m                   2                  2.834 m
 Der Rest von 264 m ist langsame Drift über 150 km, kein Wippen. Das Gebirge wird weiterhin
 überflogen.
 
+Das reichte immer noch nicht, und der Grund war ein anderer als gedacht.
+
+## Der eigentliche Grund: die Kamera hing am Gelände
+
+MapLibre heftet den Kartenmittelpunkt ans Gelände. Die Kamera hängt daran und steigt
+zwangsläufig mit jedem Hügel darunter, ganz gleich, welche Zoomstufe man setzt. Über den Zoom
+lässt sich das nicht ausgleichen: der ändert den Maßstab, nicht die Lage im Bild.
+
+Seit Fassung 5 lässt sich die Kopplung lösen. `setCenterClampedToGround(false)` und
+`setCenterElevation()` gibt es in 4.7.1 noch nicht, in 5.0.0 und 5.6.1 schon. Die Seite läuft
+deshalb auf **5.6.1**.
+
+Während des Flugs bekommt der Mittelpunkt die geplante Höhe statt des echten Geländes. Damit
+kann die Zoomstufe auch fest bleiben, die Höhe steckt ja im Mittelpunkt.
+
+Gemessen über einen Flug, Gelände unter der Drohne mit 763 m Höhenunterschied:
+
+```
+                     Spanne    Richtungswechsel
+Boden darunter        763 m                  22
+Flughöhe              933 m                   2
+Zoomstufe               0,0                   0
+Neigung              1,28 °                   2
+```
+
+Der Boden wellt sich, die Kamera nicht.
+
+## Die Höhe wird geplant, nicht geregelt
+
+Jede Regelung, die im Flug auf das Gelände unter der Kamera reagiert, steigt über jede Kuppe
+und sinkt dahinter wieder. Eine Drohne tut das nicht. Sie hält eine Höhe, solange nichts im
+Weg ist.
+
+Die Höhe wird deshalb vor dem Start geplant, über das ganze Geländeprofil auf einmal:
+
+1. Das Profil kommt aus denselben Terrarium-Kacheln wie die Landschaft, auf Zoomstufe 9. Für
+   eine Reiseflughöhe reichen gut zweihundert Meter Auflösung. Für die Balkanreise sind das
+   1.201 Stützpunkte zwischen −48 m und 2.365 m, ein paar Dutzend Kacheln, die beim Laden der
+   Seite im Hintergrund kommen.
+2. Laufendes Maximum über ein breites Fenster. Alle Kuppen, die schmaler sind als das
+   Fenster, verschwinden, übrig bleibt die Hüllkurve des Gebirges.
+3. Symmetrische Glättung, drei Durchgänge. Weil offline gerechnet wird, schaut sie nach vorn
+   und nach hinten. Kein Nachlauf, kein Sägezahn.
+4. Zum Schluss die Mindesthöhe über der Hüllkurve erzwingen, damit die Glättung nirgends in
+   einen Berg hineinläuft.
+
+Im Flug wird der Plan nur noch abgelesen. Dazu eine harte Untergrenze gegen das echte
+Gelände, weil das Profil grob abgetastet ist und ein einzelner Grat darin fehlen kann.
+
+Über das echte Gelände der Balkanreise, 3.521 km:
+
+```
+Boden                   -48 .. 2.365 m
+Richtungswechsel der geplanten Höhe        0
+Strecke mit unter 5 m Höhenänderung je km   87 %
+```
+
+Die Neigung kommt aus demselben Plan. Vorher hing sie am Boden direkt unter der Kamera und
+zappelte mit bis zu 7 Grad mit.
+
 ## Die Straße kurvt wirklich
 
 Die Routenabfrage holte bis dahin `overview=simplified`, eine vereinfachte Geometrie mit
