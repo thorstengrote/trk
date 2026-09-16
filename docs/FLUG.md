@@ -109,6 +109,10 @@ Sauberer wäre eine freie Kamera mit echter Höhenangabe, wie Mapbox sie hat. Ma
 nicht, geprüft in 4.7.1, 5.0.0 und 5.6.1. Das Abtasten ist deshalb eine Minderung, keine
 Garantie.
 
+## Die Drohne hoppelte über jeden Hügel
+
+Zwei verschiedene Ursachen, nacheinander gefunden.
+
 ## Der Höhenschlag über der Straße
 
 Die Kamera stieg und sank mit jeder Steigung der Straße. Der Grund steckte in einer
@@ -133,6 +137,34 @@ absolute Flughöhe, Änderung je Bild        unter 1 Promille
 
 Die Höhe über Grund folgt dem Gelände, die absolute Flughöhe bleibt liegen. Genau
 andersherum als vorher.
+
+## Der Sägezahn über welligem Land
+
+Danach wackelte die Kamera immer noch, und zwar über Kuppen unter der **Drohnenbahn**, nicht
+über Steigungen der Straße. Die Drohne fliegt ja ihre eigene Bahn, das Gelände unter ihr hat
+mit der Straße im Tal wenig zu tun.
+
+Das Höhenziel war `max(Boden direkt darunter, Gelände voraus) + Reisehöhe`. Der erste Term
+hob es bei jeder Kuppe sofort an, und die Sperrklinke ließ es zügig steigen (0,02) und nur
+langsam sinken (0,004). Heraus kam ein Sägezahn.
+
+Jetzt bestimmt allein das Gelände weit voraus die Reisehöhe, stark geträgt (0,010 hoch,
+0,002 runter). Einzelne Kuppen fallen dabei unter den Tisch. Dazu eine harte Untergrenze:
+kommt der Boden näher als 45 Prozent der Reisehöhe, wird mit 0,08 nachgesteuert. Gestiegen
+wird also nur, wenn es sonst eng würde.
+
+Die Regelung lässt sich ohne Grafikkarte prüfen, indem man sie über ein gerechnetes
+Geländeprofil laufen lässt: welliges Land mit Kuppen von ±265 m, dazwischen ein Gebirge bis
+1.606 m.
+
+```
+                Höhenschlag    Richtungswechsel    kleinster Bodenabstand
+alt                   755 m                  53                  2.973 m
+neu                   264 m                   2                  2.834 m
+```
+
+Der Rest von 264 m ist langsame Drift über 150 km, kein Wippen. Das Gebirge wird weiterhin
+überflogen.
 
 ## Die Straße kurvt wirklich
 
@@ -169,6 +201,14 @@ Strafaufschlag auf die Überfahrt. OSRM bleibt als Rückfall, falls Valhalla nic
 Das ist keine Ausnahme für diesen Ort, sondern ein Wechsel des Routers. Valhalla liefert
 zusätzlich die Fährabschnitte einzeln zurück (`begin_shape_index` je Manöver), die
 Kartenansicht zeichnet sie gepunktet in Wasserfarbe.
+
+In der Flugansicht bekommt jedes Fährstück eine eigene Quelle mit `lineMetrics`, weil ein
+Farbverlauf immer die ganze Quelle betrifft und jedes Stück seinen eigenen Streckenstand
+hat. Gezeichnet wird die klassische Fährsignatur: blaue Linie, weiße Striche darüber. Die
+Freigabe während des Flugs läuft mit, der Gesamtanteil wird dafür auf den Anteil innerhalb
+des Stücks umgerechnet.
+
+Am Drin sind das 32 km von Koman nach Fierzë, bei Streckenkilometer 261 bis 293.
 
 Der Schlüssel im Zwischenspeicher steht deshalb auf `r3`. Einträge von vorher stammen von
 einem Router ohne Fähren und werden nicht mehr benutzt.
