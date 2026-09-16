@@ -64,6 +64,11 @@
           font-size:13px;color:var(--dim);display:flex;gap:16px;flex-wrap:wrap;align-items:center}
   #zahlen b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
 
+  #hinweis{position:absolute;z-index:600;left:50%;transform:translateX(-50%);top:70px;
+           padding:9px 16px;font-size:13px;color:var(--dim)}
+  #hinweis b{color:var(--text);font-weight:600}
+  @media (max-width:820px){ #hinweis{left:14px;right:14px;transform:none;top:auto;bottom:86px} }
+
   /* Aufenthaltsliste */
   #liste{position:absolute;z-index:600;right:14px;bottom:14px;width:320px;
          max-height:min(52vh,560px);display:flex;flex-direction:column;overflow:hidden}
@@ -145,6 +150,8 @@
 </div>
 
 <div id="zahlen" class="karte"></div>
+<div id="hinweis" class="karte" hidden>Die Strecke ist noch verdeckt. <b>Fahrt abspielen</b>
+  zeigt sie Stück für Stück, <b>Strecke</b> blendet sie sofort ein.</div>
 
 <div id="liste" class="karte">
   <div id="listekopf">Aufenthalte</div>
@@ -205,7 +212,7 @@
   let karte, erg = null, csv = null;
   let laeuft = false, raf = null, letzteGrenzen = null;
   const gruppe = { strecke:null, punkte:null, kreise:null, stops:null, van:null };
-  const zeigt = { strecke:true, punkte:false, kreise:false };
+  const zeigt = { strecke:false, punkte:false, kreise:false };
 
   /* ---------- Hilfsformate ---------- */
   const nk1 = n => n.toFixed(1).replace('.', ',');
@@ -296,7 +303,19 @@
 
     sichtbarkeit();
     letzteGrenzen = grenzen.length ? grenzen : null;
-    if (letzteGrenzen) karte.fitBounds(letzteGrenzen, kartenRand());
+    if (!letzteGrenzen) return;
+    if (zeigt.strecke){
+      karte.fitBounds(letzteGrenzen, kartenRand());
+    } else {
+      // Verdeckter Start: die Karte zeigt nur, wo es losgeht. Wer die ganze
+      // Reise gleich sehen will, blendet die Strecke ein.
+      const a = erg.punkte[0];
+      L.circleMarker([a.lat,a.lon], {radius:9, color:'#fff', weight:3,
+          fillColor:css('--akzent'), fillOpacity:.95})
+        .bindTooltip('Start der Reise · ' + fmtZeit(a.time), {permanent:false})
+        .addTo(gruppe.van);
+      karte.fitBounds([[a.lat-.35, a.lon-.35],[a.lat+.35, a.lon+.35]], kartenRand());
+    }
   }
 
   // Links liegt das Bedienfeld, rechts die Liste. Ohne diesen Versatz
@@ -310,8 +329,11 @@
   function sichtbarkeit(){
     const setze = (g,an) => an ? karte.addLayer(g) : karte.removeLayer(g);
     setze(gruppe.strecke, zeigt.strecke);
+    setze(gruppe.stops,   zeigt.strecke);   // Aufenthalte gehoeren zur Strecke
     setze(gruppe.punkte,  zeigt.punkte);
     setze(gruppe.kreise,  zeigt.kreise);
+    $('hinweis').hidden = zeigt.strecke;
+    if (zeigt.strecke && !laeuft) gruppe.van.clearLayers();
     $('tRoute').classList.toggle('an', zeigt.strecke);
     $('tPunkte').classList.toggle('an', zeigt.punkte);
     $('tKreise').classList.toggle('an', zeigt.kreise);
@@ -336,6 +358,7 @@
     k.querySelectorAll('.halt').forEach(row => {
       row.onclick = () => {
         const h = erg.stops[+row.dataset.i];
+        if (!zeigt.strecke){ zeigt.strecke = true; sichtbarkeit(); }
         k.querySelectorAll('.halt').forEach(r => r.classList.remove('aktiv'));
         row.classList.add('aktiv');
         karte.setView([h.lat,h.lon], 12);
@@ -496,8 +519,8 @@
     $('fahren').disabled = false;
     // Danach wieder der vollstaendige Ueberblick
     gruppe.van.clearLayers();
+    zeigt.strecke = true;          // nach der Fahrt ist nichts mehr zu verraten
     sichtbarkeit();
-    karte.addLayer(gruppe.stops);
     if (letzteGrenzen) karte.fitBounds(letzteGrenzen, kartenRand());
   }
 
@@ -508,7 +531,7 @@
     $('fahrt').classList.remove('an');
     $('fahren').textContent = 'Fahrt abspielen';
     $('fahren').disabled = false;
-    if (!still){ sichtbarkeit(); karte.addLayer(gruppe.stops); }
+    if (!still){ sichtbarkeit(); }
   }
 
   /* ---------- Ablauf ---------- */
@@ -517,6 +540,7 @@
     const von = $('von').value ? new Date($('von').value+'T00:00:00Z') : null;
     const bis = $('bis').value ? new Date($('bis').value+'T23:59:59Z') : null;
 
+    zeigt.strecke = false;          // neuer Zeitraum, wieder verdeckt
     $('lade').style.display = 'flex';
     $('ladebalken').style.width = '0%';
     $('ladetext').textContent = 'Strecke wird berechnet';

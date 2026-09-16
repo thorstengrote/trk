@@ -79,8 +79,12 @@ Ergebnis auf derselben Sommerreise: 21 Aufenthalte statt null, 3434 km ueber Str
 
 ## Bedienung
 
-Zeitraum waehlen, **Anzeigen**. Die Umschalter blenden Strecke, Messpunkte und
-Genauigkeitskreise ein. Ein Klick auf einen Aufenthalt in der Liste springt dorthin.
+Zeitraum waehlen, **Anzeigen**. Beim Aufruf ist die Strecke **verdeckt**: die Karte zeigt nur,
+wo die Reise losgeht. Sonst waere schon alles verraten, bevor man die Fahrt gesehen hat.
+Aufgedeckt wird sie durch **Fahrt abspielen**, durch den Umschalter **Strecke** oder durch
+einen Klick auf einen Aufenthalt in der Liste.
+
+Die Umschalter blenden ausserdem Messpunkte und Genauigkeitskreise ein.
 
 **Fahrt abspielen** laesst die ganze Reise in wenigen Sekunden ablaufen, einstellbar von 8 bis
 100 Sekunden. Nicht in Echtzeit: bei einem zweitaegigen Aufenthalt saesse man sonst zwei Tage
