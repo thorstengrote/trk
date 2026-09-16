@@ -277,6 +277,28 @@ Die Geometrie kommt als Polyline mit sechs Nachkommastellen und wird in `analyse
 dekodiert. Der Gemeinschaftsserver drosselt bei zu vielen Anfragen; bei 429 oder 5xx wird
 bis zu dreimal mit wachsender Pause neu gefragt, gleichzeitig laufen höchstens drei Anfragen.
 
+## Kacheln vorwärmen
+
+MapLibre lädt immer nur, was gerade im Bild ist. Im Flug heißt das: Details tauchen auf,
+wenn man schon darüber ist. Ein Vorladen lässt sich nicht anweisen, aber der Browser hat
+einen Zwischenspeicher.
+
+Gewärmt wird entlang der Flugbahn, an drei Punkten voraus mit je einem Ring von neun
+Kacheln. Die Zoomstufe wird nicht geraten, sondern aus den Anfragen gelernt, die die Karte
+selbst stellt (`transformRequest`, Adresse gegen die Kachelvorlage gematcht). Dazu jeweils die
+nächstgröbere Stufe, denn solange die feine Kachel lädt, zeigt die Karte die gröbere.
+
+Über 45 Sekunden Flug gemessen:
+
+```
+ohne Vorwärmen      848 Kachelanfragen,   0 aus dem Vorrat
+mit Vorwärmen     1.017 Kachelanfragen, 440 aus dem Vorrat   (43 %)
+```
+
+**Offen:** Ob das sichtbar hilft, ließ sich hier nicht messen. Der Software-Renderer wartet
+in beiden Fällen die ganze Zeit auf Kacheln, er ist selbst der Engpass. Belegt ist nur die
+Trefferquote.
+
 ## Bedienung
 
 Zeitraum über `?start=` und `?end=` wie bei der Karte, Belag über `?belag=satellit|topo|outdoor`.
@@ -291,8 +313,34 @@ ein Fach offen.
 
 Die Dauer reicht von **30 Minuten bis 8 Sekunden** für die ganze Reise, in fünfzehn Stufen.
 Da sich die Flughöhe aus der Geschwindigkeit ergibt, ist das zugleich der Höhenregler:
-langsam heißt tief und nah an der Straße, schnell heißt hoch und weit. Vorgabe sind
-3:30 Minuten.
+langsam heißt tief und nah an der Straße, schnell heißt hoch und weit.
+
+Der Regler wirkt **mitten im Flug**. Dafür wird der Fortschritt als Anteil mitgeführt und
+nicht aus der Startzeit gerechnet, sonst spränge die Drohne beim Umstellen vor oder zurück.
+Höhe und Höhenplan werden mitgezogen, der Zoom wandert weich auf den neuen Wert. Gemessen:
+0,8 km/s auf Stufe 4, nach dem Umstellen 9,3 km/s auf Stufe 11, zurück auf 1,0 km/s, ohne
+Sprung in der Strecke.
+
+**Pause** hält den Flug an und gibt ihn wieder frei. Die Schleife läuft dabei weiter, sonst
+ließe sich die Karte nicht mehr drehen. **Stopp** beendet ihn und zeigt wieder alles.
+
+Vorgaben: **10 Minuten**, Kamerawinkel **53 Grad**, Höhenüberhöhung **1,0×**, Belag
+**Satellit**.
+
+## Halte
+
+An jedem Aufenthalt verweilt die Drohne drei Sekunden. Der Halt bekommt eine Sprechblase mit
+Sinnbild und Wort:
+
+| Dauer | Beschriftung | Sinnbild |
+|---|---|---|
+| unter 1 h | Pause | Pausenzeichen |
+| 1 bis 6 h, oder länger am Tag | Parken | P |
+| ab 6 h nachts | Campen über Nacht | Zelt |
+| ab 24 h | Mehrere Tage | Zelt |
+
+Die Beschriftung wird in das Bild gezeichnet und nicht als Textebene gesetzt. Zwei der drei
+Beläge sind reine Rasterkarten ohne Schriftarten, eine Textebene bliebe dort leer.
 
 ## Geprüft
 

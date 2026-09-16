@@ -55,11 +55,12 @@
 
 <div id="steuer" class="karte">
   <h1>Flug über die Strecke</h1>
-  <label>Dauer <span class="wert" id="dauerwert">3:30 min</span>
+  <label>Dauer <span class="wert" id="dauerwert">10:00 min</span>
     <span id="temponame" style="color:#9b9b93;font-weight:400"></span></label>
-  <input type="range" id="dauer" min="1" max="15" value="7">
+  <input type="range" id="dauer" min="1" max="15" value="4">
   <div style="margin-top:12px">
     <button id="start">Flug starten</button>
+    <button class="still" id="pause" disabled>Pause</button>
     <button class="still" id="stopp">Stopp</button>
     <button class="still" id="zeigen">Strecke einblenden</button>
   <div id="planstand"></div>
@@ -71,19 +72,19 @@
     <button class="reiter" data-auf="karteWahl">Karte</button>
     <div class="fach" id="karteWahl" hidden>
       <div id="belaege">
-        <button class="still" data-id="satellit">Satellit</button>
+        <button class="still an" data-id="satellit">Satellit</button>
         <button class="still" data-id="topo">Topografisch</button>
-        <button class="still an" data-id="outdoor">Outdoor</button>
+        <button class="still" data-id="outdoor">Outdoor</button>
       </div>
     </div>
   </div>
   <div class="klapp" id="klappSicht">
     <button class="reiter" data-auf="sichtWahl">Sicht</button>
     <div class="fach" id="sichtWahl" hidden>
-      <label>Kamerawinkel <span class="wert" id="winkelwert">70°</span></label>
-      <input type="range" id="winkel" min="0" max="80" value="70">
-      <label>Höhenüberhöhung <span class="wert" id="hoehewert">1,8×</span></label>
-      <input type="range" id="hoehe" min="10" max="30" value="18">
+      <label>Kamerawinkel <span class="wert" id="winkelwert">53°</span></label>
+      <input type="range" id="winkel" min="0" max="80" value="53">
+      <label>Höhenüberhöhung <span class="wert" id="hoehewert">1,0×</span></label>
+      <input type="range" id="hoehe" min="10" max="30" value="10">
     </div>
   </div>
 </div>
@@ -141,7 +142,8 @@
   const $ = id => document.getElementById(id);
   const P = new URLSearchParams(location.search);
 
-  let karte, pfad = [], stops = [], faehrten = [], profilVersprechen = null, raf = null, laeuft = false, gelaendeDaGlobal = true;
+  let karte, pfad = [], stops = [], faehrten = [], profilVersprechen = null,
+      tempoImFlug = null, raf = null, laeuft = false, pausiert = false, gelaendeDaGlobal = true;
   let verdeckt = true;
 
   const fmtUhr = d => d.toLocaleString('de-DE',
@@ -202,8 +204,65 @@
     return ['interpolate',['linear'],['line-progress'],
             0, voll, f, voll, g, durchsichtig, 1, durchsichtig];
   }
-  const NAME_KURZ = { pause:'Pause', halt:'Halt', 'langer-halt':'Längerer Halt',
-                      uebernachtung:'Übernachtung', standtage:'Standtage' };
+  const NAME_KURZ = { pause:'Pause', halt:'Parken', 'langer-halt':'Parken',
+                      uebernachtung:'Campen über Nacht', standtage:'Mehrere Tage' };
+  const HALT_FARBE = { pause:'#d4941f', halt:'#cc6a2c', 'langer-halt':'#cc6a2c',
+                       uebernachtung:'#6b52b5', standtage:'#a33b3b' };
+  const HALT_MS = 3000;           // so lange verweilt die Drohne am Halt
+
+  /* Die Beschriftung wird in das Bild gezeichnet und nicht als Textebene
+     gesetzt. Zwei der drei Belaege sind reine Rasterkarten ohne Schriftarten,
+     eine Textebene bliebe dort leer. */
+  function pinBild(art){
+    const text = NAME_KURZ[art] || 'Halt';
+    const farbe = HALT_FARBE[art] || '#888';
+    const V = 2;                                   // doppelte Aufloesung
+    const mess = document.createElement('canvas').getContext('2d');
+    mess.font = `600 13px system-ui, sans-serif`;
+    const tw = Math.ceil(mess.measureText(text).width);
+    const b = tw + 46, h = 46;
+    const fl = document.createElement('canvas');
+    fl.width = b*V; fl.height = h*V;
+    const c = fl.getContext('2d');
+    c.scale(V, V);
+
+    // Sprechblase mit Spitze nach unten
+    const r = 13, sp = 7, bh = h - sp;
+    c.beginPath();
+    c.moveTo(r, 0); c.lineTo(b-r, 0); c.quadraticCurveTo(b, 0, b, r);
+    c.lineTo(b, bh-r); c.quadraticCurveTo(b, bh, b-r, bh);
+    c.lineTo(b/2 + sp, bh); c.lineTo(b/2, h); c.lineTo(b/2 - sp, bh);
+    c.lineTo(r, bh); c.quadraticCurveTo(0, bh, 0, bh-r);
+    c.lineTo(0, r); c.quadraticCurveTo(0, 0, r, 0);
+    c.closePath();
+    c.fillStyle = 'rgba(12,20,28,.88)';
+    c.fill();
+    c.strokeStyle = farbe; c.lineWidth = 2; c.stroke();
+
+    // Sinnbild links im Kreis
+    const mx = 20, my = bh/2;
+    c.beginPath(); c.arc(mx, my, 11, 0, 7); c.fillStyle = farbe; c.fill();
+    c.strokeStyle = '#fff'; c.fillStyle = '#fff'; c.lineWidth = 2;
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    if (art === 'pause'){                          // Pausenzeichen
+      c.fillRect(mx-4, my-5, 3, 10); c.fillRect(mx+1, my-5, 3, 10);
+    } else if (art === 'uebernachtung' || art === 'standtage'){   // Zelt
+      c.beginPath(); c.moveTo(mx, my-6); c.lineTo(mx+7, my+5);
+      c.lineTo(mx-7, my+5); c.closePath(); c.stroke();
+      c.beginPath(); c.moveTo(mx, my-6); c.lineTo(mx, my+5); c.stroke();
+    } else {                                        // Parken
+      c.font = '700 14px system-ui, sans-serif';
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('P', mx, my + 1);
+    }
+
+    c.fillStyle = '#fff';
+    c.font = '600 13px system-ui, sans-serif';
+    c.textAlign = 'left'; c.textBaseline = 'middle';
+    c.fillText(text, 37, my + 1);
+
+    return { daten: c.getImageData(0, 0, fl.width, fl.height), breite: b, hoehe: h };
+  }
 
   // Jeder Aufenthalt bekommt seinen Streckenstand. Waehrend des Flugs gibt ihn
   // ein Filter frei, sobald die Drohne vorbei ist.
@@ -250,7 +309,7 @@
     outdoor: { name:'Outdoor', stil:'https://tiles.openfreemap.org/styles/liberty', schummer:true }
   };
 
-  let belag = P0.get('belag') && BELAEGE[P0.get('belag')] ? P0.get('belag') : 'outdoor';
+  let belag = P0.get('belag') && BELAEGE[P0.get('belag')] ? P0.get('belag') : 'satellit';
 
   // Gelaende, Himmel, Strecke und Aufenthalte haengen nicht am Belag und
   // muessen nach jedem Stilwechsel neu gesetzt werden.
@@ -311,12 +370,16 @@
         features: stops.map(h => ({ type:'Feature',
           properties:{ art:h.art, km: halteKmVon(h) },
           geometry:{ type:'Point', coordinates:[h.lon, h.lat] } })) } });
+    for (const art of Object.keys(NAME_KURZ)){
+      if (karte.hasImage('pin-' + art)) continue;
+      const b = pinBild(art);
+      karte.addImage('pin-' + art, b.daten, { pixelRatio: 2 });
+    }
     if (!karte.getLayer('halte'))
-      karte.addLayer({ id:'halte', type:'circle', source:'halte',
-        paint:{ 'circle-radius':8, 'circle-stroke-width':2.5, 'circle-stroke-color':'#fff',
-          'circle-color':['match',['get','art'],
-            'pause','#d4941f','halt','#cc6a2c','langer-halt','#cc6a2c',
-            'uebernachtung','#6b52b5','standtage','#a33b3b','#888'] } });
+      karte.addLayer({ id:'halte', type:'symbol', source:'halte',
+        layout:{ 'icon-image':['concat', 'pin-', ['get','art']],
+                 'icon-anchor':'bottom', 'icon-allow-overlap':true,
+                 'icon-ignore-placement':true, 'icon-size':0.9 } });
   }
 
   function initKarte(gelaendeDa){
@@ -326,7 +389,16 @@
       // Vor dem Flug eine gewoehnliche Karte: genordet und von oben. Der
       // eingestellte Kamerawinkel gilt erst fuer den Flug selbst.
       pitch:0, bearing:0, maxPitch:85,
-      attributionControl:{ compact:true }
+      attributionControl:{ compact:true },
+      // Einmal geladene Kacheln laenger halten, der Flug kommt teils zurueck
+      maxTileCacheSize: 800,
+      // Nur zum Nachzaehlen, ob das Vorwaermen etwas bringt
+      // Mitschreiben, welche Kacheln wirklich gebraucht werden. Daraus lernt
+      // das Vorwaermen die richtigen Zoomstufen.
+      transformRequest: (url, art) => {
+        if (art === 'Tile') warmMerken(url);
+        return { url };
+      }
     });
     return new Promise(fertig => {
       karte.on('load', () => { ebenenSetzen(gelaendeDa); fertig(); });
@@ -388,6 +460,106 @@
   function bahnBauen(){
     const gesamtKm = pfad.length ? pfad[pfad.length-1].km || 1 : 1;
     return drohnenbahn(pfad, Math.max(gesamtKm / 28, 12));
+  }
+
+  /* ---------- Kacheln vorwaermen ---------- */
+
+  /* MaplibreGL laedt immer nur, was gerade im Bild ist. Im Flug bedeutet das:
+     Details tauchen genau dann auf, wenn man schon darueber ist.
+
+     Ein Vorladen laesst sich nicht anweisen, aber der Browser hat einen
+     Zwischenspeicher. Wer die Kacheln entlang der Bahn vorher einmal abruft,
+     bekommt sie spaeter aus dem Speicher statt aus dem Netz. */
+
+  const gewaermt = new Set();
+  let warmOffen = 0, warmTreffer = 0, warmFehl = 0;
+  let warmQuellen = [];
+  const WARM = P0.get('warm') !== 'aus';
+
+  // Aus der Kachelvorlage ein Muster bauen, um aus einer tatsaechlich
+  // angefragten Adresse die Zoomstufe zurueckzulesen. Raten hilft nicht: die
+  // Karte waehlt die Stufe je nach Neigung und Entfernung selbst.
+  function musterAus(vorlage){
+    const roh = vorlage.replace(/\{ratio\}|\{r\}/g, '');
+    const teile = roh.split(/(\{[zxy]\})/);
+    let aus = '^', reihe = [];
+    for (const t of teile){
+      if (t === '{z}' || t === '{x}' || t === '{y}'){ aus += '(\\d+)'; reihe.push(t[1]); }
+      else aus += t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    return { muster: new RegExp(aus + '$'), reihe };
+  }
+
+  function kachelquellen(){
+    const raus = [];
+    const stil = karte.getStyle?.();
+    for (const id of Object.keys(stil?.sources || {})){
+      const q = karte.getSource(id);
+      const kacheln = q?.tiles || q?._options?.tiles;
+      if (!kacheln?.length) continue;
+      raus.push({ kacheln, min: q.minzoom ?? 0, max: q.maxzoom ?? 14,
+                  hoch: (q.scheme || 'xyz') === 'tms',
+                  ...musterAus(kacheln[0]), stufen: new Set() });
+    }
+    warmQuellen = raus;
+    return raus;
+  }
+
+  // Beim Anfragen mitschreiben, welche Stufen wirklich gebraucht werden
+  function warmMerken(adresse){
+    if (gewaermt.has(adresse)) warmTreffer++; else warmFehl++;
+    for (const q of warmQuellen){
+      const t = q.muster.exec(adresse);
+      if (!t) continue;
+      const z = +t[q.reihe.indexOf('z') + 1];
+      if (Number.isFinite(z)){ q.stufen.add(z); if (q.stufen.size > 4){
+        const alt = Math.min(...q.stufen); q.stufen.delete(alt); } }
+      return;
+    }
+  }
+
+  function adresseBauen(q, z, x, y){
+    const n = 2 ** z;
+    return q.kacheln[0].replace('{z}', z).replace('{x}', x)
+      .replace('{y}', q.hoch ? n - 1 - y : y)
+      .replace(/\{ratio\}|\{r\}/g, '');
+  }
+
+  /* MaplibreGL laedt immer nur, was gerade im Bild ist. Im Flug bedeutet das:
+     Details tauchen genau dann auf, wenn man schon darueber ist.
+
+     Ein Vorladen laesst sich nicht anweisen, aber der Browser hat einen
+     Zwischenspeicher. Wer die Kacheln entlang der Bahn vorher einmal abruft,
+     bekommt sie spaeter von dort statt aus dem Netz. Gewaermt wird auf den
+     Stufen, die die Karte gerade selbst anfragt, und rund um mehrere Punkte
+     voraus, weil der Blick bei starker Neigung weit reicht. */
+  function vorwaermen(quellen, bahn, km, gesamtKm, weiteKm){
+    if (!WARM || warmOffen > 8) return;
+    for (const q of quellen){
+      // Auch die naechstgroebere Stufe waermen: solange die feine Kachel
+      // laedt, zeigt die Karte die groebere. Eine Kachel deckt dort das
+      // Vierfache ab, kostet also wenig.
+      const stufen = q.stufen.size ? [...new Set([...q.stufen, Math.min(...q.stufen) - 1])] : [];
+      for (const z0 of stufen){
+        const z = Math.max(q.min, Math.min(z0, q.max));
+        const n = 2 ** z;
+        for (const f of [1.0, 1.7, 2.6]){
+          const p = aufBahn(bahn, Math.min(km + weiteKm * f, gesamtKm));
+          const mx = kachelX(p.lon, z), my = kachelY(p.lat, z);
+          for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++){
+            const x = mx + dx, y = my + dy;
+            if (x < 0 || y < 0 || x >= n || y >= n) continue;
+            const adresse = adresseBauen(q, z, x, y);
+            if (gewaermt.has(adresse)) continue;
+            if (warmOffen > 12) return;
+            gewaermt.add(adresse); warmOffen++;
+            fetch(adresse, { mode:'cors', credentials:'same-origin' })
+              .then(r => r.arrayBuffer()).catch(() => {})
+              .finally(() => { warmOffen--; });
+          }
+        }
+      }
+    }
   }
 
   /* ---------- Flugplan ---------- */
@@ -663,40 +835,52 @@
     flugStopp();
     if (pfad.length < 2) return;
     laeuft = true;
+    pausiert = false;
     $('anzeige').classList.add('an');
     $('start').textContent = 'Fliegt …';
     $('start').disabled = true;
+    $('pause').disabled = false;
+    $('pause').textContent = 'Pause';
 
     const gesamtKm = pfad[pfad.length-1].km || 1;
-    const dauerMs = DAUERN[+$('dauer').value - 1] * 1000;
-    const tempo = gesamtKm * 1000 / (dauerMs / 1000);       // Meter je Sekunde
-
     const bahn = bahnBauen();
-
-    // Grundhoehe der Kamera aus dem Tempo: die Landschaft soll immer mit
-    // rund derselben Pixelzahl je Sekunde vorbeiziehen.
-    const basisZoom  = flughoehe(tempo, pfad[0].lat);
     const basisPitch = +$('winkel').value;
     const VORLAUF = Math.max(gesamtKm / 40, 4);            // km, Blickpunkt voraus
     const bildHoehe = karte.getContainer().clientHeight || 800;
 
     let richtung = null, pitchAkt = basisPitch;
-    let t0 = 0, letzteKamera = 0, letzterStrich = 0, erreicht = 0;
+    let t0 = 0, anteil = 0, letzteKamera = 0, letzterStrich = 0, letzteWarm = 0;
+    let erreicht = 0, verweiltBis = 0;
+    const quellen = kachelquellen();
     let grundAkt = null, grundHart = null, grundGlatt = null;
     let zielGrund = null, flugNN = null;
 
-    /* Hoehe planen, bevor der erste Bildschritt laeuft.
+    /* Tempo, Flughoehe und Hoehenplan haengen alle am Regler.
 
-       Das Gelaendeprofil haengt nur an der Strecke und wird einmal geholt.
-       Der Plan selbst haengt am Tempo, weil daraus die Reisehoehe folgt, und
-       wird deshalb bei jedem Start neu gerechnet. Das kostet Millisekunden. */
+       Der Regler wirkt deshalb auch mitten im Flug: er wird nicht einmal beim
+       Start abgelesen, sondern setzt bei jeder Bewegung alles neu. Der
+       Fortschritt wird als Anteil mitgefuehrt und nicht aus der Startzeit
+       gerechnet, sonst spraenge die Drohne beim Umstellen vor oder zurueck. */
     const mittLat = bahn[bahn.length >> 1].lat;
-    const REISE = hoeheAusZoom(basisZoom, mittLat, bildHoehe);
-    let plan = null;
+    let dauerMs, zoomZiel, basisZoom = null, REISE, plan = null, profil = null;
+
+    function tempoSetzen(){
+      dauerMs = DAUERN[+$('dauer').value - 1] * 1000;
+      const tempo = gesamtKm * 1000 / (dauerMs / 1000);     // Meter je Sekunde
+      // Grundhoehe der Kamera aus dem Tempo: die Landschaft soll immer mit
+      // rund derselben Pixelzahl je Sekunde vorbeiziehen.
+      zoomZiel = flughoehe(tempo, pfad[0].lat);
+      if (basisZoom === null) basisZoom = zoomZiel;
+      REISE = hoeheAusZoom(zoomZiel, mittLat, bildHoehe);
+      if (profil) plan = flugplan(profil, REISE, Math.max(gesamtKm / 60, 25));
+    }
+    tempoSetzen();
+    tempoImFlug = tempoSetzen;
+
     if (!profilVersprechen) profilVersprechen = gelaendeprofil(bahn, gesamtKm);
-    const profil = await profilVersprechen;
+    profil = await profilVersprechen;
     if (!laeuft) return;                       // zwischenzeitlich gestoppt
-    if (profil) plan = flugplan(profil, REISE, Math.max(gesamtKm / 60, 25));
+    tempoSetzen();
     $('start').textContent = plan ? 'Fliegt …' : 'Fliegt (ohne Plan) …';
 
     /* Der eigentliche Grund fuer das Auf und Ab.
@@ -732,8 +916,21 @@
     const schritt = (jetzt) => {
       if (!laeuft) return;
       if (!t0) t0 = jetzt;
-      const anteil = Math.min((jetzt - t0) / dauerMs, 1);
+      // Pause: die Uhr mitziehen, damit beim Weiterfliegen nichts nachgeholt
+      // wird. Die Schleife laeuft weiter, sonst waere das Bild eingefroren
+      // und liesse sich nicht mehr drehen.
+      if (pausiert || jetzt < verweiltBis){
+        t0 = jetzt; raf = requestAnimationFrame(schritt); return;
+      }
+      // Verstrichene Zeit statt Startzeitpunkt: so aendert der Regler das
+      // Tempo, ohne den Fortschritt zu verschieben. Grosse Spruenge nach
+      // einem haengenden Bild werden gekappt.
+      anteil = Math.min(anteil + Math.min(jetzt - t0, 120) / dauerMs, 1);
+      t0 = jetzt;
       const km = anteil * gesamtKm;
+
+      // Zoom weich auf das neue Tempo ziehen, nicht springen
+      basisZoom += (zoomZiel - basisZoom) * 0.05;
 
       const fahrzeug = aufBahn(pfad, km);
       const kam   = aufBahn(bahn, km);
@@ -821,6 +1018,11 @@
           { km, boden:bodenJetzt, glatt:boden, geplant, flugNN, ueberGrund, zoom:zoomAkt, pitch:pitchAkt });
       }
 
+      if (jetzt - letzteWarm > 450){
+        letzteWarm = jetzt;
+        vorwaermen(quellen, bahn, km, gesamtKm, VORLAUF);
+      }
+
       if (jetzt - letzterStrich > 45){
         letzterStrich = jetzt;
         strichSetzen(anteil);
@@ -828,7 +1030,9 @@
       }
 
       while (erreicht < halteKm.length && halteKm[erreicht].km <= km){
+        // Am Halt kurz verweilen, damit man den Ort auch sieht
         $('aNext').textContent = NAME_KURZ[halteKm[erreicht].halt.art] || '';
+        verweiltBis = jetzt + HALT_MS;
         erreicht++;
       }
 
@@ -862,6 +1066,10 @@
 
   function flugEnde(){
     laeuft = false;
+    pausiert = false;
+    tempoImFlug = null;
+    $('pause').disabled = true;
+    $('pause').textContent = 'Pause';
     if (karte && typeof karte.setCenterClampedToGround === 'function')
       karte.setCenterClampedToGround(true);
     if (raf){ cancelAnimationFrame(raf); raf = null; }
@@ -941,10 +1149,17 @@
         karte.setFilter('halte', verdeckt ? ['<=', ['get','km'], -1] : null);
       $('zeigen').textContent = verdeckt ? 'Strecke einblenden' : 'Strecke ausblenden';
     };
+    $('pause').onclick = () => {
+      if (!laeuft) return;
+      pausiert = !pausiert;
+      $('pause').textContent = pausiert ? 'Weiter' : 'Pause';
+      $('start').textContent = pausiert ? 'Pausiert' : 'Fliegt …';
+    };
     $('dauer').oninput = () => {
       const d = DAUERN[+$('dauer').value - 1];
       $('dauerwert').textContent = DAUERTEXT(d);
       $('temponame').textContent = '· ' + TEMPONAME(d);
+      if (tempoImFlug) tempoImFlug();          // wirkt auch mitten im Flug
     };
     $('dauer').oninput();          // Beschriftung gleich richtig stellen
     $('winkel').oninput = () => {
@@ -966,7 +1181,8 @@
         r.classList.toggle('auf', !offen);
       };
     window.flug = { karte, pfad, stops, faehrten, get profil(){ return profilVersprechen; },
-                  gelaendeprofil, flugplan, planAbfragen, bahnBauen, hoeheAusZoom };
+                  gelaendeprofil, flugplan, planAbfragen, bahnBauen, hoeheAusZoom,
+                  get gewaermt(){ return { vorgeladen: gewaermt.size, treffer: warmTreffer, fehl: warmFehl }; } };
   })();
 })();
 </script>
