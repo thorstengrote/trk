@@ -8,7 +8,11 @@
 <style>
   html,body{margin:0;height:100%;background:#12141a;
             font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#e9e9e4}
-  #map{position:absolute;inset:0}
+  /* Untergrund der Karte: Himmel statt Nacht. Ueber dem Bergkamm und in
+     jedem Loch im Gelaende schien sonst der dunkle Seitenhintergrund durch,
+     was wie ein schwarzer Keil aussah. */
+  #map{position:absolute;inset:0;
+       background:linear-gradient(#5d97d4 0%,#9cc3e6 45%,#d8e8f4 78%,#e9eef2 100%)}
   .karte{position:absolute;z-index:10;background:rgba(24,26,32,.92);border:1px solid #333842;
          border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);backdrop-filter:blur(6px)}
   #steuer{top:14px;left:14px;padding:12px 14px;width:250px}
@@ -127,7 +131,10 @@
   const DEM = P0.get('dem') === 'lokal'
     ? location.href.replace(/[^?#]*\//, m => m) .replace(/[^/]*$/, '') + 'dem/{z}/{x}/{y}.png'
     : 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
-  const DEM_MAXZOOM = P0.get('dem') === 'lokal' ? 11 : 15;
+  // Hoechste Hoehenstufe. Weiter oben fehlen einzelne Kacheln, und jedes
+  // fehlende Stueck ist ein Loch im Gelaende. Fuer die Form reicht 13 auch
+  // auf der langsamsten Stufe.
+  const DEM_MAXZOOM = P0.get('dem') === 'lokal' ? 11 : 13;
 
   // Spieldauer der ganzen Reise in Sekunden, von sehr langsam bis extrem
   // schnell. Da sich die Flughoehe aus der Geschwindigkeit ergibt, ist das
@@ -205,63 +212,117 @@
             0, voll, f, voll, g, durchsichtig, 1, durchsichtig];
   }
   const NAME_KURZ = { pause:'Pause', halt:'Parken', 'langer-halt':'Parken',
-                      uebernachtung:'Campen über Nacht', standtage:'Mehrere Tage' };
-  const HALT_FARBE = { pause:'#d4941f', halt:'#cc6a2c', 'langer-halt':'#cc6a2c',
-                       uebernachtung:'#6b52b5', standtage:'#a33b3b' };
+                      uebernachtung:'Übernachtung', standtage:'Übernachtung' };
+  const HALT_FARBE = { pause:'#e0a32a', halt:'#e07a33', 'langer-halt':'#e07a33',
+                       uebernachtung:'#7b62d6', standtage:'#7b62d6' };
   const HALT_MS = 3000;           // so lange verweilt die Drohne am Halt
 
-  /* Die Beschriftung wird in das Bild gezeichnet und nicht als Textebene
-     gesetzt. Zwei der drei Belaege sind reine Rasterkarten ohne Schriftarten,
-     eine Textebene bliebe dort leer. */
-  function pinBild(art){
-    const text = NAME_KURZ[art] || 'Halt';
+  // Wie viele Naechte dort geschlafen wurde: die Zahl der Datumswechsel in
+  // Ortszeit, nicht die Dauer geteilt durch 24.
+  function naechte(h){
+    const O = 2 * 3600e3;                       // grobe Ortszeit
+    const a = new Date(+h.von + O), b = new Date(+h.bis + O);
+    const tag = d => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    return Math.max(Math.round((tag(b) - tag(a)) / 86400e3), 1);
+  }
+
+  const istCamp = art => art === 'uebernachtung' || art === 'standtage';
+  const bildName = h => istCamp(h.art) ? 'pin-camp-' + Math.min(naechte(h), 99)
+                      : (h.art === 'pause' ? 'pin-pause' : 'pin-park');
+  const haltText = h => istCamp(h.art)
+    ? (naechte(h) === 1 ? 'Eine Nacht' : naechte(h) + ' Nächte')
+    : (NAME_KURZ[h.art] || 'Halt');
+
+  /* Die Pins sind gezeichnete Bilder, keine Textebenen. Zwei der drei Belaege
+     sind reine Rasterkarten ohne Schriftarten, eine Textebene bliebe dort
+     leer. Raeumlich wirken sie ueber Verlauf, Glanzlicht, dunklen Rand,
+     einen Schaft und einen Schatten auf dem Boden.
+
+     Beschriftungen gibt es nicht: das Pausenzeichen, das P und das Zelt
+     stehen fuer sich. Beim Zelt sagt eine kleine Scheibe die Zahl der
+     Naechte. */
+  function pinBild(art, anzahl){
     const farbe = HALT_FARBE[art] || '#888';
-    const V = 2;                                   // doppelte Aufloesung
-    const mess = document.createElement('canvas').getContext('2d');
-    mess.font = `600 13px system-ui, sans-serif`;
-    const tw = Math.ceil(mess.measureText(text).width);
-    const b = tw + 46, h = 46;
+    const V = 3;                                  // dreifache Aufloesung
+    const B = 46, H = 64, r = 17;                 // Bild, Kopfradius
+    const mx = B/2, my = r + 3;                   // Mittelpunkt des Kopfes
     const fl = document.createElement('canvas');
-    fl.width = b*V; fl.height = h*V;
+    fl.width = B*V; fl.height = H*V;
     const c = fl.getContext('2d');
     c.scale(V, V);
-
-    // Sprechblase mit Spitze nach unten
-    const r = 13, sp = 7, bh = h - sp;
-    c.beginPath();
-    c.moveTo(r, 0); c.lineTo(b-r, 0); c.quadraticCurveTo(b, 0, b, r);
-    c.lineTo(b, bh-r); c.quadraticCurveTo(b, bh, b-r, bh);
-    c.lineTo(b/2 + sp, bh); c.lineTo(b/2, h); c.lineTo(b/2 - sp, bh);
-    c.lineTo(r, bh); c.quadraticCurveTo(0, bh, 0, bh-r);
-    c.lineTo(0, r); c.quadraticCurveTo(0, 0, r, 0);
-    c.closePath();
-    c.fillStyle = 'rgba(12,20,28,.88)';
-    c.fill();
-    c.strokeStyle = farbe; c.lineWidth = 2; c.stroke();
-
-    // Sinnbild links im Kreis
-    const mx = 20, my = bh/2;
-    c.beginPath(); c.arc(mx, my, 11, 0, 7); c.fillStyle = farbe; c.fill();
-    c.strokeStyle = '#fff'; c.fillStyle = '#fff'; c.lineWidth = 2;
     c.lineCap = 'round'; c.lineJoin = 'round';
+
+    // Schatten auf dem Boden
+    c.save();
+    c.translate(mx, H - 4); c.scale(1, 0.34);
+    const sch = c.createRadialGradient(0,0,1, 0,0,9);
+    sch.addColorStop(0, 'rgba(0,0,0,.45)'); sch.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = sch; c.beginPath(); c.arc(0,0,9,0,7); c.fill();
+    c.restore();
+
+    // Schaft, unten spitz
+    const g = c.createLinearGradient(mx-3, 0, mx+3, 0);
+    g.addColorStop(0, 'rgba(255,255,255,.55)');
+    g.addColorStop(.45, farbe);
+    g.addColorStop(1, 'rgba(0,0,0,.35)');
+    c.beginPath();
+    c.moveTo(mx-3.2, my + r - 4); c.lineTo(mx+3.2, my + r - 4);
+    c.lineTo(mx+0.9, H - 5); c.lineTo(mx-0.9, H - 5); c.closePath();
+    c.fillStyle = g; c.fill();
+    c.strokeStyle = 'rgba(0,0,0,.30)'; c.lineWidth = .8; c.stroke();
+
+    // Kopf als Kugel: Verlauf von oben links, dunkler Rand, Glanzlicht
+    const kg = c.createRadialGradient(mx - r*.42, my - r*.5, r*.15, mx, my, r);
+    kg.addColorStop(0, '#ffffff');
+    kg.addColorStop(.28, farbe);
+    kg.addColorStop(1, mischen(farbe, '#000000', .45));
+    c.beginPath(); c.arc(mx, my, r, 0, 7); c.fillStyle = kg; c.fill();
+    c.lineWidth = 1.6; c.strokeStyle = 'rgba(255,255,255,.85)'; c.stroke();
+
+    c.save();
+    c.beginPath(); c.ellipse(mx - r*.3, my - r*.45, r*.5, r*.28, -.5, 0, 7);
+    c.fillStyle = 'rgba(255,255,255,.4)'; c.fill();
+    c.restore();
+
+    // Sinnbild
+    c.save();
+    c.shadowColor = 'rgba(0,0,0,.5)'; c.shadowBlur = 2; c.shadowOffsetY = 1;
+    c.fillStyle = '#fff'; c.strokeStyle = '#fff';
     if (art === 'pause'){                          // Pausenzeichen
-      c.fillRect(mx-4, my-5, 3, 10); c.fillRect(mx+1, my-5, 3, 10);
-    } else if (art === 'uebernachtung' || art === 'standtage'){   // Zelt
-      c.beginPath(); c.moveTo(mx, my-6); c.lineTo(mx+7, my+5);
-      c.lineTo(mx-7, my+5); c.closePath(); c.stroke();
-      c.beginPath(); c.moveTo(mx, my-6); c.lineTo(mx, my+5); c.stroke();
-    } else {                                        // Parken
-      c.font = '700 14px system-ui, sans-serif';
+      c.fillRect(mx-5.5, my-7, 4, 14); c.fillRect(mx+1.5, my-7, 4, 14);
+    } else if (istCamp(art)){                      // Zelt, gefuellt mit Eingang
+      c.beginPath(); c.moveTo(mx, my-9.5); c.lineTo(mx+10.5, my+7);
+      c.lineTo(mx-10.5, my+7); c.closePath(); c.fill();
+      c.fillStyle = mischen(farbe, '#000000', .35);
+      c.beginPath(); c.moveTo(mx, my-1.5); c.lineTo(mx+3.8, my+7);
+      c.lineTo(mx-3.8, my+7); c.closePath(); c.fill();
+    } else {                                       // Parken
+      c.font = '800 23px system-ui, -apple-system, sans-serif';
       c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillText('P', mx, my + 1);
+      c.fillText('P', mx, my + 1.5);
+    }
+    c.restore();
+
+    // Scheibe mit der Zahl der Naechte
+    if (istCamp(art) && anzahl){
+      const bx = mx + r*.80, by = my - r*.74, br = 9.5;
+      c.beginPath(); c.arc(bx, by, br, 0, 7);
+      c.fillStyle = '#17202b'; c.fill();
+      c.lineWidth = 1.6; c.strokeStyle = '#fff'; c.stroke();
+      c.fillStyle = '#fff';
+      c.font = `800 ${anzahl > 9 ? 10 : 12}px system-ui, sans-serif`;
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(String(anzahl), bx, by + .5);
     }
 
-    c.fillStyle = '#fff';
-    c.font = '600 13px system-ui, sans-serif';
-    c.textAlign = 'left'; c.textBaseline = 'middle';
-    c.fillText(text, 37, my + 1);
+    return c.getImageData(0, 0, fl.width, fl.height);
+  }
 
-    return { daten: c.getImageData(0, 0, fl.width, fl.height), breite: b, hoehe: h };
+  function mischen(hex, ziel, anteil){
+    const z = h => [1,3,5].map(i => parseInt(h.slice(i, i+2), 16));
+    const [a,b2,c2] = z(hex), [d,e,f] = z(ziel);
+    const m = (x,y) => Math.round(x + (y-x)*anteil);
+    return `rgb(${m(a,d)},${m(b2,e)},${m(c2,f)})`;
   }
 
   // Jeder Aufenthalt bekommt seinen Streckenstand. Waehrend des Flugs gibt ihn
@@ -298,14 +359,16 @@
       version:8, sources:{ sat:{ type:'raster', tileSize:256, maxzoom:18,
         tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
         attribution:'Luftbilder &copy; Esri' } },
-      layers:[{ id:'sat', type:'raster', source:'sat' }] } },
+      layers:[{ id:'grund', type:'background', paint:{ 'background-color':'#9cc3e6' } },
+              { id:'sat', type:'raster', source:'sat' }] } },
     topo: { name:'Topografisch', stil: {
       version:8, sources:{ topo:{ type:'raster', tileSize:256, maxzoom:16,
         tiles:['https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
                'https://b.tile.opentopomap.org/{z}/{x}/{y}.png',
                'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'],
         attribution:'&copy; OpenStreetMap, SRTM | &copy; OpenTopoMap (CC-BY-SA)' } },
-      layers:[{ id:'topo', type:'raster', source:'topo' }] } },
+      layers:[{ id:'grund', type:'background', paint:{ 'background-color':'#9cc3e6' } },
+              { id:'topo', type:'raster', source:'topo' }] } },
     outdoor: { name:'Outdoor', stil:'https://tiles.openfreemap.org/styles/liberty', schummer:true }
   };
 
@@ -320,11 +383,18 @@
         attribution:'Höhendaten: Terrain Tiles (AWS Open Data)' });
     if (gelaendeDa) karte.setTerrain({ source:'gelaende', exaggeration:+$('hoehe').value/10 });
 
-    // MapLibre kennt keine sky-Ebene wie Mapbox, sondern setSky.
+    /* MapLibre kennt keine sky-Ebene wie Mapbox, sondern setSky.
+
+       atmosphere-blend lief frueher ab Zoom 13 auf null. Dann wurde gar kein
+       Himmel mehr gezeichnet und der dunkle Untergrund der Seite blieb stehen:
+       eine schwarze Flaeche ueber dem Bergkamm, und dieselbe schwarze Flaeche
+       durch jedes Loch im Gelaende. Der Wert bleibt jetzt ueberall deutlich
+       ueber null. */
     karte.setSky({ 'sky-color':'#4b8fd6', 'horizon-color':'#e4eef7',
                    'fog-color':'#eef4f9', 'sky-horizon-blend':0.5,
                    'horizon-fog-blend':0.6, 'fog-ground-blend':0.15,
-                   'atmosphere-blend':['interpolate',['linear'],['zoom'],0,1,10,0.6,13,0] });
+                   'atmosphere-blend':['interpolate',['linear'],['zoom'],
+                                       0, 1, 10, 0.9, 16, 0.7] });
 
     if (BELAEGE[belag].schummer && !karte.getLayer('schummer'))
       karte.addLayer({ id:'schummer', type:'hillshade', source:'gelaende',
@@ -368,18 +438,22 @@
     if (!karte.getSource('halte'))
       karte.addSource('halte', { type:'geojson', data:{ type:'FeatureCollection',
         features: stops.map(h => ({ type:'Feature',
-          properties:{ art:h.art, km: halteKmVon(h) },
+          properties:{ art:h.art, bild: bildName(h), km: halteKmVon(h) },
           geometry:{ type:'Point', coordinates:[h.lon, h.lat] } })) } });
-    for (const art of Object.keys(NAME_KURZ)){
-      if (karte.hasImage('pin-' + art)) continue;
-      const b = pinBild(art);
-      karte.addImage('pin-' + art, b.daten, { pixelRatio: 2 });
+    const gebraucht = new Set(stops.map(bildName));
+    for (const name of gebraucht){
+      if (karte.hasImage(name)) continue;
+      const zahl = name.startsWith('pin-camp-') ? +name.slice(9) : 0;
+      const art = zahl ? 'uebernachtung' : (name === 'pin-pause' ? 'pause' : 'halt');
+      karte.addImage(name, pinBild(art, zahl), { pixelRatio: 3 });
     }
     if (!karte.getLayer('halte'))
       karte.addLayer({ id:'halte', type:'symbol', source:'halte',
-        layout:{ 'icon-image':['concat', 'pin-', ['get','art']],
+        layout:{ 'icon-image':['get','bild'],
                  'icon-anchor':'bottom', 'icon-allow-overlap':true,
-                 'icon-ignore-placement':true, 'icon-size':0.9 } });
+                 'icon-ignore-placement':true,
+                 // Aus grosser Hoehe klein, im Tiefflug groesser
+                 'icon-size':['interpolate',['linear'],['zoom'], 8,1.0, 12,1.35, 15,1.7] } });
   }
 
   function initKarte(gelaendeDa){
@@ -474,7 +548,9 @@
   const gewaermt = new Set();
   let warmOffen = 0, warmTreffer = 0, warmFehl = 0;
   let warmQuellen = [];
-  const WARM = P0.get('warm') !== 'aus';
+  // Vorwaermen nur auf Wunsch: es verdoppelt den Verkehr, und ein sichtbarer
+  // Nutzen liess sich nicht belegen.
+  const WARM = P0.get('warm') === 'an';
 
   // Aus der Kachelvorlage ein Muster bauen, um aus einer tatsaechlich
   // angefragten Adresse die Zoomstufe zurueckzulesen. Raten hilft nicht: die
@@ -741,6 +817,33 @@
     return a[i] + (a[j] - a[i]) * f;
   };
 
+  /* Die Drohnenbahn glaettet die Strasse, damit die Kamera keine Serpentine
+     mitfliegt. Bei starken Kurven laeuft sie dadurch weit daneben: gemessen
+     19,9 km im oberen Zehntel und bis zu 45,6 km, bei 35,7 km Sichtbreite auf
+     der Vorgabestufe. Die Strecke wanderte dann aus dem Bild.
+
+     Die Kamera wird deshalb in einen Korridor um die Strasse eingefangen. Die
+     Korridorbreite haengt an der aktuellen Sichtbreite, also mittelbar am
+     Tempo: schnell und hoch darf sie weit ausholen, langsam und tief nicht. */
+  const FANG = P0.get('fang') !== 'aus';
+  function einfangen(p, ziel, grenzeM){
+    if (!FANG) return p;
+    const d = Analyse.meter(p, ziel);
+    if (!(d > grenzeM)) return p;
+    const f = (d - grenzeM) / d;
+    return { lat: p.lat + (ziel.lat - p.lat) * f,
+             lon: p.lon + (ziel.lon - p.lon) * f, i: p.i };
+  }
+
+  // Abstand eines Punktes von der Blickachse, quer zur Flugrichtung
+  function querAbstand(p, kam, kurs){
+    const t = Math.PI / 180;
+    const ost  = (p.lon - kam.lon) * Math.cos(kam.lat * t) * 111320;
+    const nord = (p.lat - kam.lat) * 110540;
+    const k = kurs * t;
+    return Math.abs(ost * Math.cos(k) - nord * Math.sin(k));
+  }
+
   function peilung(a, b){
     const y = Math.sin((b.lon-a.lon)*Math.PI/180) * Math.cos(b.lat*Math.PI/180);
     const x = Math.cos(a.lat*Math.PI/180)*Math.sin(b.lat*Math.PI/180) -
@@ -850,7 +953,7 @@
 
     let richtung = null, pitchAkt = basisPitch;
     let t0 = 0, anteil = 0, letzteKamera = 0, letzterStrich = 0, letzteWarm = 0;
-    let erreicht = 0, verweiltBis = 0;
+    let erreicht = 0, verweiltBis = 0, zoomAus = 0;
     const quellen = kachelquellen();
     let grundAkt = null, grundHart = null, grundGlatt = null;
     let zielGrund = null, flugNN = null;
@@ -933,8 +1036,15 @@
       basisZoom += (zoomZiel - basisZoom) * 0.05;
 
       const fahrzeug = aufBahn(pfad, km);
-      const kam   = aufBahn(bahn, km);
-      const blick = aufBahn(bahn, Math.min(km + VORLAUF, gesamtKm));
+      const vorKm = Math.min(km + VORLAUF, gesamtKm);
+
+      // Halbe Sichtbreite an der Bildmitte, in Metern
+      const mProPx = 156543.03 * Math.cos(fahrzeug.lat * Math.PI/180) / Math.pow(2, basisZoom);
+      const halbM = (karte.getContainer().clientWidth || 1280) * 0.5 * mProPx;
+      const grenzeM = halbM * 0.5;
+
+      const kam   = einfangen(aufBahn(bahn, km), fahrzeug, grenzeM);
+      const blick = einfangen(aufBahn(bahn, vorKm), aufBahn(pfad, vorKm), grenzeM);
 
       if (jetzt - letzteKamera > 28){
         letzteKamera = jetzt;
@@ -997,9 +1107,21 @@
 
            Ohne die Entkopplung bleibt der alte Weg, die Hoehe indirekt ueber
            den Zoom zu halten. */
+        /* Sicherheitsnetz: macht die Strasse im Blickfeld einen weiten Bogen,
+           reicht das Einfangen der Kamera nicht. Dann wird so weit
+           herausgezoomt, dass sie wieder hineinpasst, gedaempft und
+           hoechstens um zweieinhalb Stufen. */
+        let quer = 0;
+        const achse = richtung ?? peilung(kam, blick);
+        for (const f of [.2, .4, .6, .8, 1.0])
+          quer = Math.max(quer, querAbstand(aufBahn(pfad, Math.min(km + VORLAUF*f, gesamtKm)),
+                                            kam, achse));
+        const noetig = (FANG && quer > grenzeM) ? Math.min(Math.log2(quer / grenzeM), 2.5) : 0;
+        zoomAus += (noetig - zoomAus) * (noetig > zoomAus ? 0.08 : 0.02);
+
         const ueberGrund = Math.max(flugNN - bodenJetzt, 120);
-        const zoomAkt = loesbar ? basisZoom : Math.max(8.5, Math.min(
-          zoomAusHoehe(ueberGrund, kam.lat, bildHoehe), 15));
+        const zoomAkt = (loesbar ? basisZoom : Math.max(8.5, Math.min(
+          zoomAusHoehe(ueberGrund, kam.lat, bildHoehe), 15))) - zoomAus;
         if (loesbar) karte.setCenterElevation(flugNN - REISE);
 
         const relief = planAbfragen(plan, km, 'relief')
@@ -1031,7 +1153,7 @@
 
       while (erreicht < halteKm.length && halteKm[erreicht].km <= km){
         // Am Halt kurz verweilen, damit man den Ort auch sieht
-        $('aNext').textContent = NAME_KURZ[halteKm[erreicht].halt.art] || '';
+        $('aNext').textContent = haltText(halteKm[erreicht].halt);
         verweiltBis = jetzt + HALT_MS;
         erreicht++;
       }
@@ -1181,7 +1303,7 @@
         r.classList.toggle('auf', !offen);
       };
     window.flug = { karte, pfad, stops, faehrten, get profil(){ return profilVersprechen; },
-                  gelaendeprofil, flugplan, planAbfragen, bahnBauen, hoeheAusZoom,
+                  gelaendeprofil, flugplan, planAbfragen, bahnBauen, hoeheAusZoom, pinBild, bildName, naechte,
                   get gewaermt(){ return { vorgeladen: gewaermt.size, treffer: warmTreffer, fehl: warmFehl }; } };
   })();
 })();

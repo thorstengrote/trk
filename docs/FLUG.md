@@ -295,9 +295,43 @@ ohne Vorwärmen      848 Kachelanfragen,   0 aus dem Vorrat
 mit Vorwärmen     1.017 Kachelanfragen, 440 aus dem Vorrat   (43 %)
 ```
 
-**Offen:** Ob das sichtbar hilft, ließ sich hier nicht messen. Der Software-Renderer wartet
-in beiden Fällen die ganze Zeit auf Kacheln, er ist selbst der Engpass. Belegt ist nur die
-Trefferquote.
+**Standardmäßig aus.** Ob es sichtbar hilft, ließ sich nicht messen: der Software-Renderer
+wartet in beiden Fällen die ganze Zeit auf Kacheln, er ist selbst der Engpass. Belegt ist nur
+die Trefferquote, und der Verkehr verdoppelt sich dabei. Einschalten mit `?warm=an`.
+
+## Schwarze Keile im Bild
+
+Über dem Bergkamm und mitten in der Landschaft standen schwarze Flächen mit scharfem Rand.
+
+Es war der Himmel, oder genauer sein Fehlen. `atmosphere-blend` lief in der Einstellung ab
+Zoom 13 auf null, dann zeichnet MapLibre gar keinen Himmel mehr und der dunkle Hintergrund
+der Seite bleibt stehen. Auf der langsamsten Stufe fliegt die Kamera bei Zoom 14, also genau
+dort. Durch jedes Loch im Gelände war dieselbe schwarze Fläche zu sehen.
+
+Drei Änderungen:
+
+1. `atmosphere-blend` bleibt überall deutlich über null.
+2. Der Untergrund der Karte ist ein Himmelsverlauf statt der dunklen Seitenfarbe, dazu eine
+   Hintergrundebene in den beiden Rasterbelägen. Was nicht gezeichnet wird, sieht damit nach
+   Himmel aus und nicht nach Loch.
+3. Die höchste Höhenstufe geht von 15 auf 13. Weiter oben fehlen einzelne Kacheln, und jede
+   fehlende ist ein Loch im Gelände. Für die Form reicht 13 auch im Tiefflug.
+
+Gemessen als Anteil sehr dunkler Bildpunkte im schlimmsten Bild eines Flugs: **12,3 Prozent
+vorher, 4,8 Prozent nachher**, und der Rest davon ist das Bedienfeld.
+
+## Die Strecke bleibt im Bild
+
+Die Drohnenbahn glättet die Straße, damit die Kamera keine Serpentine mitfliegt. Bei starken
+Kurven lief sie dadurch weit daneben: gemessen 19,9 km Abweichung im oberen Zehntel und bis
+zu 45,6 km, bei 35,7 km Sichtbreite auf der Vorgabestufe. Die Strecke wanderte dann aus dem
+Bild.
+
+Die Kamera wird deshalb in einen Korridor um die Straße eingefangen, halb so breit wie das
+halbe Bild. Die Korridorbreite hängt an der aktuellen Sichtbreite, also mittelbar am Tempo:
+schnell und hoch darf sie weit ausholen, langsam und tief nicht. Dazu ein Sicherheitsnetz:
+macht die Straße im Blickfeld trotzdem einen weiten Bogen, wird gedämpft herausgezoomt,
+höchstens um zweieinhalb Stufen.
 
 ## Bedienung
 
@@ -329,18 +363,22 @@ Vorgaben: **10 Minuten**, Kamerawinkel **53 Grad**, Höhenüberhöhung **1,0×**
 
 ## Halte
 
-An jedem Aufenthalt verweilt die Drohne drei Sekunden. Der Halt bekommt eine Sprechblase mit
-Sinnbild und Wort:
+An jedem Aufenthalt verweilt die Drohne drei Sekunden. Der Halt steckt als Pin in der
+Landschaft, ohne Beschriftung:
 
-| Dauer | Beschriftung | Sinnbild |
-|---|---|---|
-| unter 1 h | Pause | Pausenzeichen |
-| 1 bis 6 h, oder länger am Tag | Parken | P |
-| ab 6 h nachts | Campen über Nacht | Zelt |
-| ab 24 h | Mehrere Tage | Zelt |
+| Dauer | Sinnbild |
+|---|---|
+| unter 1 h | Pausenzeichen |
+| 1 bis 6 h, oder länger am Tag | P |
+| ab 6 h nachts | Zelt mit der Zahl der Nächte |
 
-Die Beschriftung wird in das Bild gezeichnet und nicht als Textebene gesetzt. Zwei der drei
-Beläge sind reine Rasterkarten ohne Schriftarten, eine Textebene bliebe dort leer.
+Die Zahl der Nächte ist die Zahl der Datumswechsel in Ortszeit, nicht die Dauer geteilt durch
+24. Ein Aufenthalt vom 26. bis zum 29. Juli zählt drei Nächte.
+
+Die Pins sind gezeichnete Bilder, keine Textebenen. Zwei der drei Beläge sind reine
+Rasterkarten ohne Schriftarten, eine Textebene bliebe dort leer. Räumlich wirken sie über
+einen Farbverlauf von oben links, ein Glanzlicht, einen dunklen Rand, einen Schaft und einen
+Schatten auf dem Boden. Mit dem Zoom wachsen sie von einfacher auf 1,7-fache Größe.
 
 ## Geprüft
 
