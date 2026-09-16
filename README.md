@@ -97,8 +97,11 @@ davor. Vorgerueckt wird nach zurueckgelegter Strecke, an jedem Aufenthalt haelt 
 an und das Symbol erscheint. Rund ein Drittel der Spielzeit gehoert diesen Haltepausen, damit
 die eingestellte Gesamtdauer auch stimmt.
 
-Die Strecke waechst dabei hinter dem Van, statt vorher schon dazuliegen. Der Kartenausschnitt
-bleibt der Ueberblick.
+Die Strecke waechst dabei hinter dem Van, statt vorher schon dazuliegen. Die Karte startet im
+Bereich des Startpunkts und zieht dem Van weich nach: solange er im mittleren Bereich bleibt,
+steht sie still, verlaesst er ihn, gleitet sie hinterher. Leaflets eigene Pan-Animation kommt
+dafuer nicht in Frage, sie kaeme der laufenden Fahrtanimation in die Quere; stattdessen wird
+die Kartenmitte Bild fuer Bild interpoliert.
 
 Zeitraum im Link: `?start=2026-07-18&end=2026-08-06`.
 Ohne Parameter sucht die Seite selbst einen Zeitraum, in dem genug Bewegung liegt.

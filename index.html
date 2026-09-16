@@ -463,6 +463,7 @@
     }).addTo(gruppe.van);
 
     $('fahrt').classList.add('an');
+    $('hinweis').hidden = true;      // waehrend der Fahrt deckt sie sich selbst auf
     $('fahren').textContent = 'Läuft …';
     $('fahren').disabled = true;
     // Kein Hineinzoomen zum Start: der Ausschnitt bleibt der Ueberblick, in dem
@@ -518,19 +519,49 @@
     };
 
     let warteSumme = 0;
+    kameraZuruecksetzen();
     laeuft = true;
     raf = requestAnimationFrame(schritt);
   }
 
-  // Der Karte nur folgen, wenn der Van den mittleren Bereich verlaesst. Ein
-  // panTo bei jedem Bild kaempft gegen die eigene Animation und wirkt hakelig.
+  /* Kameraführung.
+     Vorher sprang die Karte hart auf den Van, sobald er den Rand erreichte.
+     Jetzt gibt es eine Kamera, die dem Van weich nachzieht: solange er im
+     mittleren Bereich bleibt, steht sie still. Verlaesst er ihn, gleitet sie
+     ihm hinterher, statt zu springen.
+
+     Leaflets eigene Pan-Animation kommt dafuer nicht in Frage, sie wuerde sich
+     mit der laufenden Fahrtanimation ins Gehege kommen. Deshalb wird die Mitte
+     selbst Bild fuer Bild interpoliert und ohne Animation gesetzt. */
+  let kamZiel = null, kamPos = null;
+  const KAM_TEMPO = 0.075;      // wie schnell die Kamera aufholt
+  const KAM_TOTZONE = 0.17;     // Rand, ab dem die Kamera nachzieht
+
+  function kameraZuruecksetzen(){ kamZiel = null; kamPos = null; }
+
   function folge(pos){
-    const g = karte.getBounds(), nw = karte.latLngToContainerPoint(g.getNorthWest()),
-          se = karte.latLngToContainerPoint(g.getSouthEast());
+    const g = karte.getBounds();
+    const nw = karte.latLngToContainerPoint(g.getNorthWest());
+    const se = karte.latLngToContainerPoint(g.getSouthEast());
     const p = karte.latLngToContainerPoint(pos);
-    const bx = (se.x - nw.x) * 0.26, by = (se.y - nw.y) * 0.26;
+    const bx = (se.x - nw.x) * KAM_TOTZONE, by = (se.y - nw.y) * KAM_TOTZONE;
+
+    // Ausserhalb der Totzone: neues Ziel setzen
     if (p.x < nw.x + bx || p.x > se.x - bx || p.y < nw.y + by || p.y > se.y - by)
-      karte.panTo(pos, {animate:false});
+      kamZiel = { lat: pos[0], lon: pos[1] };
+
+    if (!kamZiel) return;
+
+    const m = karte.getCenter();
+    if (!kamPos) kamPos = { lat: m.lat, lon: m.lng };
+    kamPos.lat += (kamZiel.lat - kamPos.lat) * KAM_TEMPO;
+    kamPos.lon += (kamZiel.lon - kamPos.lon) * KAM_TEMPO;
+
+    // Nah genug: Ziel loslassen, damit die Kamera wieder zur Ruhe kommt
+    if (Math.abs(kamZiel.lat - kamPos.lat) < 1e-4 &&
+        Math.abs(kamZiel.lon - kamPos.lon) < 1e-4) kamZiel = null;
+
+    karte.panTo([kamPos.lat, kamPos.lon], {animate:false, noMoveStart:true});
   }
 
   function zeigeHalt(h){
@@ -648,7 +679,9 @@
 
     $('los').onclick = auswerten;
     $('fahren').onclick = fahrtStart;
-    $('fStop').onclick = fahrtStop;
+    // Nicht direkt binden: der Klick wuerde als Argument ankommen und
+    // fahrtStop in den stillen Zweig schicken, der die Karte nicht herstellt.
+    $('fStop').onclick = () => fahrtStop();
     $('tempo').oninput = () => $('tempowert').textContent = DAUERN[+$('tempo').value-1] + ' s';
     $('tempo').oninput();
     $('tRoute').onclick  = () => {
