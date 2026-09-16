@@ -98,7 +98,12 @@
   #tor .knopf{width:210px}
   .fehler{color:var(--tage);max-width:420px;text-align:center;padding:0 20px}
 
-  .van-icon{font-size:22px;line-height:1;filter:drop-shadow(0 1px 3px rgba(0,0,0,.4))}
+  .van-icon{font-size:22px;line-height:1;position:relative;
+            filter:drop-shadow(0 1px 3px rgba(0,0,0,.45))}
+  .van-icon::before{content:'';position:absolute;left:50%;top:50%;width:34px;height:34px;
+            margin:-17px 0 0 -17px;border-radius:50%;background:var(--fahrt);opacity:.22;
+            animation:puls 1.6s ease-out infinite}
+  @keyframes puls{0%{transform:scale(.55);opacity:.35}70%{transform:scale(1.25);opacity:0}100%{opacity:0}}
 
   @media (max-width:820px){
     #steuer{width:auto;right:14px}
@@ -124,8 +129,8 @@
       <button class="knopf" id="los">Anzeigen</button>
     </div>
     <div class="feld">
-      <label>Tempo der Fahrt <span class="wert" id="tempowert">200×</span></label>
-      <input type="range" id="tempo" min="1" max="12" value="7">
+      <label>Dauer der Abspielung <span class="wert" id="tempowert">18 s</span></label>
+      <input type="range" id="tempo" min="1" max="8" value="3">
     </div>
     <div class="feld">
       <button class="knopf still an" id="tRoute">Strecke</button>
@@ -190,12 +195,15 @@
     pause:'Pause', halt:'Halt', 'langer-halt':'Längerer Halt',
     uebernachtung:'Übernachtung', standtage:'Standtage'
   };
-  const TEMPO = [10,20,50,100,150,200,300,500,800,1200,2000,4000];
+  // Spieldauer der ganzen Reise in Sekunden. Echtzeit waere sinnlos: bei einem
+  // zweitaegigen Aufenthalt saesse man zwei Tage davor.
+  const DAUERN = [8,12,18,25,35,50,70,100];
 
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
 
-  let karte, erg = null, csv = null, animation = null;
+  let karte, erg = null, csv = null;
+  let laeuft = false, raf = null, letzteGrenzen = null;
   const gruppe = { strecke:null, punkte:null, kreise:null, stops:null, van:null };
   const zeigt = { strecke:true, punkte:false, kreise:false };
 
@@ -234,6 +242,8 @@
     for (const k of Object.keys(gruppe)) gruppe[k] = L.layerGroup().addTo(karte);
     for (const k of ['pause','halt','langer-halt','uebernachtung','standtage'])
       FARBE[k] = css('--'+(k==='langer-halt'?'halt':k==='uebernachtung'?'nacht':k==='standtage'?'tage':k));
+    // Zum Nachsehen in der Konsole des Browsers
+    window.vanspur = { karte, get erg(){ return erg; } };
   }
 
   function leere(){
@@ -285,15 +295,16 @@
     });
 
     sichtbarkeit();
-    if (grenzen.length){
-      // Links liegt das Bedienfeld, rechts die Liste. Ohne diesen Versatz
-      // verschwindet die Spur halb darunter.
-      const schmal = window.innerWidth < 820;
-      karte.fitBounds(grenzen, {
-        paddingTopLeft:     schmal ? [30,90]  : [330,80],
-        paddingBottomRight: schmal ? [30,120] : [350,60]
-      });
-    }
+    letzteGrenzen = grenzen.length ? grenzen : null;
+    if (letzteGrenzen) karte.fitBounds(letzteGrenzen, kartenRand());
+  }
+
+  // Links liegt das Bedienfeld, rechts die Liste. Ohne diesen Versatz
+  // verschwindet die Spur halb darunter.
+  function kartenRand(){
+    const schmal = window.innerWidth < 820;
+    return { paddingTopLeft:     schmal ? [30,90]  : [330,80],
+             paddingBottomRight: schmal ? [30,120] : [350,60] };
   }
 
   function sichtbarkeit(){
@@ -334,80 +345,170 @@
   }
 
   /* ---------- Fahrt abspielen ----------
-     Der Van laeuft die berechnete Strecke ab. Die Uhr laeuft dabei in echter
-     Reisezeit weiter, damit Aufenthalte als Wartezeit sichtbar werden statt
-     uebersprungen zu werden. */
-  function fahrtPunkte(){
-    const bahn = [];
-    let gefahren = 0;   // laufende Summe, damit die Anzeige nicht auf 0 stehen bleibt
+     Nicht in Echtzeit. Die ganze Reise laeuft in wenigen Sekunden ab, sonst
+     wartet man bei einem zweitaegigen Aufenthalt zwei Tage. Vorgerueckt wird
+     nach zurueckgelegter Strecke, nicht nach Uhrzeit. An jedem Aufenthalt
+     haelt der Van kurz an, damit man ihn wahrnimmt.
+
+     Die Strecke waechst hinter dem Van, statt vorher schon dazuliegen. */
+
+  // Gewicht der Haltepause je Art. Die tatsaechliche Laenge ergibt sich aus
+  // dem Budget, damit die eingestellte Gesamtdauer auch stimmt.
+  const PAUSE_GEWICHT = { pause:1, halt:1.6, 'langer-halt':2.2, uebernachtung:2.8, standtage:3.4 };
+
+  // Stuetzpunkte aller Fahrtabschnitte, mit laufender Strecke und Uhrzeit.
+  function bahnBauen(){
+    const pfad = [];
+    let km = 0;
     for (const s of erg.segs){
-      if (!s) continue;
-      if (s.art === 'steht'){
-        bahn.push({lat:s.a.lat, lon:s.a.lon, von:s.a.bis, bis:s.b.time, km:gefahren/1000});
-        continue;
-      }
+      if (!s || s.art === 'steht') continue;
       const geo = s.geo?.length ? s.geo : [[s.a.lat,s.a.lon],[s.b.lat,s.b.lon]];
-      const n = geo.length;
       const spanne = s.b.time - s.a.bis;
-      let lauf = 0;
-      for (let i = 0; i < n; i++){
-        if (i > 0) lauf += Analyse.meter({lat:geo[i-1][0],lon:geo[i-1][1]},
-                                         {lat:geo[i][0],lon:geo[i][1]});
-        bahn.push({lat:geo[i][0], lon:geo[i][1],
-                   von:new Date(+s.a.bis + spanne * i/(n-1||1)),
-                   bis:new Date(+s.a.bis + spanne * (i+1)/(n-1||1)),
-                   km:(gefahren + lauf)/1000});
+      for (let i = 0; i < geo.length; i++){
+        if (i > 0) km += Analyse.meter({lat:geo[i-1][0],lon:geo[i-1][1]},
+                                       {lat:geo[i][0],lon:geo[i][1]}) / 1000;
+        pfad.push({ lat:geo[i][0], lon:geo[i][1], km,
+                    zeit:new Date(+s.a.bis + spanne * i / (geo.length-1 || 1)) });
       }
-      gefahren += s.meter || lauf;
     }
-    return bahn;
+    // Jeden Aufenthalt an den naechstgelegenen Stuetzpunkt haengen
+    const marken = [];
+    for (const h of erg.stops){
+      let bi = -1, bd = Infinity;
+      for (let i = 0; i < pfad.length; i++){
+        const d = Analyse.meter(h, pfad[i]);
+        if (d < bd){ bd = d; bi = i; }
+      }
+      if (bi >= 0 && bd < 25000) marken.push({ halt:h, i:bi });
+    }
+    marken.sort((a,b) => a.i - b.i);
+    return { pfad, marken };
   }
 
   function fahrtStart(){
-    fahrtStop();
-    const bahn = fahrtPunkte();
-    if (bahn.length < 2) return;
+    fahrtStop(true);
+    const { pfad, marken } = bahnBauen();
+    if (pfad.length < 2){ return; }
 
-    const vanIcon = L.divIcon({html:'<div class="van-icon">🚐</div>', className:'',
-                               iconSize:[24,24], iconAnchor:[12,12]});
-    const van = L.marker([bahn[0].lat,bahn[0].lon],{icon:vanIcon,zIndexOffset:1000})
-      .addTo(gruppe.van);
+    // Nichts vorwegnehmen: Strecke und Aufenthalte verschwinden, bis der Van
+    // sie erreicht.
+    karte.removeLayer(gruppe.strecke);
+    karte.removeLayer(gruppe.stops);
+
+    const spur = L.polyline([[pfad[0].lat,pfad[0].lon]],
+      {color:css('--fahrt'), weight:4, opacity:.9, lineJoin:'round'}).addTo(gruppe.van);
+    const van = L.marker([pfad[0].lat,pfad[0].lon], {
+      icon: L.divIcon({html:'<div class="van-icon">🚐</div>', className:'', iconSize:[34,34], iconAnchor:[17,17]}),
+      zIndexOffset: 1000
+    }).addTo(gruppe.van);
+
     $('fahrt').classList.add('an');
     $('fahren').textContent = 'Läuft …';
     $('fahren').disabled = true;
+    // Kein Hineinzoomen zum Start: der Ausschnitt bleibt der Ueberblick, in dem
+    // die Spur waechst. Das zeigt die Reise als Ganzes und haengt nicht an
+    // Leaflets Zoom-Animation.
 
-    const t0 = +bahn[0].von, t1 = +bahn[bahn.length-1].bis;
-    let reiseZeit = t0, idx = 0, kmGesamt = 0, letzterTick = performance.now();
+    const gesamtKm = pfad[pfad.length-1].km || 1;
+    const gesamtMs = DAUERN[+$('tempo').value - 1] * 1000;
+    // Rund ein Drittel der Spielzeit gehoert den Aufenthalten, der Rest der
+    // Fahrt. Sonst haengt die Gesamtdauer an der Zahl der Stopps.
+    const gewichtSumme = marken.reduce((a,m) => a + (PAUSE_GEWICHT[m.halt.art] || 1), 0) || 1;
+    const pausenBudget = gesamtMs * 0.34;
+    const pauseFuer = h => Math.max(90, Math.min(
+      pausenBudget * (PAUSE_GEWICHT[h.art] || 1) / gewichtSumme, 900));
+    const dauerMs = gesamtMs - Math.min(pausenBudget, marken.reduce((a,m)=>a+pauseFuer(m.halt),0));
+    let i = 0, naechsteMarke = 0, wartetBis = 0, t0 = 0, gefahrenKm = 0;
 
-    animation = setInterval(() => {
-      const jetzt = performance.now();
-      const echtMs = jetzt - letzterTick;
-      letzterTick = jetzt;
-      reiseZeit += echtMs * TEMPO[+$('tempo').value - 1];
+    const schritt = (jetzt) => {
+      if (!laeuft) return;
+      if (!t0) t0 = jetzt;
 
-      while (idx < bahn.length - 1 && +bahn[idx].bis < reiseZeit) idx++;
-      const p = bahn[idx];
-      van.setLatLng([p.lat,p.lon]);
-      if (p.km) kmGesamt = Math.max(kmGesamt, p.km);
+      if (jetzt >= wartetBis){
+        const anteil = Math.min((jetzt - t0 - warteSumme) / dauerMs, 1);
+        gefahrenKm = anteil * gesamtKm;
 
-      const naechster = erg.stops.find(h => +h.von >= reiseZeit);
-      $('fZeit').textContent = fmtUhr(new Date(Math.min(reiseZeit,t1)));
-      $('fKm').textContent = tausend(p.km || 0) + ' km';
-      $('fNext').textContent = naechster ? NAME[naechster.art] : 'Ziel';
+        while (i < pfad.length - 1 && pfad[i+1].km <= gefahrenKm) i++;
 
-      const sicht = karte.getBounds();
-      if (!sicht.contains([p.lat,p.lon])) karte.panTo([p.lat,p.lon],{animate:true,duration:.6});
+        // Zwischen zwei Stuetzpunkten interpolieren, sonst ruckelt es sichtbar
+        const a = pfad[i], b = pfad[Math.min(i+1, pfad.length-1)];
+        const spanne = (b.km - a.km) || 1;
+        const f = Math.max(0, Math.min((gefahrenKm - a.km) / spanne, 1));
+        const pos = [a.lat + (b.lat-a.lat)*f, a.lon + (b.lon-a.lon)*f];
+        van.setLatLng(pos);
+        spur.addLatLng(pos);
 
-      if (reiseZeit >= t1){ fahrtStop(); }
-    }, 60);
+        // Aufenthalt erreicht: Symbol einblenden und kurz innehalten
+        while (naechsteMarke < marken.length && marken[naechsteMarke].i <= i){
+          const m = marken[naechsteMarke++];
+          zeigeHalt(m.halt);
+          const warte = pauseFuer(m.halt);
+          wartetBis = jetzt + warte;
+          warteSumme += warte;
+          $('fNext').textContent = NAME[m.halt.art];
+        }
+
+        $('fZeit').textContent = fmtUhr(a.zeit);
+        $('fKm').textContent = tausend(gefahrenKm) + ' km';
+
+        folge(pos);
+        if (anteil >= 1){ fahrtEnde(); return; }
+      }
+      raf = requestAnimationFrame(schritt);
+    };
+
+    let warteSumme = 0;
+    laeuft = true;
+    raf = requestAnimationFrame(schritt);
   }
 
-  function fahrtStop(){
-    if (animation){ clearInterval(animation); animation = null; }
+  // Der Karte nur folgen, wenn der Van den mittleren Bereich verlaesst. Ein
+  // panTo bei jedem Bild kaempft gegen die eigene Animation und wirkt hakelig.
+  function folge(pos){
+    const g = karte.getBounds(), nw = karte.latLngToContainerPoint(g.getNorthWest()),
+          se = karte.latLngToContainerPoint(g.getSouthEast());
+    const p = karte.latLngToContainerPoint(pos);
+    const bx = (se.x - nw.x) * 0.26, by = (se.y - nw.y) * 0.26;
+    if (p.x < nw.x + bx || p.x > se.x - bx || p.y < nw.y + by || p.y > se.y - by)
+      karte.panTo(pos, {animate:false});
+  }
+
+  function zeigeHalt(h){
+    const r = h.art==='standtage'?13 : h.art==='uebernachtung'?11 : h.art==='pause'?7 : 9;
+    const m = L.circleMarker([h.lat,h.lon], {radius:1, color:'#fff', weight:2,
+        fillColor:FARBE[h.art], fillOpacity:.95}).addTo(gruppe.van);
+    m.bindTooltip(`${NAME[h.art]} · ${fmtDauer(h.sek)}`, {permanent:false});
+    // kurzes Aufpoppen
+    const t0 = performance.now();
+    const waechst = (jetzt) => {
+      const f = Math.min((jetzt - t0) / 260, 1);
+      m.setRadius(r * (1 + .45 * Math.sin(f * Math.PI)) * (f < 1 ? f : 1) || r);
+      if (f < 1) requestAnimationFrame(waechst); else m.setRadius(r);
+    };
+    requestAnimationFrame(waechst);
+  }
+
+  function fahrtEnde(){
+    laeuft = false;
+    if (raf) cancelAnimationFrame(raf), raf = null;
+    $('fahrt').classList.remove('an');
+    $('fahren').textContent = 'Fahrt abspielen';
+    $('fahren').disabled = false;
+    // Danach wieder der vollstaendige Ueberblick
+    gruppe.van.clearLayers();
+    sichtbarkeit();
+    karte.addLayer(gruppe.stops);
+    if (letzteGrenzen) karte.fitBounds(letzteGrenzen, kartenRand());
+  }
+
+  function fahrtStop(still){
+    laeuft = false;
+    if (raf) cancelAnimationFrame(raf), raf = null;
     gruppe.van.clearLayers();
     $('fahrt').classList.remove('an');
     $('fahren').textContent = 'Fahrt abspielen';
     $('fahren').disabled = false;
+    if (!still){ sichtbarkeit(); karte.addLayer(gruppe.stops); }
   }
 
   /* ---------- Ablauf ---------- */
@@ -496,7 +597,7 @@
     $('los').onclick = auswerten;
     $('fahren').onclick = fahrtStart;
     $('fStop').onclick = fahrtStop;
-    $('tempo').oninput = () => $('tempowert').textContent = TEMPO[+$('tempo').value-1] + '×';
+    $('tempo').oninput = () => $('tempowert').textContent = DAUERN[+$('tempo').value-1] + ' s';
     $('tempo').oninput();
     $('tRoute').onclick  = () => { zeigt.strecke = !zeigt.strecke; sichtbarkeit(); };
     $('tPunkte').onclick = () => { zeigt.punkte  = !zeigt.punkte;  sichtbarkeit(); };

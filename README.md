@@ -80,8 +80,16 @@ Ergebnis auf derselben Sommerreise: 21 Aufenthalte statt null, 3434 km ueber Str
 ## Bedienung
 
 Zeitraum waehlen, **Anzeigen**. Die Umschalter blenden Strecke, Messpunkte und
-Genauigkeitskreise ein. **Fahrt abspielen** laesst den Van die Strecke ablaufen, das Tempo
-regelt der Schieber. Ein Klick auf einen Aufenthalt in der Liste springt dorthin.
+Genauigkeitskreise ein. Ein Klick auf einen Aufenthalt in der Liste springt dorthin.
+
+**Fahrt abspielen** laesst die ganze Reise in wenigen Sekunden ablaufen, einstellbar von 8 bis
+100 Sekunden. Nicht in Echtzeit: bei einem zweitaegigen Aufenthalt saesse man sonst zwei Tage
+davor. Vorgerueckt wird nach zurueckgelegter Strecke, an jedem Aufenthalt haelt der Van kurz
+an und das Symbol erscheint. Rund ein Drittel der Spielzeit gehoert diesen Haltepausen, damit
+die eingestellte Gesamtdauer auch stimmt.
+
+Die Strecke waechst dabei hinter dem Van, statt vorher schon dazuliegen. Der Kartenausschnitt
+bleibt der Ueberblick.
 
 Zeitraum im Link: `?start=2026-07-18&end=2026-08-06`.
 Ohne Parameter sucht die Seite selbst einen Zeitraum, in dem genug Bewegung liegt.
