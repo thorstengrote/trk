@@ -62,6 +62,7 @@
   <div><div class="klein">Zeit</div><div class="gross" id="aZeit">–</div></div>
   <div><div class="klein">Strecke</div><div class="gross" id="aKm">–</div></div>
   <div><div class="klein">Höhe</div><div class="gross" id="aHoehe">–</div></div>
+  <div><div class="klein">Zuletzt</div><div class="gross" id="aNext">–</div></div>
 </div>
 
 <div id="fehlt" class="karte" hidden style="top:14px;left:280px;right:14px;padding:10px 14px;font-size:13px;color:#e0b070">
@@ -135,6 +136,36 @@
   }
 
   /* ---------- Karte ---------- */
+  const leereLinie = () => ({ type:'Feature', geometry:{ type:'LineString', coordinates:[] } });
+  const leereSammlung = () => ({ type:'FeatureCollection', features:[] });
+  const NAME_KURZ = { pause:'Pause', halt:'Halt', 'langer-halt':'Längerer Halt',
+                      uebernachtung:'Übernachtung', standtage:'Standtage' };
+
+  function spurSetzen(koordinaten){
+    const q = karte?.getSource('spur');
+    if (q) q.setData({ type:'Feature', geometry:{ type:'LineString', coordinates:koordinaten } });
+  }
+  function halteSetzen(liste){
+    const q = karte?.getSource('halte-erreicht');
+    if (q) q.setData({ type:'FeatureCollection', features: liste.map(h => ({
+      type:'Feature', properties:{ art:h.art },
+      geometry:{ type:'Point', coordinates:[h.lon, h.lat] } })) });
+  }
+
+  // Jeder Aufenthalt bekommt seinen Streckenstand, damit er beim Passieren
+  // eingeblendet werden kann
+  let halteKm = [];
+  function halteEinmessen(){
+    halteKm = stops.map(h => {
+      let bi = 0, bd = Infinity;
+      for (let i = 0; i < pfad.length; i++){
+        const d = Analyse.meter(h, pfad[i]);
+        if (d < bd){ bd = d; bi = i; }
+      }
+      return { halt:h, km: pfad[bi].km, ab: bd };
+    }).filter(x => x.ab < 25000).sort((a,b) => a.km - b.km);
+  }
+
   const kachelX = (lon, z) => Math.floor((lon + 180) / 360 * 2**z);
   const kachelY = (lat, z) => {
     const r = lat * Math.PI / 180;
@@ -197,6 +228,26 @@
       karte.addSource('halte', { type:'geojson', data:{ type:'FeatureCollection',
         features: stops.map(h => ({ type:'Feature', properties:{ art:h.art },
           geometry:{ type:'Point', coordinates:[h.lon, h.lat] } })) } });
+    // Wachsende Spur waehrend des Flugs
+    if (!karte.getSource('spur'))
+      karte.addSource('spur', { type:'geojson', data:leereLinie() });
+    if (!karte.getLayer('spur-schatten'))
+      karte.addLayer({ id:'spur-schatten', type:'line', source:'spur',
+        paint:{ 'line-color':'#08131f', 'line-width':10, 'line-opacity':.4, 'line-blur':4 } });
+    if (!karte.getLayer('spur'))
+      karte.addLayer({ id:'spur', type:'line', source:'spur',
+        layout:{ 'line-cap':'round', 'line-join':'round' },
+        paint:{ 'line-color':'#46b1ff', 'line-width':5 } });
+
+    if (!karte.getSource('halte-erreicht'))
+      karte.addSource('halte-erreicht', { type:'geojson', data:leereSammlung() });
+    if (!karte.getLayer('halte-erreicht'))
+      karte.addLayer({ id:'halte-erreicht', type:'circle', source:'halte-erreicht',
+        paint:{ 'circle-radius':8, 'circle-stroke-width':2.5, 'circle-stroke-color':'#fff',
+          'circle-color':['match',['get','art'],
+            'pause','#d4941f','halt','#cc6a2c','langer-halt','#cc6a2c',
+            'uebernachtung','#6b52b5','standtage','#a33b3b','#888'] } });
+
     if (!karte.getLayer('halte'))
       karte.addLayer({ id:'halte', type:'circle', source:'halte',
         paint:{ 'circle-radius':8, 'circle-stroke-width':2.5, 'circle-stroke-color':'#fff',
@@ -232,6 +283,36 @@
   }
 
   /* ---------- Flug ---------- */
+
+  /* Eine echte Drohne folgt nicht jeder Kurve der Strasse. Die Kamera bekommt
+     deshalb eine eigene, geglaettete Bahn: gleitender Mittelwert ueber ein
+     Streckenfenster. Die gezeichnete Strecke bleibt davon unberuehrt und liegt
+     weiter exakt auf der Strasse. */
+  function glaetten(punkte, fensterKm){
+    const aus = new Array(punkte.length);
+    let von = 0, bis = 0, sLat = 0, sLon = 0, n = 0;
+    for (let i = 0; i < punkte.length; i++){
+      const k = punkte[i].km;
+      while (bis < punkte.length && punkte[bis].km <= k + fensterKm){
+        sLat += punkte[bis].lat; sLon += punkte[bis].lon; n++; bis++;
+      }
+      while (punkte[von].km < k - fensterKm){
+        sLat -= punkte[von].lat; sLon -= punkte[von].lon; n--; von++;
+      }
+      aus[i] = { lat: sLat/n, lon: sLon/n, km: k };
+    }
+    return aus;
+  }
+
+  // Position auf einer Bahn zu einem Streckenstand
+  function aufBahn(bahn, km){
+    let i = 0;
+    while (i < bahn.length - 2 && bahn[i+1].km <= km) i++;
+    const a = bahn[i], b = bahn[Math.min(i+1, bahn.length-1)];
+    const f = Math.max(0, Math.min((km - a.km) / ((b.km - a.km) || 1), 1));
+    return { lat: a.lat + (b.lat-a.lat)*f, lon: a.lon + (b.lon-a.lon)*f, i };
+  }
+
   function peilung(a, b){
     const y = Math.sin((b.lon-a.lon)*Math.PI/180) * Math.cos(b.lat*Math.PI/180);
     const x = Math.cos(a.lat*Math.PI/180)*Math.sin(b.lat*Math.PI/180) -
@@ -248,48 +329,92 @@
     $('start').textContent = 'Fliegt …';
     $('start').disabled = true;
 
+    // Nichts vorwegnehmen, wie in der Kartenansicht: die Strecke waechst
+    // waehrend des Flugs, die Aufenthalte tauchen beim Passieren auf.
+    for (const l of ['strecke','strecke-schatten','halte'])
+      if (karte.getLayer(l)) karte.setLayoutProperty(l, 'visibility', 'none');
+    spurSetzen([[pfad[0].lon, pfad[0].lat]]);
+    halteSetzen([]);
+
     const gesamtKm = pfad[pfad.length-1].km || 1;
     const dauerMs = DAUERN[+$('dauer').value - 1] * 1000;
-    let t0 = 0, richtung = peilung(pfad[0], pfad[Math.min(8, pfad.length-1)]);
-    karte.jumpTo({ center:[pfad[0].lon, pfad[0].lat], zoom:12.5,
-                   pitch:+$('winkel').value, bearing:richtung });
+    const kamBahn = glaetten(pfad, 1.2);      // Kamerabahn, geglaettet
+    const VORLAUF = 3.5;                      // km, so weit schaut die Kamera voraus
+    const ABSTAND = 0.9;                      // km, so weit haengt sie zurueck
+
+    let richtung = null, erreicht = 0, letzteSpur = 0, letzteKamera = 0, t0 = 0;
+    const gezeigt = [];
 
     const schritt = (jetzt) => {
       if (!laeuft) return;
       if (!t0) t0 = jetzt;
       const anteil = Math.min((jetzt - t0) / dauerMs, 1);
-      const ziel = anteil * gesamtKm;
+      const km = anteil * gesamtKm;
 
-      let i = 0;
-      while (i < pfad.length - 2 && pfad[i+1].km <= ziel) i++;
-      const a = pfad[i], b = pfad[Math.min(i+1, pfad.length-1)];
-      const f = Math.max(0, Math.min(((ziel - a.km) / ((b.km - a.km) || 1)), 1));
-      const lat = a.lat + (b.lat-a.lat)*f, lon = a.lon + (b.lon-a.lon)*f;
+      // Fahrzeug auf der echten Strasse, Kamera auf der geglaetteten Bahn
+      const fahrzeug = aufBahn(pfad, km);
+      const kam      = aufBahn(kamBahn, Math.max(km - ABSTAND, 0));
+      const blick    = aufBahn(kamBahn, Math.min(km + VORLAUF, gesamtKm));
 
-      // Blick in Fahrtrichtung, weich nachgefuehrt
-      const voraus = pfad[Math.min(i + 12, pfad.length-1)];
-      richtung += kurz(peilung({lat,lon}, voraus) - richtung) * 0.06;
+      const soll = peilung(kam, blick);
+      richtung = richtung === null ? soll : richtung + kurz(soll - richtung) * 0.045;
 
-      karte.jumpTo({ center:[lon,lat], zoom:12.5,
-                     pitch:+$('winkel').value, bearing:richtung });
+      // Nicht bei jedem Bild die Kamera setzen. Bei 60 Bildern je Sekunde
+      // kommt MapLibre mit dem Nachladen der Kacheln nicht hinterher, und auf
+      // schwaecheren Geraeten bleibt das Bild leer. Rund 33 Mal je Sekunde
+      // sieht genauso fluessig aus und laesst Luft zum Laden.
+      if (jetzt - letzteKamera > 30){
+        letzteKamera = jetzt;
+        karte.jumpTo({ center:[kam.lon, kam.lat], zoom:12.5,
+                       pitch:+$('winkel').value, bearing:richtung });
+      }
 
-      $('aZeit').textContent = fmtUhr(a.zeit);
-      $('aKm').textContent = tausend(ziel) + ' km';
-      const h = karte.queryTerrainElevation({lng:lon, lat});
-      $('aHoehe').textContent = h != null ? Math.round(h) + ' m' : '–';
+      // Spur nachziehen, nicht bei jedem Bild: das Neusetzen der Geometrie
+      // kostet mehr als es bringt.
+      if (jetzt - letzteSpur > 90){
+        letzteSpur = jetzt;
+        const bis = fahrzeug.i;
+        const linie = pfad.slice(0, bis + 1).map(p => [p.lon, p.lat]);
+        linie.push([
+          pfad[bis].lon + (pfad[Math.min(bis+1,pfad.length-1)].lon - pfad[bis].lon) * 0.5,
+          pfad[bis].lat + (pfad[Math.min(bis+1,pfad.length-1)].lat - pfad[bis].lat) * 0.5]);
+        spurSetzen(linie);
+      }
 
-      if (anteil >= 1){ flugStopp(); return; }
+      // Aufenthalte einblenden, sobald sie hinter uns liegen
+      while (erreicht < halteKm.length && halteKm[erreicht].km <= km){
+        gezeigt.push(halteKm[erreicht].halt);
+        halteSetzen(gezeigt);
+        $('aNext').textContent = NAME_KURZ[halteKm[erreicht].halt.art] || '';
+        erreicht++;
+      }
+
+      $('aZeit').textContent = fmtUhr(pfad[fahrzeug.i].zeit);
+      $('aKm').textContent = tausend(km) + ' km';
+      const h = karte.queryTerrainElevation({lng:fahrzeug.lon, lat:fahrzeug.lat});
+      $('aHoehe').textContent = (h != null && h > -500) ? Math.round(h) + ' m' : '–';
+
+      if (anteil >= 1){ flugEnde(); return; }
       raf = requestAnimationFrame(schritt);
     };
     raf = requestAnimationFrame(schritt);
   }
 
-  function flugStopp(){
+  function flugEnde(){
     laeuft = false;
     if (raf){ cancelAnimationFrame(raf); raf = null; }
     $('anzeige').classList.remove('an');
     $('start').textContent = 'Flug starten';
     $('start').disabled = false;
+    // Danach wieder alles zeigen
+    for (const l of ['strecke','strecke-schatten','halte'])
+      if (karte.getLayer(l)) karte.setLayoutProperty(l, 'visibility', 'visible');
+    spurSetzen([]); halteSetzen([]);
+  }
+
+  function flugStopp(){
+    if (!laeuft){ return; }
+    flugEnde();
   }
 
   /* ---------- Start ---------- */
@@ -313,6 +438,7 @@
 
       gelaendeDaGlobal = gelaendeDa;
       await initKarte(gelaendeDa);
+      halteEinmessen();
       $('lade').style.display = 'none';
       if (!gelaendeDa) $('fehlt').hidden = false;
     } catch(e){

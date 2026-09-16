@@ -72,6 +72,23 @@ werkzeug/hoehenkorridor.py route.json --zoom 11 --rand 3 --ziel dem
 Umfang für die Balkanreise: 77 MB bis Zoom 10, 207 MB mit Zoom 11. Für den Normalfall ist das
 überflüssig, die Kacheln kommen direkt aus dem Netz.
 
+## Kameraführung
+
+Eine echte Drohne folgt nicht jeder Kurve der Straße. Die Kamera bekommt deshalb eine eigene,
+geglättete Bahn: gleitender Mittelwert über ein Streckenfenster von 1,2 km. Die gezeichnete
+Strecke bleibt davon unberührt und liegt weiter exakt auf der Straße.
+
+Dazu hängt die Kamera 900 m zurück und blickt 3,5 km voraus, und der Kurs wird gedämpft
+nachgeführt. Gemessen über einen Flug: Kursänderung je Bild im Mittel 1,4 Grad, im
+95-Prozent-Fall 4,0 Grad.
+
+Gesetzt wird die Kamera höchstens 33 Mal je Sekunde. Bei 60 kommt MapLibre mit dem Nachladen
+der Kacheln nicht hinterher, und auf schwächeren Geräten bleibt das Bild leer.
+
+Wie in der Kartenansicht wird nichts vorweggenommen: beim Start verschwinden Strecke und
+Aufenthalte, die Spur wächst hinter der Drohne, die Aufenthalte tauchen beim Passieren auf.
+Am Ende ist wieder alles zu sehen.
+
 ## Bedienung
 
 Zeitraum über `?start=` und `?end=` wie bei der Karte. Regler für Spieldauer, Kamerawinkel und
