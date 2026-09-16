@@ -9,7 +9,7 @@ topografischer Karte darüber. Ohne API-Schlüssel, ohne Vorbereitung, für jede
 |---|---|
 | 3D-Gelände | MapLibre GL `setTerrain` |
 | Höhendaten | Terrain Tiles auf AWS Open Data, Terrarium-Format, frei und ohne Schlüssel |
-| Karte | OpenTopoMap, Höhenlinien und Schummerung |
+| Karte | drei Beläge zur Wahl, siehe unten |
 | Strecke | dieselbe Auswertung wie `index.html`, siehe `analyse.js` |
 
 ```js
@@ -19,6 +19,20 @@ encoding: 'terrarium', tileSize: 256, maxzoom: 15
 
 Das ist alles. Die Kacheln kommen mit `Access-Control-Allow-Origin: *`, WebGL darf sie also
 auslesen.
+
+## Beläge
+
+| | Quelle | wofür |
+|---|---|---|
+| Satellit | Esri World Imagery | die plastischste Ansicht, Vorgabe |
+| Topografisch | OpenTopoMap | Höhenlinien, Wege, Hütten |
+| Outdoor | OpenFreeMap liberty plus Schummerung | Vektorstil, bleibt beim Kippen scharf |
+
+Alle drei ohne Schlüssel. Umschalten wechselt den Stil und setzt Gelände, Himmel, Strecke und
+Aufenthalte danach neu, die hängen nicht am Belag.
+
+Übernommen aus dem Schwesterprojekt **vantrip**, das genau diese Kombination seit Monaten
+fährt. Dort steht auch der Hinweis, der den Irrweg unten aufgelöst hat.
 
 ## Ein Irrweg, den man sich sparen kann
 
@@ -41,6 +55,9 @@ Access-Control-Allow-Methods: GET
 
 Merke: CORS-Header nie mit `awk`+`IGNORECASE` suchen, sondern mit `grep -i`. Und im Zweifel
 im Browser prüfen statt mit curl.
+
+Zweite Lehre: vantrip benutzt dieselbe Adresse seit Monaten erfolgreich. Ein Blick ins eigene
+Schwesterprojekt hätte den Umweg erspart.
 
 ## Vorladen, falls doch einmal gewünscht
 

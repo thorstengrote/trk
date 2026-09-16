@@ -19,6 +19,8 @@
          background:#3d7a4e;color:#fff;cursor:pointer;width:100%}
   button:hover{background:#4d9463}
   button.still{background:#24262c;border-color:#333842;color:#e9e9e4}
+  button.still.an{background:#3d7a4e;border-color:transparent;color:#fff}
+  #belaege button+button{margin-top:0}
   button+button{margin-top:7px}
   .wert{color:#fff;font-weight:600;font-variant-numeric:tabular-nums}
   #anzeige{bottom:14px;left:50%;transform:translateX(-50%);padding:10px 18px;display:none;
@@ -40,10 +42,16 @@
   <h1>Flug über die Strecke</h1>
   <label>Dauer <span class="wert" id="dauerwert">40 s</span></label>
   <input type="range" id="dauer" min="1" max="6" value="3">
+  <label>Karte</label>
+  <div id="belaege" style="display:flex;gap:6px">
+    <button class="still an" data-id="satellit" style="flex:1;padding:7px 4px;font-size:12px">Satellit</button>
+    <button class="still" data-id="topo" style="flex:1;padding:7px 4px;font-size:12px">Topo</button>
+    <button class="still" data-id="outdoor" style="flex:1;padding:7px 4px;font-size:12px">Outdoor</button>
+  </div>
   <label>Kamerawinkel <span class="wert" id="winkelwert">70°</span></label>
   <input type="range" id="winkel" min="0" max="80" value="70">
-  <label>Höhenüberhöhung <span class="wert" id="hoehewert">1,6×</span></label>
-  <input type="range" id="hoehe" min="10" max="30" value="16">
+  <label>Höhenüberhöhung <span class="wert" id="hoehewert">1,8×</span></label>
+  <input type="range" id="hoehe" min="10" max="30" value="18">
   <div style="margin-top:12px">
     <button id="start">Flug starten</button>
     <button class="still" id="stopp">Stopp</button>
@@ -93,7 +101,7 @@
   const $ = id => document.getElementById(id);
   const P = new URLSearchParams(location.search);
 
-  let karte, pfad = [], stops = [], raf = null, laeuft = false;
+  let karte, pfad = [], stops = [], raf = null, laeuft = false, gelaendeDaGlobal = true;
 
   const fmtUhr = d => d.toLocaleString('de-DE',
     {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
@@ -133,62 +141,94 @@
     return Math.floor((1 - Math.log(Math.tan(r) + 1/Math.cos(r)) / Math.PI) / 2 * 2**z);
   };
 
+  // Drei Belaege, wie im Schwesterprojekt vantrip. Satellit gibt dem Flug die
+  // meiste Haptik, Topografisch zeigt Hoehenlinien, Outdoor ist ein Vektorstil
+  // mit Schummerung und bleibt beim Kippen scharf.
+  const BELAEGE = {
+    satellit: { name:'Satellit', stil: {
+      version:8, sources:{ sat:{ type:'raster', tileSize:256, maxzoom:18,
+        tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+        attribution:'Luftbilder &copy; Esri' } },
+      layers:[{ id:'sat', type:'raster', source:'sat' }] } },
+    topo: { name:'Topografisch', stil: {
+      version:8, sources:{ topo:{ type:'raster', tileSize:256, maxzoom:16,
+        tiles:['https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
+               'https://b.tile.opentopomap.org/{z}/{x}/{y}.png',
+               'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'],
+        attribution:'&copy; OpenStreetMap, SRTM | &copy; OpenTopoMap (CC-BY-SA)' } },
+      layers:[{ id:'topo', type:'raster', source:'topo' }] } },
+    outdoor: { name:'Outdoor', stil:'https://tiles.openfreemap.org/styles/liberty', schummer:true }
+  };
+
+  let belag = P0.get('belag') && BELAEGE[P0.get('belag')] ? P0.get('belag') : 'satellit';
+
+  // Gelaende, Himmel, Strecke und Aufenthalte haengen nicht am Belag und
+  // muessen nach jedem Stilwechsel neu gesetzt werden.
+  function ebenenSetzen(gelaendeDa){
+    if (!karte.getSource('gelaende'))
+      karte.addSource('gelaende', { type:'raster-dem', tileSize:256, maxzoom:DEM_MAXZOOM,
+        encoding:'terrarium', tiles:[DEM],
+        attribution:'Höhendaten: Terrain Tiles (AWS Open Data)' });
+    if (gelaendeDa) karte.setTerrain({ source:'gelaende', exaggeration:+$('hoehe').value/10 });
+
+    // MapLibre kennt keine sky-Ebene wie Mapbox, sondern setSky.
+    karte.setSky({ 'sky-color':'#4b8fd6', 'horizon-color':'#e4eef7',
+                   'fog-color':'#eef4f9', 'sky-horizon-blend':0.5,
+                   'horizon-fog-blend':0.6, 'fog-ground-blend':0.15,
+                   'atmosphere-blend':['interpolate',['linear'],['zoom'],0,1,10,0.6,13,0] });
+
+    if (BELAEGE[belag].schummer && !karte.getLayer('schummer'))
+      karte.addLayer({ id:'schummer', type:'hillshade', source:'gelaende',
+        paint:{ 'hillshade-exaggeration':0.5, 'hillshade-shadow-color':'#473b24',
+                'hillshade-illumination-anchor':'map' } });
+
+    if (!karte.getSource('strecke'))
+      karte.addSource('strecke', { type:'geojson', data:{ type:'Feature',
+        geometry:{ type:'LineString', coordinates: pfad.map(p => [p.lon, p.lat]) } } });
+    if (!karte.getLayer('strecke-schatten'))
+      karte.addLayer({ id:'strecke-schatten', type:'line', source:'strecke',
+        paint:{ 'line-color':'#08131f', 'line-width':10, 'line-opacity':.4, 'line-blur':4 } });
+    if (!karte.getLayer('strecke'))
+      karte.addLayer({ id:'strecke', type:'line', source:'strecke',
+        layout:{ 'line-cap':'round', 'line-join':'round' },
+        paint:{ 'line-color':'#46b1ff', 'line-width':5 } });
+
+    if (!karte.getSource('halte'))
+      karte.addSource('halte', { type:'geojson', data:{ type:'FeatureCollection',
+        features: stops.map(h => ({ type:'Feature', properties:{ art:h.art },
+          geometry:{ type:'Point', coordinates:[h.lon, h.lat] } })) } });
+    if (!karte.getLayer('halte'))
+      karte.addLayer({ id:'halte', type:'circle', source:'halte',
+        paint:{ 'circle-radius':8, 'circle-stroke-width':2.5, 'circle-stroke-color':'#fff',
+          'circle-color':['match',['get','art'],
+            'pause','#d4941f','halt','#cc6a2c','langer-halt','#cc6a2c',
+            'uebernachtung','#6b52b5','standtage','#a33b3b','#888'] } });
+  }
+
   function initKarte(gelaendeDa){
     karte = new maplibregl.Map({
-      container: 'map',
-      style: {
-        version: 8,
-        sources: {
-          topo: { type:'raster', tileSize:256, maxzoom:16,
-                  tiles:['https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
-                         'https://b.tile.opentopomap.org/{z}/{x}/{y}.png',
-                         'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'],
-                  attribution:'&copy; OpenStreetMap, SRTM | Kartendarstellung &copy; OpenTopoMap (CC-BY-SA)' },
-          gelaende: { type:'raster-dem', tileSize:256, maxzoom:DEM_MAXZOOM,
-                      encoding:'terrarium', tiles:[DEM],
-                      attribution:'Höhendaten: Terrain Tiles (AWS Open Data)' }
-        },
-        layers: [{ id:'topo', type:'raster', source:'topo' }]
-      },
-      center: [pfad[0].lon, pfad[0].lat],
-      zoom: 12, pitch: +$('winkel').value, bearing: 0,
-      maxPitch: 85, attributionControl: { compact:true }
+      container:'map', style: BELAEGE[belag].stil,
+      center:[pfad[0].lon, pfad[0].lat], zoom:12,
+      pitch:+$('winkel').value, bearing:0, maxPitch:85,
+      attributionControl:{ compact:true }
     });
-
     return new Promise(fertig => {
-      karte.on('load', () => {
-        if (gelaendeDa) karte.setTerrain({ source:'gelaende', exaggeration: +$('hoehe').value/10 });
-        karte.setSky({ 'sky-color':'#7fb3e0', 'horizon-color':'#cfe3f2',
-                       'fog-color':'#dfeaf3', 'sky-horizon-blend':0.6,
-                       'horizon-fog-blend':0.7, 'fog-ground-blend':0.2 });
-
-        // Schummerung ueber den Belag: das Relief bekommt dadurch Plastik,
-        // auch dort wo die Karte selbst flach wirkt.
-        karte.addLayer({ id:'schummer', type:'hillshade', source:'gelaende',
-          paint:{ 'hillshade-exaggeration':0.45, 'hillshade-shadow-color':'#473b24',
-                  'hillshade-illumination-anchor':'map' } });
-
-        karte.addSource('strecke', { type:'geojson', data:{
-          type:'Feature', geometry:{ type:'LineString',
-            coordinates: pfad.map(p => [p.lon, p.lat]) } } });
-        karte.addLayer({ id:'strecke-schatten', type:'line', source:'strecke',
-          paint:{ 'line-color':'#0b1c2c', 'line-width':9, 'line-opacity':.35, 'line-blur':3 } });
-        karte.addLayer({ id:'strecke', type:'line', source:'strecke',
-          layout:{ 'line-cap':'round', 'line-join':'round' },
-          paint:{ 'line-color':'#3aa0ff', 'line-width':4.5 } });
-
-        karte.addSource('halte', { type:'geojson', data:{ type:'FeatureCollection',
-          features: stops.map(h => ({ type:'Feature',
-            properties:{ art:h.art }, geometry:{ type:'Point', coordinates:[h.lon,h.lat] } })) } });
-        karte.addLayer({ id:'halte', type:'circle', source:'halte',
-          paint:{ 'circle-radius':7, 'circle-stroke-width':2, 'circle-stroke-color':'#fff',
-            'circle-color':['match',['get','art'],
-              'pause','#d4941f','halt','#cc6a2c','langer-halt','#cc6a2c',
-              'uebernachtung','#6b52b5','standtage','#a33b3b','#888'] } });
-
-        fertig();
-      });
+      karte.on('load', () => { ebenenSetzen(gelaendeDa); fertig(); });
     });
+  }
+
+  function belagWechseln(id, gelaendeDa){
+    if (id === belag) return;
+    belag = id;
+    const mitte = karte.getCenter(), z = karte.getZoom(),
+          n = karte.getPitch(), r = karte.getBearing();
+    karte.setStyle(BELAEGE[id].stil);
+    karte.once('style.load', () => {
+      karte.jumpTo({ center:mitte, zoom:z, pitch:n, bearing:r });
+      ebenenSetzen(gelaendeDa);
+    });
+    for (const el of document.querySelectorAll('#belaege button'))
+      el.classList.toggle('an', el.dataset.id === id);
   }
 
   /* ---------- Flug ---------- */
@@ -271,6 +311,7 @@
         try { gelaendeDa = (await fetch(probe)).ok; } catch(e){}
       }
 
+      gelaendeDaGlobal = gelaendeDa;
       await initKarte(gelaendeDa);
       $('lade').style.display = 'none';
       if (!gelaendeDa) $('fehlt').hidden = false;
@@ -290,6 +331,8 @@
       $('hoehewert').textContent = (+$('hoehe').value/10).toFixed(1).replace('.',',') + '×';
       if (karte.getTerrain()) karte.setTerrain({ source:'gelaende', exaggeration:+$('hoehe').value/10 });
     };
+    for (const el of document.querySelectorAll('#belaege button'))
+      el.onclick = () => belagWechseln(el.dataset.id, gelaendeDaGlobal);
     window.flug = { karte, pfad, stops };
   })();
 })();
