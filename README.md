@@ -86,6 +86,11 @@ einen Klick auf einen Aufenthalt in der Liste.
 
 Die Umschalter blenden ausserdem Messpunkte und Genauigkeitskreise ein.
 
+Die Aufenthalte tragen eigene Symbole: Kaffeetasse fuer eine Pause, P fuer einen Halt, Uhr fuer
+einen laengeren Halt, Mondsichel fuer eine Uebernachtung, Zelt fuer mehrere Standtage. Als
+Inline-SVG, nicht als Emoji: Emoji sehen auf jedem Betriebssystem anders aus und lassen sich
+nicht einfaerben.
+
 **Fahrt abspielen** laesst die ganze Reise in wenigen Sekunden ablaufen, einstellbar von 8 bis
 100 Sekunden. Nicht in Echtzeit: bei einem zweitaegigen Aufenthalt saesse man sonst zwei Tage
 davor. Vorgerueckt wird nach zurueckgelegter Strecke, an jedem Aufenthalt haelt der Van kurz
