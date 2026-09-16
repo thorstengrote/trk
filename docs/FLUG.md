@@ -128,9 +128,16 @@ Am Ende ist wieder alles zu sehen.
 
 ## Bedienung
 
-Zeitraum über `?start=` und `?end=` wie bei der Karte. Regler für Spieldauer, Kamerawinkel und
-Höhenüberhöhung. Die Kamera fährt die Strecke in Fahrtrichtung ab, die Höhe unter dem
-Fahrzeug läuft mit.
+Zeitraum über `?start=` und `?end=` wie bei der Karte, Belag über `?belag=satellit|topo|outdoor`.
+
+Links unten die Fahrt: Dauer und Start. Oben rechts, wie im Schwesterprojekt vantrip, die
+Ansicht: **Karte** für den Belag, **Sicht** für Kamerawinkel und Höhenüberhöhung. Immer nur
+ein Fach offen.
+
+Die Dauer reicht von **30 Minuten bis 8 Sekunden** für die ganze Reise, in fünfzehn Stufen.
+Da sich die Flughöhe aus der Geschwindigkeit ergibt, ist das zugleich der Höhenregler:
+langsam heißt tief und nah an der Straße, schnell heißt hoch und weit. Vorgabe sind
+3:30 Minuten.
 
 ## Geprüft
 
