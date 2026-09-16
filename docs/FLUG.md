@@ -352,10 +352,35 @@ Zeitraum über die beiden Datumsfelder oder über `?start=` und `?end=`, Belag �
 `?belag=satellit|topo|outdoor`, Grenzen über `?grenzen=aus`. Ein Wechsel des Zeitraums lädt
 die Seite neu: Strecke, Geländeprofil und Höhenplan hängen alle daran.
 
+### Höhe im Flug ändern
+
+Zwei Wege, beide wirken sofort:
+
+**Zoom.** Mausrad oder zwei Finger auf der Karte heben und senken die Kamera. Während des
+Flugs setzt die Schleife die Zoomstufe in jedem Bild neu, ein gewöhnlicher Kartenzoom wäre
+im nächsten Bild wieder weg. Die eigenen Zoomgesten von MapLibre sind deshalb während des
+Flugs abgeschaltet, und Rad beziehungsweise Fingerabstand werden auf einen Versatz gerechnet,
+den die Schleife auf ihre Zoomstufe legt, gedämpft und begrenzt auf −3 bis +4,5 Stufen. Nach
+dem Flug sind die normalen Gesten wieder da.
+
+**Höhenüberhöhung.** In Stufen von flach über 1,0× bis 15×, um die Eins herum fein
+abgestuft. 15-fach macht aus einem Mittelgebirge eine Wand.
+
+Wichtig dabei: `queryTerrainElevation` liefert **überhöhte** Werte, gemessen 184 m, 367 m und
+735 m für denselben Punkt bei 1×, 2× und 4×. Der Höhenplan wird aus rohen Metern der
+Terrarium-Kacheln gebaut und deshalb mit demselben Faktor skaliert, sonst flöge die Kamera
+bei starker Überhöhung durch die Berge. Beim Verstellen wird er neu gerechnet, das kostet
+Millisekunden.
+
+Bei 8-facher Überhöhung über Albanien gemessen: Gelände bis 8.794 m, kleinster Abstand zur
+Kamera 7.975 m, kein einziges Bild unter null.
+
 ### Auf dem Handy
 
 Das Bedienfeld wird zur Schublade am unteren Rand und startet eingeklappt, sonst deckt es die
-halbe Karte zu. Beim Flugstart klappt es von selbst zu. Die Zahlenleiste steht oben links und
+halbe Karte zu. Beim Flugstart klappt es von selbst zu. Eingeklappt steht dort nicht der
+Titel, sondern der **Tempo-Regler**: im Flug ist das Tempo das Einzige, was man laufend
+anfassen will. Der Pfeil zum Aufklappen sitzt in der Ecke. Die Zahlenleiste steht oben links und
 zeigt dort nur Kilometer, Halte und Fähre, die volle Liste bräuchte drei Zeilen. Das Klappfeld
 bleibt oben rechts, sein Fach ist auf 64 Prozent der Schirmbreite begrenzt. Die Fluganzeige
 legt sich als schmaler Streifen über die Schublade.

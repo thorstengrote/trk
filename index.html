@@ -20,7 +20,9 @@
               align-items:center;justify-content:space-between;gap:10px;user-select:none}
   #steuerkopf .pfeil{color:#9b9b93;transition:transform .18s}
   #steuer.zu #steuerkopf .pfeil{transform:rotate(-90deg)}
-  #steuerkoerper{padding:0 14px 13px;max-height:min(70vh,640px);overflow:auto}
+  #tempoleiste{padding:0 14px 4px}
+  #tempoleiste label{margin-top:0}
+  #steuerkoerper{padding:8px 14px 13px;max-height:min(70vh,640px);overflow:auto}
   #steuer.zu #steuerkoerper{display:none}
   /* Zugeklappt nur so breit wie die Reiter, aufgeklappt so breit wie der Inhalt */
   #oben{top:14px;right:14px;padding:6px;display:flex;flex-direction:column;gap:6px;
@@ -76,9 +78,14 @@
      nach oben links, das Klappfeld bleibt oben rechts, die Fluganzeige legt
      sich als schmaler Streifen ueber die Schublade. */
   @media (max-width:760px){
-    #steuer{top:auto;bottom:8px;left:8px;right:8px;width:auto}
+    #steuer{top:auto;bottom:8px;left:8px;right:8px;width:auto;padding-top:6px}
     #steuerkoerper{max-height:44vh}
-    #steuerkopf{padding:12px 14px}
+    /* Eingeklappt steht hier der Tempo-Regler und nicht der Titel. Der Pfeil
+       zum Aufklappen sitzt oben rechts in der Ecke. */
+    #steuertitel{display:none}
+    #steuerkopf{position:absolute;top:2px;right:4px;padding:8px 12px;z-index:2}
+    #tempoleiste{padding:4px 14px 8px 14px}
+    #tempoleiste label{padding-right:40px}
     button{padding:11px 12px}
     /* Reiter bleiben untereinander wie am Rechner, nur das aufgeklappte Fach
        bekommt eine Breite, die auf den Schirm passt. */
@@ -104,16 +111,22 @@
 <div id="map"></div>
 
 <div id="steuer" class="karte">
-  <div id="steuerkopf"><b>Flug über die Strecke</b><span class="pfeil">▾</span></div>
+  <div id="steuerkopf"><b id="steuertitel">Flug über die Strecke</b><span class="pfeil">▾</span></div>
+
+  <!-- Bleibt auch eingeklappt stehen: im Flug ist das Tempo das Einzige,
+       was man laufend anfassen will. -->
+  <div id="tempoleiste">
+    <label>Dauer <span class="wert" id="dauerwert">10:00 min</span>
+      <span id="temponame" style="color:#9b9b93;font-weight:400"></span></label>
+    <input type="range" id="dauer" min="1" max="15" value="4">
+  </div>
+
   <div id="steuerkoerper">
 
   <label>Zeitraum</label>
   <div class="zeile"><input type="date" id="von"><input type="date" id="bis"></div>
   <button class="still" id="los" style="margin-top:8px">Zeitraum anzeigen</button>
 
-  <label style="margin-top:14px;display:block">Dauer <span class="wert" id="dauerwert">10:00 min</span>
-    <span id="temponame" style="color:#9b9b93;font-weight:400"></span></label>
-  <input type="range" id="dauer" min="1" max="15" value="4">
   <div style="margin-top:12px">
     <button id="start">Flug starten</button>
     <button class="still" id="pause" disabled>Pause</button>
@@ -145,7 +158,7 @@
       <label>Kamerawinkel <span class="wert" id="winkelwert">53°</span></label>
       <input type="range" id="winkel" min="0" max="80" value="53">
       <label>Höhenüberhöhung <span class="wert" id="hoehewert">1,0×</span></label>
-      <input type="range" id="hoehe" min="10" max="30" value="10">
+      <input type="range" id="hoehe" min="1" max="17" value="5">
     </div>
   </div>
 </div>
@@ -205,6 +218,13 @@
   // schnell. Da sich die Flughoehe aus der Geschwindigkeit ergibt, ist das
   // zugleich der Hoehenregler: langsam heisst tief, schnell heisst hoch.
   const DAUERN = [1800, 1200, 900, 600, 420, 300, 210, 150, 100, 70, 45, 30, 20, 12, 8];
+
+  /* Hoehenueberhoehung in Stufen statt linear. Um die Eins herum fein, nach
+     oben weit: 15-fach macht aus einem Mittelgebirge eine Wand und schafft
+     damit genau den Abstand, den man manchmal sehen will. Null legt die
+     Landschaft flach. */
+  const UEBERHOEHUNGEN = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10, 12, 15];
+  const ueberhoehung = () => UEBERHOEHUNGEN[+$('hoehe').value - 1] ?? 1;
   const TEMPONAME = s =>
     s >= 900 ? 'sehr langsam' : s >= 300 ? 'langsam' : s >= 100 ? 'mittel'
     : s >= 30 ? 'schnell' : 'extrem schnell';
@@ -215,6 +235,9 @@
   const P = new URLSearchParams(location.search);
   const SCHMAL = window.matchMedia('(max-width: 760px)');
 
+  // Zoomversatz von Hand, bleibt ueber den Flug hinaus stehen
+  let zoomHand = 0, aufraeumen = null;
+  const begrenzen = z => Math.max(-3, Math.min(z, 4.5));
   let karte, pfad = [], stops = [], faehrten = [], ergebnis = null, profilVersprechen = null,
       tempoImFlug = null, raf = null, laeuft = false, pausiert = false, gelaendeDaGlobal = true;
   let verdeckt = true;
@@ -449,7 +472,7 @@
       karte.addSource('gelaende', { type:'raster-dem', tileSize:256, maxzoom:DEM_MAXZOOM,
         encoding:'terrarium', tiles:[DEM],
         attribution:'Höhendaten: Terrain Tiles (AWS Open Data)' });
-    if (gelaendeDa) karte.setTerrain({ source:'gelaende', exaggeration:+$('hoehe').value/10 });
+    if (gelaendeDa) karte.setTerrain({ source:'gelaende', exaggeration: ueberhoehung() });
 
     /* MapLibre kennt keine sky-Ebene wie Mapbox, sondern setSky.
 
@@ -869,12 +892,14 @@
      Huellkurve des Gebirges. Dann symmetrisch glaetten. Zum Schluss die
      Mindesthoehe ueber der Huellkurve erzwingen, damit die Glaettung nirgends
      in einen Berg hineinlaeuft. */
-  function flugplan(profil, reiseHoehe, fensterKm){
+  function flugplan(profil, reiseHoehe, fensterKm, faktor){
+    const f = faktor ?? 1;
     const n = profil.length;
     const proSchritt = n > 1 ? (profil[n-1].km - profil[0].km) / (n-1) : 1;
     const w = Math.max(Math.round(fensterKm / proSchritt), 2);
 
-    const werte = Float64Array.from(profil, p => p.boden);
+    // Die Karte zeigt ueberhoehtes Gelaende, der Plan rechnet in derselben Welt
+    const werte = Float64Array.from(profil, p => p.boden * f);
     const huelle = laufMax(werte, w);
     const glatt = glaetten(huelle, w, 3);
 
@@ -1043,7 +1068,7 @@
 
     let richtung = null, pitchAkt = basisPitch;
     let t0 = 0, anteil = 0, letzteKamera = 0, letzterStrich = 0, letzteWarm = 0;
-    let erreicht = 0, verweiltBis = 0, zoomAus = 0;
+    let erreicht = 0, verweiltBis = 0, zoomAus = 0, zoomHandGlatt = zoomHand;
     const quellen = kachelquellen();
     let grundAkt = null, grundHart = null, grundGlatt = null;
     let zielGrund = null, flugNN = null;
@@ -1065,7 +1090,7 @@
       zoomZiel = flughoehe(tempo, pfad[0].lat);
       if (basisZoom === null) basisZoom = zoomZiel;
       REISE = hoeheAusZoom(zoomZiel, mittLat, bildHoehe);
-      if (profil) plan = flugplan(profil, REISE, Math.max(gesamtKm / 60, 25));
+      if (profil) plan = flugplan(profil, REISE, Math.max(gesamtKm / 60, 25), ueberhoehung());
     }
     tempoSetzen();
     tempoImFlug = tempoSetzen;
@@ -1075,6 +1100,44 @@
     if (!laeuft) return;                       // zwischenzeitlich gestoppt
     tempoSetzen();
     $('start').textContent = plan ? 'Fliegt …' : 'Fliegt (ohne Plan) …';
+
+    /* Zoom als Hoehenregler.
+
+       Waehrend des Flugs setzt die Schleife die Zoomstufe in jedem Bild neu.
+       Ein Rad- oder Kneifzoom der Karte waere im naechsten Bild wieder weg.
+       Deshalb werden die eigenen Zoomgesten waehrend des Flugs abgeschaltet
+       und das Rad beziehungsweise der Fingerabstand auf einen Versatz
+       gerechnet, den die Schleife auf ihre Zoomstufe legt. Nach oben heisst
+       das naeher am Boden, nach unten weiter weg. */
+    karte.scrollZoom.disable(); karte.touchZoomRotate.disable();
+    karte.doubleClickZoom.disable();
+    const leinwand = karte.getCanvas();
+
+    const radHoch = e => { e.preventDefault();
+      zoomHand = begrenzen(zoomHand - e.deltaY * 0.0022); };
+    let kneifAb = null;
+    const abstand = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const kneifAn = e => { if (e.touches.length === 2) kneifAb = abstand(e.touches); };
+    const kneifZieh = e => {
+      if (e.touches.length !== 2 || !kneifAb) return;
+      e.preventDefault();
+      const jetztAb = abstand(e.touches);
+      zoomHand = begrenzen(zoomHand + Math.log2(jetztAb / kneifAb));
+      kneifAb = jetztAb;
+    };
+    const kneifAus = () => { kneifAb = null; };
+    leinwand.addEventListener('wheel', radHoch, { passive:false });
+    leinwand.addEventListener('touchstart', kneifAn, { passive:true });
+    leinwand.addEventListener('touchmove', kneifZieh, { passive:false });
+    leinwand.addEventListener('touchend', kneifAus, { passive:true });
+    aufraeumen = () => {
+      leinwand.removeEventListener('wheel', radHoch);
+      leinwand.removeEventListener('touchstart', kneifAn);
+      leinwand.removeEventListener('touchmove', kneifZieh);
+      leinwand.removeEventListener('touchend', kneifAus);
+      karte.scrollZoom.enable(); karte.touchZoomRotate.enable();
+      karte.doubleClickZoom.enable();
+    };
 
     /* Der eigentliche Grund fuer das Auf und Ab.
 
@@ -1210,8 +1273,9 @@
         zoomAus += (noetig - zoomAus) * (noetig > zoomAus ? 0.08 : 0.02);
 
         const ueberGrund = Math.max(flugNN - bodenJetzt, 120);
+        zoomHandGlatt += (zoomHand - zoomHandGlatt) * 0.12;
         const zoomAkt = (loesbar ? basisZoom : Math.max(8.5, Math.min(
-          zoomAusHoehe(ueberGrund, kam.lat, bildHoehe), 15))) - zoomAus;
+          zoomAusHoehe(ueberGrund, kam.lat, bildHoehe), 15))) - zoomAus + zoomHandGlatt;
         if (loesbar) karte.setCenterElevation(flugNN - REISE);
 
         const relief = planAbfragen(plan, km, 'relief')
@@ -1279,6 +1343,7 @@
   function flugEnde(){
     laeuft = false;
     pausiert = false;
+    if (aufraeumen){ aufraeumen(); aufraeumen = null; }
     tempoImFlug = null;
     $('pause').disabled = true;
     $('pause').textContent = 'Pause';
@@ -1452,8 +1517,13 @@
       karte.setPitch(+$('winkel').value);
     };
     $('hoehe').oninput = () => {
-      $('hoehewert').textContent = (+$('hoehe').value/10).toFixed(1).replace('.',',') + '×';
-      if (karte.getTerrain()) karte.setTerrain({ source:'gelaende', exaggeration:+$('hoehe').value/10 });
+      const f = ueberhoehung();
+      $('hoehewert').textContent = f === 0 ? 'flach'
+        : f.toFixed(f < 1 ? 2 : 1).replace('.', ',') + '×';
+      if (karte.getTerrain()) karte.setTerrain({ source:'gelaende', exaggeration: f });
+      // Der Hoehenplan steckt in echten Metern, die Karte zeigt ueberhoehte.
+      // Ohne Nachziehen floege die Kamera bei starker Ueberhoehung durch Berge.
+      if (tempoImFlug) tempoImFlug();
     };
     for (const el of document.querySelectorAll('#belaege button'))
       el.onclick = () => belagWechseln(el.dataset.id, gelaendeDaGlobal);
