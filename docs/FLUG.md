@@ -109,6 +109,31 @@ Sauberer wäre eine freie Kamera mit echter Höhenangabe, wie Mapbox sie hat. Ma
 nicht, geprüft in 4.7.1, 5.0.0 und 5.6.1. Das Abtasten ist deshalb eine Minderung, keine
 Garantie.
 
+## Der Höhenschlag über der Straße
+
+Die Kamera stieg und sank mit jeder Steigung der Straße. Der Grund steckte in einer
+Vermischung zweier Bodenwerte.
+
+MapLibre setzt die Kamera zu einer Zoomstufe immer relativ zum echten Gelände unter dem
+Bildmittelpunkt. Die Zoomstufe wurde aber gegen einen stark geglätteten Bodenwert gerechnet,
+weil der auch das Ziel der Reiseflughöhe bestimmt. Die Differenz beider Werte landete
+eins zu eins als Höhenschlag im Bild.
+
+Jetzt laufen zwei Werte nebeneinander: `grundHart` folgt dem Gelände fast unverzögert
+(Dämpfung 0,55) und geht in die Zoomrechnung, `grundGlatt` läuft träge (0,12) und bestimmt
+nur, welche Höhe angepeilt wird.
+
+Gemessen aus der Animationsschleife heraus über die komplette Reise, 1.321 m Höhenunterschied
+am Boden:
+
+```
+Zoomstufe, Spanne über den ganzen Flug     0,08
+absolute Flughöhe, Änderung je Bild        unter 1 Promille
+```
+
+Die Höhe über Grund folgt dem Gelände, die absolute Flughöhe bleibt liegen. Genau
+andersherum als vorher.
+
 ## Die Straße kurvt wirklich
 
 Die Routenabfrage holte bis dahin `overview=simplified`, eine vereinfachte Geometrie mit
@@ -126,9 +151,39 @@ Wie in der Kartenansicht wird nichts vorweggenommen: beim Start verschwinden Str
 Aufenthalte, die Spur wächst hinter der Drohne, die Aufenthalte tauchen beim Passieren auf.
 Am Ende ist wieder alles zu sehen.
 
+## Fähren gehören zum Verkehrsnetz
+
+Am Drin bei Shkodra führte die gezeichnete Strecke weit an der Drohne vorbei zurück, weil der
+Van dort die Fähre genommen hat und der Router sie nicht kannte.
+
+Die Fähren stehen in OpenStreetMap. Der öffentliche OSRM-Demoserver benutzt sie am Drin
+nicht, obwohl er es andernorts tut (Villa San Giovanni nach Messina erkennt er). Gerechnet
+wird deshalb über **Valhalla** (`valhalla1.openstreetmap.de`) mit `use_ferry: 1`, also ohne
+Strafaufschlag auf die Überfahrt. OSRM bleibt als Rückfall, falls Valhalla nicht antwortet.
+
+| Strecke | OSRM | Valhalla |
+|---|---|---|
+| Shkodra nach Gjakova | 203 km, keine Fähre | 110 km, davon 32,2 km Fähre |
+| Koman nach Fierzë | 270 km ums Wasser herum | 43 km über die Fähre |
+
+Das ist keine Ausnahme für diesen Ort, sondern ein Wechsel des Routers. Valhalla liefert
+zusätzlich die Fährabschnitte einzeln zurück (`begin_shape_index` je Manöver), die
+Kartenansicht zeichnet sie gepunktet in Wasserfarbe.
+
+Der Schlüssel im Zwischenspeicher steht deshalb auf `r3`. Einträge von vorher stammen von
+einem Router ohne Fähren und werden nicht mehr benutzt.
+
+Die Geometrie kommt als Polyline mit sechs Nachkommastellen und wird in `analyse.js`
+dekodiert. Der Gemeinschaftsserver drosselt bei zu vielen Anfragen; bei 429 oder 5xx wird
+bis zu dreimal mit wachsender Pause neu gefragt, gleichzeitig laufen höchstens drei Anfragen.
+
 ## Bedienung
 
 Zeitraum über `?start=` und `?end=` wie bei der Karte, Belag über `?belag=satellit|topo|outdoor`.
+
+Vor dem Flug liegt die Karte genordet und flach da, wie eine gewöhnliche Karte. Erst beim
+Start kippt sie in die Fluglage und dreht auf den ersten Kurs. Nach dem Flug geht sie wieder
+genordet auf die ganze Strecke.
 
 Links unten die Fahrt: Dauer und Start. Oben rechts, wie im Schwesterprojekt vantrip, die
 Ansicht: **Karte** für den Belag, **Sicht** für Kamerawinkel und Höhenüberhöhung. Immer nur

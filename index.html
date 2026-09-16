@@ -9,7 +9,8 @@
 <style>
   :root{
     --bg:#f4f4f1; --panel:#ffffff; --panel2:#fafaf8; --line:#e2e2dc; --text:#22221e;
-    --dim:#75756c; --akzent:#3d7a4e; --akzent-hell:#4d9463;
+    --wasser:#4aa3d8;
+      --dim:#75756c; --akzent:#3d7a4e; --akzent-hell:#4d9463;
     --fahrt:#2f6fb0; --pause:#d4941f; --halt:#cc6a2c; --nacht:#6b52b5; --tage:#a33b3b;
     --schatten:0 1px 3px rgba(0,0,0,.08),0 8px 24px rgba(0,0,0,.10);
   }
@@ -302,6 +303,18 @@
         L.polyline(s.geo,{color:css('--fahrt'),weight:3.5,opacity:.85,lineJoin:'round'})
           .addTo(gruppe.strecke);
         for (const c of s.geo) grenzen.push(c);
+        // Faehrstrecken liegen auf der Route, gehoeren aber aufs Wasser
+        for (const teil of s.faehreGeo || []){
+          L.polyline(teil,{color:css('--wasser'),weight:3.5,opacity:.95,
+            dashArray:'1,9',lineCap:'round'}).addTo(gruppe.strecke)
+            .bindTooltip('Fähre');
+        }
+      } else if (s.art === 'ueberfahrt'){
+        // Der Router fand nur einen Umweg, der nicht in die Zeit passt
+        L.polyline([[s.a.lat,s.a.lon],[s.b.lat,s.b.lon]],
+          {color:css('--wasser'),weight:3,dashArray:'2,7',opacity:.85}).addTo(gruppe.strecke)
+          .bindTooltip('Über Wasser oder abseits der Straße');
+        grenzen.push([s.a.lat,s.a.lon],[s.b.lat,s.b.lon]);
       } else {
         // Keine Route berechenbar: als Vermutung kennzeichnen, nicht als Fahrt
         L.polyline([[s.a.lat,s.a.lon],[s.b.lat,s.b.lon]],
@@ -621,8 +634,10 @@
       `<span><b>${z.imZeitraum}</b> Messungen</span>` +
       `<span><b>${tausend(z.km)}</b> km über Straßen</span>` +
       `<span><b>${erg.stops.length}</b> Aufenthalte</span>` +
-      `<span><b>${z.faehrt + z.faehrtHalt}</b> Fahrtabschnitte</span>` +
+      `<span><b>${z.faehrt + z.faehrtHalt + (z.faehre||0)}</b> Fahrtabschnitte</span>` +
+      (z.faehreKm >= 0.5 ? `<span><b>${tausend(z.faehreKm)}</b> km per Fähre</span>` : '') +
       (z.pingpongEntfernt ? `<span><b>${z.pingpongEntfernt}</b> Mastwechsel ohne Bewegung entfernt</span>` : '') +
+      (z.ueberfahrt ? `<span><b>${z.ueberfahrt}</b> über Wasser</span>` : '') +
       (z.unklar ? `<span><b>${z.unklar}</b> ohne Route</span>` : '');
 
     zeichne();

@@ -19,6 +19,7 @@
  */
 
 const Analyse = (() => {
+  const VALHALLA = 'https://valhalla1.openstreetmap.de/route';
   const OSRM = 'https://router.project-osrm.org/route/v1/driving/';
 
   // Ab dieser Luftlinie gilt ein Abschnitt als Ortswechsel und wird geroutet.
@@ -86,10 +87,107 @@ const Analyse = (() => {
 
   /* --- Abschnitte ------------------------------------------------------- */
 
-  // Versionskennung im Schluessel: aeltere Eintraege enthalten noch die
-  // vereinfachte Geometrie und wuerden die Strasse eckig lassen.
+  // Versionskennung im Schluessel: r3 seit der Umstellung auf Valhalla.
+  // Die alten Eintraege stammen von einem Router ohne Faehren.
   const cacheKey = (a, b) =>
-    `r2:${a.lat.toFixed(5)},${a.lon.toFixed(5)}>${b.lat.toFixed(5)},${b.lon.toFixed(5)}`;
+    `r3:${a.lat.toFixed(5)},${a.lon.toFixed(5)}>${b.lat.toFixed(5)},${b.lon.toFixed(5)}`;
+
+  /* Valhalla liefert die Geometrie als Polyline mit sechs Nachkommastellen. */
+  function polyline6(str) {
+    const punkte = [];
+    let i = 0, lat = 0, lon = 0;
+    while (i < str.length) {
+      let ergebnis = 0, verschiebung = 0, zeichen;
+      do { zeichen = str.charCodeAt(i++) - 63;
+           ergebnis |= (zeichen & 0x1f) << verschiebung; verschiebung += 5;
+      } while (zeichen >= 0x20);
+      lat += (ergebnis & 1) ? ~(ergebnis >> 1) : (ergebnis >> 1);
+      ergebnis = 0; verschiebung = 0;
+      do { zeichen = str.charCodeAt(i++) - 63;
+           ergebnis |= (zeichen & 0x1f) << verschiebung; verschiebung += 5;
+      } while (zeichen >= 0x20);
+      lon += (ergebnis & 1) ? ~(ergebnis >> 1) : (ergebnis >> 1);
+      punkte.push([lat / 1e6, lon / 1e6]);
+    }
+    return punkte;
+  }
+
+  /* Valhalla kennt Faehren als Teil des Verkehrsnetzes.
+
+     use_ferry auf 1 heisst: keine Strafe auf die Ueberfahrt. Ohne das faehrt
+     der Router am Drin 203 km ueber Kukes statt 110 km ueber die Faehre bei
+     Shkodra. Der oeffentliche OSRM-Dienst kennt die dortigen Faehren gar
+     nicht und bleibt deshalb nur der Rueckfall. */
+  async function valhalla(a, b) {
+    const anfrage = {
+      locations: [{ lat: +a.lat.toFixed(6), lon: +a.lon.toFixed(6) },
+                  { lat: +b.lat.toFixed(6), lon: +b.lon.toFixed(6) }],
+      costing: 'auto',
+      costing_options: { auto: { use_ferry: 1, use_highways: 1 } },
+      directions_options: { units: 'kilometers' },
+      shape_match: 'map_snap'
+    };
+    const adresse = `${VALHALLA}?json=${encodeURIComponent(JSON.stringify(anfrage))}`;
+    let r = await fetch(adresse);
+    // Der Gemeinschaftsserver bremst bei zu vielen Anfragen. Einmal warten
+    // und neu fragen ist billiger als der Rueckfall auf einen Router ohne
+    // Faehren.
+    for (let n = 0; !r.ok && (r.status === 429 || r.status >= 500) && n < 3; n++) {
+      await new Promise(f => setTimeout(f, 700 * (n + 1)));
+      r = await fetch(adresse);
+    }
+    if (!r.ok) return null;
+    const d = await r.json();
+    const beine = d?.trip?.legs;
+    if (!beine?.length) return null;
+
+    const geo = [];
+    const faehreGeo = [];
+    let faehreMeter = 0;
+    for (const bein of beine) {
+      const form = polyline6(bein.shape || '');
+      for (const pt of form) {
+        const letzter = geo[geo.length - 1];
+        if (!letzter || letzter[0] !== pt[0] || letzter[1] !== pt[1]) geo.push(pt);
+      }
+      for (const m of bein.maneuvers || []) {
+        const istFaehre = m.travel_type === 'ferry' ||
+          /\bferry\b|f[aä]hre/i.test(m.instruction || '') ||
+          (m.street_names || []).some(n => /ferry|f[aä]hre/i.test(n));
+        if (!istFaehre) continue;
+        faehreMeter += (m.length || 0) * 1000;
+        // Die Ueberfahrt als eigenes Stueck merken, damit die Karte sie
+        // anders zeichnen kann als die Strasse.
+        const teil = form.slice(m.begin_shape_index || 0, (m.end_shape_index ?? 0) + 1);
+        if (teil.length > 1) faehreGeo.push(teil);
+      }
+    }
+    if (geo.length < 2) return null;
+    return {
+      meter: d.trip.summary.length * 1000,
+      sekunden: d.trip.summary.time,
+      faehreMeter, faehreGeo,
+      geo
+    };
+  }
+
+  async function osrm(a, b) {
+    // overview=full statt simplified: die vereinfachte Geometrie zieht lange
+    // Geraden mit scharfen Ecken, was im Tiefflug wie Zickzack aussieht.
+    const url = `${OSRM}${a.lon.toFixed(6)},${a.lat.toFixed(6)};` +
+                `${b.lon.toFixed(6)},${b.lat.toFixed(6)}` +
+                `?overview=full&geometries=geojson`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (d.code !== 'Ok' || !d.routes?.length) return null;
+    return {
+      meter: d.routes[0].distance,
+      sekunden: d.routes[0].duration,
+      faehreMeter: 0,
+      geo: d.routes[0].geometry.coordinates.map(c => [c[1], c[0]])
+    };
+  }
 
   async function route(a, b) {
     const key = cacheKey(a, b);
@@ -98,32 +196,47 @@ const Analyse = (() => {
       if (hit) return hit;
     } catch (e) { /* Zwischenspeicher nicht verfuegbar, dann eben ohne */ }
 
-    // overview=full statt simplified: die vereinfachte Geometrie zieht lange
-    // Geraden mit scharfen Ecken, was im Tiefflug wie Zickzack aussieht.
-    const url = `${OSRM}${a.lon.toFixed(6)},${a.lat.toFixed(6)};` +
-                `${b.lon.toFixed(6)},${b.lat.toFixed(6)}` +
-                `?overview=full&geometries=geojson`;
-    try {
-      const r = await fetch(url);
-      if (!r.ok) return null;
-      const d = await r.json();
-      if (d.code !== 'Ok' || !d.routes?.length) return null;
-      const res = {
-        meter: d.routes[0].distance,
-        sekunden: d.routes[0].duration,
-        geo: d.routes[0].geometry.coordinates.map(c => [c[1], c[0]])
-      };
-      try { await localforage.setItem(key, res); } catch (e) { /* egal */ }
-      return res;
-    } catch (e) {
-      return null;
+    let res = null;
+    for (const versuch of [valhalla, osrm]) {
+      try { res = await versuch(a, b); } catch (e) { res = null; }
+      if (res) break;
     }
+    if (!res) return null;
+    try { await localforage.setItem(key, res); } catch (e) { /* egal */ }
+    return res;
+  }
+
+  /* Faehren, Grenzen, unbekannte Strassen.
+
+     Der oeffentliche OSRM-Dienst fuehrt um Gewaesser herum. Am Drin in
+     Albanien entsteht dadurch ein Umweg von Stunden, obwohl der Van die Faehre
+     genommen hat. Solche Abschnitte lassen sich daran erkennen, dass die
+     Sollfahrzeit der Strasse deutlich ueber der tatsaechlich vergangenen Zeit
+     liegt: gefahren werden kann nur, was in die Zeit passt.
+
+     Zusaetzlich muss der Umweg erheblich sein, sonst schlagen kurze Abschnitte
+     mit ungenauer Zellortung faelschlich an. */
+  const UEBERFAHRT_ZEIT = 1.4;      // Sollfahrzeit gegen die vergangene Zeit
+  const UEBERFAHRT_PUFFER = 2700;   // Sekunden Zugabe
+  const UEBERFAHRT_UMWEG = 2.0;     // Strassenweg gegen Luftlinie
+  const UEBERFAHRT_MIN_LUFT = 15000;   // Meter Luftlinie, darunter nie
+  const UEBERFAHRT_MIN_MEHR = 25000;   // Meter Umweg, darunter nie
+
+  function unplausibel(r, vergangen, luft){
+    if (!r || !r.sekunden) return false;
+    // Kurze Abschnitte schlagen sonst durch die Ungenauigkeit der Zellortung
+    // an: acht Kilometer Luftlinie in einer Viertelstunde sieht bei einem
+    // Mast am falschen Ende der Zelle immer nach Umweg aus.
+    if (luft < UEBERFAHRT_MIN_LUFT) return false;
+    if (r.meter - luft < UEBERFAHRT_MIN_MEHR) return false;
+    const zuLang = r.sekunden > vergangen * UEBERFAHRT_ZEIT + UEBERFAHRT_PUFFER;
+    return zuLang && r.meter / (luft || 1) > UEBERFAHRT_UMWEG;
   }
 
   // Mehrere Routen gleichzeitig anfragen. Nacheinander dauerte der erste
   // Aufruf ueber eine Minute, weil jede Anfrage einzeln auf die Antwort
   // wartete. Beim zweiten Mal kommt ohnehin alles aus dem Zwischenspeicher.
-  const PARALLEL = 4;
+  const PARALLEL = 3;
 
   async function abschnitte(punkte, fortschritt) {
     const segs = new Array(Math.max(punkte.length - 1, 0));
@@ -144,6 +257,23 @@ const Analyse = (() => {
           const r = await route(a, b);
           if (!r) {
             segs[i] = { a, b, art: 'unklar', vergangen, luft, meter: luft, soll: null };
+          } else if (r.faehreMeter > 500) {
+            // Der Router hat eine Faehre benutzt. Das ist keine Unsicherheit,
+            // sondern die gefahrene Strecke.
+            const ueber = vergangen - r.sekunden;
+            segs[i] = {
+              a, b, vergangen, luft, art: 'faehre',
+              meter: r.meter, soll: r.sekunden, ueber,
+              faehreMeter: r.faehreMeter, faehreGeo: r.faehreGeo, geo: r.geo
+            };
+          } else if (unplausibel(r, vergangen, luft)) {
+            // Die Strasse passt nicht in die Zeit. Gerade Linie statt Umweg.
+            segs[i] = {
+              a, b, vergangen, luft, art: 'ueberfahrt',
+              meter: luft, soll: null,
+              umweg: r.meter / (luft || 1),
+              strasseMeter: r.meter, strasseSek: r.sekunden
+            };
           } else {
             const ueber = vergangen - r.sekunden;
             segs[i] = {
@@ -171,7 +301,7 @@ const Analyse = (() => {
       if (s.art === 'steht' && s.vergangen >= MIN_HALT_S) {
         roh.push({ von: s.a.bis, bis: s.b.time, sek: s.vergangen,
                    lat: s.a.lat, lon: s.a.lon, seg: s, quelle: 'stillstand' });
-      } else if (s.art === 'faehrt+halt' && s.ueber >= MIN_HALT_S) {
+      } else if ((s.art === 'faehrt+halt' || s.art === 'faehre') && s.ueber >= MIN_HALT_S) {
         // Gehalten wurde irgendwo auf dem Weg. Die Position schaetzt
         // positionAufRoute spaeter genauer.
         roh.push({ von: s.a.bis, bis: s.b.time, sek: s.ueber,
@@ -261,6 +391,9 @@ const Analyse = (() => {
         faehrt: segs.filter(s => s.art === 'faehrt').length,
         faehrtHalt: segs.filter(s => s.art === 'faehrt+halt').length,
         steht: segs.filter(s => s.art === 'steht').length,
+        faehre: segs.filter(s => s.art === 'faehre').length,
+        faehreKm: segs.reduce((n, x) => n + (x.faehreMeter || 0), 0) / 1000,
+        ueberfahrt: segs.filter(s => s.art === 'ueberfahrt').length,
         unklar: segs.filter(s => s.art === 'unklar').length
       }
     };

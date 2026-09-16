@@ -60,6 +60,7 @@
   <div style="margin-top:12px">
     <button id="start">Flug starten</button>
     <button class="still" id="stopp">Stopp</button>
+    <button class="still" id="zeigen">Strecke einblenden</button>
   </div>
 </div>
 
@@ -139,6 +140,7 @@
   const P = new URLSearchParams(location.search);
 
   let karte, pfad = [], stops = [], raf = null, laeuft = false, gelaendeDaGlobal = true;
+  let verdeckt = true;
 
   const fmtUhr = d => d.toLocaleString('de-DE',
     {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
@@ -286,7 +288,9 @@
     karte = new maplibregl.Map({
       container:'map', style: BELAEGE[belag].stil,
       center:[pfad[0].lon, pfad[0].lat], zoom:12,
-      pitch:+$('winkel').value, bearing:0, maxPitch:85,
+      // Vor dem Flug eine gewoehnliche Karte: genordet und von oben. Der
+      // eingestellte Kamerawinkel gilt erst fuer den Flug selbst.
+      pitch:0, bearing:0, maxPitch:85,
       attributionControl:{ compact:true }
     });
     return new Promise(fertig => {
@@ -415,6 +419,25 @@
     return Math.max(9.2, Math.min(z, 14.5));
   }
 
+  /* Hoehenregelung.
+
+     MapLibre haelt die Kamera in konstanter Hoehe *ueber dem Boden*. Faehrt die
+     Bahn ueber einen Pass, hebt und senkt sich die Kamera mit. Genau das war
+     das Wackeln bei Hoehenwechseln auf der Strasse.
+
+     Es gibt keinen Schalter dagegen, aber die Hoehe ueber Grund haengt eindeutig
+     an der Zoomstufe. Also wird sie jedes Bild so nachgefuehrt, dass die
+     absolute Hoehe gleich bleibt: steigt der Boden, sinkt die Hoehe ueber Grund
+     um denselben Betrag, und die Kamera bleibt, wo sie ist.
+
+     Bei der Standardbrennweite (Sichtfeld 36,87 Grad) gilt
+        Hoehe ueber Grund = 1,5 * Bildhoehe in Pixeln * Meter je Pixel.        */
+  const hoeheAusZoom = (zoom, lat, hPx) =>
+    1.5 * hPx * (156543.03 * Math.cos(lat * Math.PI/180) / Math.pow(2, zoom));
+
+  const zoomAusHoehe = (hoehe, lat, hPx) =>
+    Math.log2(156543.03 * Math.cos(lat * Math.PI/180) * 1.5 * hPx / Math.max(hoehe, 50));
+
   function flugStart(){
     flugStopp();
     if (pfad.length < 2) return;
@@ -436,9 +459,20 @@
     const basisZoom  = flughoehe(tempo, pfad[0].lat);
     const basisPitch = +$('winkel').value;
     const VORLAUF = Math.max(gesamtKm / 40, 4);            // km, Blickpunkt voraus
+    const bildHoehe = karte.getContainer().clientHeight || 800;
 
-    let richtung = null, zoomAkt = basisZoom, pitchAkt = basisPitch;
-    let t0 = 0, letzteKamera = 0, letzterStrich = 0, erreicht = 0, grundAkt = null;
+    let richtung = null, pitchAkt = basisPitch;
+    let t0 = 0, letzteKamera = 0, letzterStrich = 0, erreicht = 0;
+    let grundAkt = null, grundHart = null, grundGlatt = null, flugNN = null;
+
+    // Aus der genordeten Startansicht in die Fluglage kippen, statt zu
+    // springen. Der erste Kurs kommt aus den ersten Kilometern der Bahn.
+    const ersterKurs = peilung(aufBahn(bahn, 0), aufBahn(bahn, Math.min(VORLAUF, gesamtKm)));
+    if (Math.abs(karte.getPitch() - basisPitch) > 1 || Math.abs(karte.getBearing()) > 1){
+      karte.jumpTo({ center:[bahn[0].lon, bahn[0].lat],
+                     zoom:basisZoom, pitch:basisPitch, bearing:ersterKurs });
+    }
+    richtung = ersterKurs;
 
     strichSetzen(0);
     if (karte.getLayer('halte')) karte.setFilter('halte', ['<=', ['get','km'], 0]);
@@ -461,24 +495,46 @@
       if (jetzt - letzteKamera > 28){
         letzteKamera = jetzt;
 
-        // Gelaende weit voraus abtasten, nicht nur bis zum Blickziel. Ein
-        // kurzer Horizont laesst die Kamera ueber jeden Grat wippen; ueber
-        // einen langen steigt sie einmal vor dem Gebirge und bleibt oben.
+        /* Zwei Bodenwerte, und die Unterscheidung ist der ganze Trick.
+
+           MaplibreGL setzt die Kamera zu einer Zoomstufe immer relativ zum
+           echten Gelaende unter dem Bildmittelpunkt. Wer die Zoomstufe gegen
+           einen geglaetteten Boden ausrechnet, bekommt die Differenz beider
+           Werte als Hoehenschlag zurueck: die Kamera stieg und sank mit
+           jeder Steigung der Strasse.
+
+           grundHart folgt dem Gelaende fast unverzoegert und geht in die
+           Zoomrechnung. grundGlatt laeuft traege und bestimmt nur, welche
+           Reiseflughoehe angepeilt wird. */
         const hier = grund(kam);
+        if (hier != null){
+          grundAkt = hier;
+          grundHart  = grundHart  === null ? hier : grundHart  + (hier - grundHart)  * 0.55;
+          grundGlatt = grundGlatt === null ? hier : grundGlatt + (hier - grundGlatt) * 0.12;
+        }
+        const boden = grundGlatt ?? 0;
+        const bodenJetzt = grundHart ?? boden;
+
+        // Gelaende weit voraus: steigt es an, steigt auch die Reiseflughoehe.
+        // Sperrklinke: zuegig hoch, sehr langsam runter.
         let vorn = 0;
         for (const f of [.2, .5, .9, 1.4, 2.0, 2.8]){
           const g = grund(aufBahn(bahn, Math.min(km + VORLAUF * f, gesamtKm)));
           if (g != null && g > vorn) vorn = g;
         }
-        if (hier != null) grundAkt = hier;
-        const relief = Math.max(0, vorn - (hier ?? 0)) * (+$('hoehe').value / 10);
+        const sollNN = Math.max(boden, vorn) +
+                       hoeheAusZoom(basisZoom, kam.lat, bildHoehe);
+        flugNN = flugNN === null ? sollNN
+               : flugNN + (sollNN - flugNN) * (sollNN > flugNN ? 0.02 : 0.004);
 
-        // Kleinere Ausschlaege als zuvor, und eine Sperrklinke: steigen darf
-        // sie zuegig, sinken nur sehr langsam. Das nimmt das Auf und Ab heraus.
-        const zielZoom  = basisZoom  - Math.min(relief / 1100, 0.8);
+        // Zoomstufe so waehlen, dass die absolute Hoehe gehalten wird.
+        // Gegen den echten Boden gerechnet, sonst bleibt der Hoehenschlag.
+        const ueberGrund = Math.max(flugNN - bodenJetzt, 120);
+        const zoomAkt = Math.max(8.5, Math.min(
+          zoomAusHoehe(ueberGrund, kam.lat, bildHoehe), 15));
+
+        const relief = Math.max(0, vorn - boden);
         const zielPitch = basisPitch - Math.min(relief / 160, 7);
-        const rauf = zielZoom < zoomAkt;                  // kleinerer Zoom heisst hoeher
-        zoomAkt  += (zielZoom  - zoomAkt)  * (rauf ? 0.02 : 0.004);
         pitchAkt += (zielPitch - pitchAkt) * (zielPitch < pitchAkt ? 0.02 : 0.004);
 
         const soll = peilung(kam, blick);
@@ -486,6 +542,10 @@
 
         karte.jumpTo({ center:[kam.lon, kam.lat], zoom:zoomAkt,
                        pitch:pitchAkt, bearing:richtung });
+        // Messpunkt fuer die Pruefung des Hoehenhalts. Wird nur gefuellt,
+        // wenn jemand window.flugMessung anlegt.
+        if (window.flugMessung) window.flugMessung.push(
+          { km, boden:bodenJetzt, glatt:boden, vorn, flugNN, ueberGrund, zoom:zoomAkt, pitch:pitchAkt });
       }
 
       if (jetzt - letzterStrich > 45){
@@ -521,9 +581,20 @@
     $('anzeige').classList.remove('an');
     $('start').textContent = 'Flug starten';
     $('start').disabled = false;
-    // Danach wieder alles zeigen
+    // Danach wieder alles zeigen, genordet und von oben wie am Anfang
+    verdeckt = false;
     strichSetzen(1);
     if (karte.getLayer('halte')) karte.setFilter('halte', null);
+    $('zeigen').textContent = 'Strecke ausblenden';
+    if (karte && pfad.length > 1){
+      let w = Infinity, o = -Infinity, s_ = Infinity, n = -Infinity;
+      for (const p of pfad){ if (p.lon < w) w = p.lon; if (p.lon > o) o = p.lon;
+                             if (p.lat < s_) s_ = p.lat; if (p.lat > n) n = p.lat; }
+      karte.easeTo({ pitch:0, bearing:0, duration:1400,
+                     center:[(w+o)/2, (s_+n)/2] });
+      karte.once('moveend', () => karte.fitBounds([[w,s_],[o,n]],
+                     { padding:60, pitch:0, bearing:0, duration:900 }));
+    }
   }
 
   function flugStopp(){
@@ -553,6 +624,11 @@
       gelaendeDaGlobal = gelaendeDa;
       await initKarte(gelaendeDa);
       halteEinmessen();
+      // Beim Laden nichts verraten: die Linie bleibt verdeckt, bis der Flug
+      // sie freigibt oder jemand sie ueber den Knopf einblendet.
+      verdeckt = true;
+      strichSetzen(0);
+      if (karte.getLayer('halte')) karte.setFilter('halte', ['<=', ['get','km'], -1]);
       $('lade').style.display = 'none';
       if (!gelaendeDa) $('fehlt').hidden = false;
     } catch(e){
@@ -562,6 +638,13 @@
 
     $('start').onclick = flugStart;
     $('stopp').onclick = () => flugStopp();
+    $('zeigen').onclick = () => {
+      verdeckt = !verdeckt;
+      strichSetzen(verdeckt ? 0 : 1);
+      if (karte.getLayer('halte'))
+        karte.setFilter('halte', verdeckt ? ['<=', ['get','km'], -1] : null);
+      $('zeigen').textContent = verdeckt ? 'Strecke einblenden' : 'Strecke ausblenden';
+    };
     $('dauer').oninput = () => {
       const d = DAUERN[+$('dauer').value - 1];
       $('dauerwert').textContent = DAUERTEXT(d);
