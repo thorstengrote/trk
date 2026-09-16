@@ -19,6 +19,7 @@
  */
 
 const Analyse = (() => {
+  const zaehler = { valhalla: 0, osrm: 0, speicher: 0 };
   const VALHALLA = 'https://valhalla1.openstreetmap.de/route';
   const OSRM = 'https://router.project-osrm.org/route/v1/driving/';
 
@@ -193,13 +194,22 @@ const Analyse = (() => {
     const key = cacheKey(a, b);
     try {
       const hit = await localforage.getItem(key);
-      if (hit) return hit;
+      if (hit){ zaehler.speicher++; return hit; }
     } catch (e) { /* Zwischenspeicher nicht verfuegbar, dann eben ohne */ }
 
+    /* Valhalla ist ein Gemeinschaftsserver und bremst oder blockt zeitweise.
+       Ein Fehlschlag wirft dann (CORS), statt einen Fehlercode zu liefern,
+       und der Rueckfall auf OSRM kostet die Faehren. Deshalb mehrere
+       Versuche mit wachsender Pause, bevor umgeschaltet wird. */
     let res = null;
-    for (const versuch of [valhalla, osrm]) {
-      try { res = await versuch(a, b); } catch (e) { res = null; }
-      if (res) break;
+    for (let n = 0; n < 3 && !res; n++) {
+      if (n) await new Promise(f => setTimeout(f, 900 * n));
+      try { res = await valhalla(a, b); } catch (e) { res = null; }
+    }
+    if (res) zaehler.valhalla++;
+    else {
+      try { res = await osrm(a, b); } catch (e) { res = null; }
+      if (res) zaehler.osrm++;
     }
     if (!res) return null;
     try { await localforage.setItem(key, res); } catch (e) { /* egal */ }
@@ -241,6 +251,7 @@ const Analyse = (() => {
   async function abschnitte(punkte, fortschritt) {
     const segs = new Array(Math.max(punkte.length - 1, 0));
     let naechster = 0, fertig = 0;
+    zaehler.valhalla = zaehler.osrm = zaehler.speicher = 0;
     const gesamt = segs.length;
 
     async function arbeiter() {
@@ -394,7 +405,8 @@ const Analyse = (() => {
         faehre: segs.filter(s => s.art === 'faehre').length,
         faehreKm: segs.reduce((n, x) => n + (x.faehreMeter || 0), 0) / 1000,
         ueberfahrt: segs.filter(s => s.art === 'ueberfahrt').length,
-        unklar: segs.filter(s => s.art === 'unklar').length
+        unklar: segs.filter(s => s.art === 'unklar').length,
+        router: { ...zaehler }
       }
     };
   }

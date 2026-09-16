@@ -1,3 +1,7 @@
+> **Hinweis:** Dieses Dokument beschreibt den alten Stand mit Leaflet. Seit September 2026
+> ist die Flugansicht die Hauptseite, siehe [FLUG.md](FLUG.md). Die flache Karte ist
+> entfallen.
+
 # Die Web-App
 
 Statische Seiten ohne Build, ohne Abhaengigkeitsverwaltung, ausgeliefert ueber GitHub Pages.
@@ -57,7 +61,8 @@ gehoert nicht zu dieser App.
 | PapaParse | CSV lesen |
 | localforage | lokaler Zwischenspeicher |
 | Font Awesome | Symbole |
-| OpenRouteService, GraphHopper, OSRM | Strassenrouting zwischen Punkten |
+| Valhalla (valhalla1.openstreetmap.de) | Strassenrouting mit Faehren, siehe FLUG.md |
+| OSRM | Rueckfall, wenn Valhalla nicht antwortet |
 | corsproxy.io, allorigins.win | Umweg bei CORS-Sperren |
 
 Alles ohne Schluessel im Quelltext. Die Routing-Dienste laufen ueber ihre freien Kontingente

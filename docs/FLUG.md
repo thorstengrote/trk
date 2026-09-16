@@ -1,5 +1,18 @@
 # Flug über die Strecke
 
+Seit September 2026 ist das die **Hauptseite** (`index.html`). Die frühere flache Karte auf
+Leaflet ist entfallen: eine Draufsicht auf dieselbe Karte leistet dasselbe, und zwei Seiten
+mit zwei Kartenbibliotheken für dieselben Daten waren doppelte Arbeit. `flug.html` bleibt als
+Weiterleitung, damit alte Verweise samt Zeitraum weiter funktionieren.
+
+Mitgenommen wurden: Zeitraumwahl, Link kopieren, das Passwort-Tor, die Zahlenleiste und die
+Liste der Aufenthalte. Dazu neu die **Draufsicht** (genordet, flach, ganze Reise im Bild) und
+**Ländergrenzen** zur Orientierung.
+
+Die Grenzen liegen als eigene Vektorquelle über allen drei Belägen (`boundary` aus den
+OpenFreeMap-Planet-Kacheln, `admin_level = 2`, ohne Seegrenzen). Satellit und Topografisch
+sind reine Rasterkarten und bringen selbst keine mit.
+
 `flug.html`: die gefahrene Strecke aus der Drohnenperspektive über echtem Gelände, mit
 topografischer Karte darüber. Ohne API-Schlüssel, ohne Vorbereitung, für jeden Zeitraum.
 
@@ -335,7 +348,11 @@ höchstens um zweieinhalb Stufen.
 
 ## Bedienung
 
-Zeitraum über `?start=` und `?end=` wie bei der Karte, Belag über `?belag=satellit|topo|outdoor`.
+Zeitraum über die beiden Datumsfelder oder über `?start=` und `?end=`, Belag über
+`?belag=satellit|topo|outdoor`, Grenzen über `?grenzen=aus`. Ein Wechsel des Zeitraums lädt
+die Seite neu: Strecke, Geländeprofil und Höhenplan hängen alle daran.
+
+Ein Klick auf einen Eintrag in der Liste der Aufenthalte springt genordet dorthin.
 
 Vor dem Flug liegt die Karte genordet und flach da, wie eine gewöhnliche Karte. Erst beim
 Start kippt sie in die Fluglage und dreht auf den ersten Kurs. Nach dem Flug geht sie wieder
