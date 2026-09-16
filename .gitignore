@@ -2,3 +2,4 @@
 secrets.env
 *.json.key
 google-sa.json
+dem/

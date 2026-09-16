@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Van-Spur, Flug</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css">
+<style>
+  html,body{margin:0;height:100%;background:#12141a;
+            font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#e9e9e4}
+  #map{position:absolute;inset:0}
+  .karte{position:absolute;z-index:10;background:rgba(24,26,32,.92);border:1px solid #333842;
+         border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);backdrop-filter:blur(6px)}
+  #steuer{top:14px;left:14px;padding:12px 14px;width:250px}
+  #steuer h1{font-size:14px;margin:0 0 10px;font-weight:600}
+  label{display:block;font-size:12px;color:#9b9b93;margin:10px 0 4px}
+  input[type=range]{width:100%;accent-color:#4d9463}
+  button{font:inherit;font-weight:500;padding:9px 12px;border:1px solid transparent;border-radius:9px;
+         background:#3d7a4e;color:#fff;cursor:pointer;width:100%}
+  button:hover{background:#4d9463}
+  button.still{background:#24262c;border-color:#333842;color:#e9e9e4}
+  button+button{margin-top:7px}
+  .wert{color:#fff;font-weight:600;font-variant-numeric:tabular-nums}
+  #anzeige{bottom:14px;left:50%;transform:translateX(-50%);padding:10px 18px;display:none;
+           gap:22px;align-items:center;font-variant-numeric:tabular-nums}
+  #anzeige.an{display:flex}
+  #anzeige .gross{font-size:16px;font-weight:600}
+  #anzeige .klein{font-size:11px;color:#9b9b93;text-transform:uppercase;letter-spacing:.04em}
+  #lade{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+        flex-direction:column;gap:12px;background:#12141a}
+  .balken{width:240px;height:4px;background:#333842;border-radius:3px;overflow:hidden}
+  .balken i{display:block;height:100%;width:0;background:#4d9463;transition:width .25s}
+  .hinw{font-size:12px;color:#9b9b93;max-width:420px;text-align:center;padding:0 20px}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="steuer" class="karte">
+  <h1>Flug über die Strecke</h1>
+  <label>Dauer <span class="wert" id="dauerwert">40 s</span></label>
+  <input type="range" id="dauer" min="1" max="6" value="3">
+  <label>Kamerawinkel <span class="wert" id="winkelwert">70°</span></label>
+  <input type="range" id="winkel" min="0" max="80" value="70">
+  <label>Höhenüberhöhung <span class="wert" id="hoehewert">1,6×</span></label>
+  <input type="range" id="hoehe" min="10" max="30" value="16">
+  <div style="margin-top:12px">
+    <button id="start">Flug starten</button>
+    <button class="still" id="stopp">Stopp</button>
+  </div>
+</div>
+
+<div id="anzeige" class="karte">
+  <div><div class="klein">Zeit</div><div class="gross" id="aZeit">–</div></div>
+  <div><div class="klein">Strecke</div><div class="gross" id="aKm">–</div></div>
+  <div><div class="klein">Höhe</div><div class="gross" id="aHoehe">–</div></div>
+</div>
+
+<div id="fehlt" class="karte" hidden style="top:14px;left:280px;right:14px;padding:10px 14px;font-size:13px;color:#e0b070">
+  Für diesen Abschnitt liegen keine Höhendaten neben der Seite, die Karte bleibt flach.
+  Nachladen mit <code>werkzeug/hoehenkorridor.py</code>.
+</div>
+
+<div id="lade">
+  <div id="ladetext">Gelände wird geladen</div>
+  <div class="balken"><i id="ladebalken"></i></div>
+  <div class="hinw" id="ladehinweis"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+<script src="analyse.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  const SHEET = 'https://docs.google.com/spreadsheets/d/' +
+    '13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv';
+
+  // Hoehenkacheln liegen neben der Seite. Die freien Kacheln von AWS schicken
+  // keinen CORS-Header und sind fuer WebGL damit unbrauchbar; ueber GitHub
+  // Pages ausgeliefert haben sie ihn. Siehe werkzeug/hoehenkorridor.py
+  // Nicht ueber new URL() bauen: das kodiert die Platzhalter zu %7Bz%7D und
+  // MapLibre fragt dann buchstaeblich diese Adresse ab.
+  const DEM = location.href.replace(/[^/]*$/, '') + 'dem/{z}/{x}/{y}.png';
+  const DEM_MAXZOOM = 11;
+
+  const DAUERN = [15, 25, 40, 60, 90, 150];
+  const $ = id => document.getElementById(id);
+  const P = new URLSearchParams(location.search);
+
+  let karte, pfad = [], stops = [], raf = null, laeuft = false;
+
+  const fmtUhr = d => d.toLocaleString('de-DE',
+    {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const tausend = n => Math.round(n).toLocaleString('de-DE');
+
+  /* ---------- Daten ---------- */
+  async function daten(){
+    const von = P.get('start') ? new Date(P.get('start')+'T00:00:00Z') : null;
+    const bis = P.get('end')   ? new Date(P.get('end')+'T23:59:59Z')   : null;
+    $('ladetext').textContent = 'Strecke wird berechnet';
+    const csv = await (await fetch(SHEET)).text();
+    const erg = await Analyse.lauf(csv, von, bis, (i,n) => {
+      $('ladebalken').style.width = (i/n*100)+'%';
+      $('ladetext').textContent = `Strecke wird berechnet (${i} von ${n})`;
+    });
+
+    let km = 0;
+    for (const s of erg.segs){
+      if (!s || s.art === 'steht') continue;
+      const geo = s.geo?.length ? s.geo : [[s.a.lat,s.a.lon],[s.b.lat,s.b.lon]];
+      const spanne = s.b.time - s.a.bis;
+      for (let i = 0; i < geo.length; i++){
+        if (i > 0) km += Analyse.meter({lat:geo[i-1][0],lon:geo[i-1][1]},
+                                       {lat:geo[i][0],lon:geo[i][1]}) / 1000;
+        pfad.push({ lat:geo[i][0], lon:geo[i][1], km,
+                    zeit:new Date(+s.a.bis + spanne*i/(geo.length-1||1)) });
+      }
+    }
+    stops = erg.stops;
+    return erg;
+  }
+
+  /* ---------- Karte ---------- */
+  const kachelX = (lon, z) => Math.floor((lon + 180) / 360 * 2**z);
+  const kachelY = (lat, z) => {
+    const r = lat * Math.PI / 180;
+    return Math.floor((1 - Math.log(Math.tan(r) + 1/Math.cos(r)) / Math.PI) / 2 * 2**z);
+  };
+
+  function initKarte(gelaendeDa){
+    karte = new maplibregl.Map({
+      container: 'map',
+      style: {
+        version: 8,
+        sources: {
+          topo: { type:'raster', tileSize:256, maxzoom:16,
+                  tiles:['https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
+                         'https://b.tile.opentopomap.org/{z}/{x}/{y}.png',
+                         'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'],
+                  attribution:'&copy; OpenStreetMap, SRTM | Kartendarstellung &copy; OpenTopoMap (CC-BY-SA)' },
+          gelaende: { type:'raster-dem', tileSize:256, maxzoom:DEM_MAXZOOM,
+                      encoding:'terrarium', tiles:[DEM],
+                      attribution:'Höhendaten: Terrain Tiles (AWS Open Data)' }
+        },
+        layers: [{ id:'topo', type:'raster', source:'topo' }]
+      },
+      center: [pfad[0].lon, pfad[0].lat],
+      zoom: 12, pitch: +$('winkel').value, bearing: 0,
+      maxPitch: 85, attributionControl: { compact:true }
+    });
+
+    return new Promise(fertig => {
+      karte.on('load', () => {
+        if (gelaendeDa) karte.setTerrain({ source:'gelaende', exaggeration: +$('hoehe').value/10 });
+        karte.setSky({ 'sky-color':'#7fb3e0', 'horizon-color':'#cfe3f2',
+                       'fog-color':'#dfeaf3', 'sky-horizon-blend':0.6,
+                       'horizon-fog-blend':0.7, 'fog-ground-blend':0.2 });
+
+        karte.addSource('strecke', { type:'geojson', data:{
+          type:'Feature', geometry:{ type:'LineString',
+            coordinates: pfad.map(p => [p.lon, p.lat]) } } });
+        karte.addLayer({ id:'strecke-schatten', type:'line', source:'strecke',
+          paint:{ 'line-color':'#0b1c2c', 'line-width':9, 'line-opacity':.35, 'line-blur':3 } });
+        karte.addLayer({ id:'strecke', type:'line', source:'strecke',
+          layout:{ 'line-cap':'round', 'line-join':'round' },
+          paint:{ 'line-color':'#3aa0ff', 'line-width':4.5 } });
+
+        karte.addSource('halte', { type:'geojson', data:{ type:'FeatureCollection',
+          features: stops.map(h => ({ type:'Feature',
+            properties:{ art:h.art }, geometry:{ type:'Point', coordinates:[h.lon,h.lat] } })) } });
+        karte.addLayer({ id:'halte', type:'circle', source:'halte',
+          paint:{ 'circle-radius':7, 'circle-stroke-width':2, 'circle-stroke-color':'#fff',
+            'circle-color':['match',['get','art'],
+              'pause','#d4941f','halt','#cc6a2c','langer-halt','#cc6a2c',
+              'uebernachtung','#6b52b5','standtage','#a33b3b','#888'] } });
+
+        fertig();
+      });
+    });
+  }
+
+  /* ---------- Flug ---------- */
+  function peilung(a, b){
+    const y = Math.sin((b.lon-a.lon)*Math.PI/180) * Math.cos(b.lat*Math.PI/180);
+    const x = Math.cos(a.lat*Math.PI/180)*Math.sin(b.lat*Math.PI/180) -
+              Math.sin(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.cos((b.lon-a.lon)*Math.PI/180);
+    return (Math.atan2(y,x)*180/Math.PI + 360) % 360;
+  }
+  const kurz = w => ((w + 540) % 360) - 180;   // kuerzester Winkelweg
+
+  function flugStart(){
+    flugStopp();
+    if (pfad.length < 2) return;
+    laeuft = true;
+    $('anzeige').classList.add('an');
+    $('start').textContent = 'Fliegt …';
+    $('start').disabled = true;
+
+    const gesamtKm = pfad[pfad.length-1].km || 1;
+    const dauerMs = DAUERN[+$('dauer').value - 1] * 1000;
+    let t0 = 0, richtung = peilung(pfad[0], pfad[Math.min(8, pfad.length-1)]);
+    karte.jumpTo({ center:[pfad[0].lon, pfad[0].lat], zoom:12.5,
+                   pitch:+$('winkel').value, bearing:richtung });
+
+    const schritt = (jetzt) => {
+      if (!laeuft) return;
+      if (!t0) t0 = jetzt;
+      const anteil = Math.min((jetzt - t0) / dauerMs, 1);
+      const ziel = anteil * gesamtKm;
+
+      let i = 0;
+      while (i < pfad.length - 2 && pfad[i+1].km <= ziel) i++;
+      const a = pfad[i], b = pfad[Math.min(i+1, pfad.length-1)];
+      const f = Math.max(0, Math.min(((ziel - a.km) / ((b.km - a.km) || 1)), 1));
+      const lat = a.lat + (b.lat-a.lat)*f, lon = a.lon + (b.lon-a.lon)*f;
+
+      // Blick in Fahrtrichtung, weich nachgefuehrt
+      const voraus = pfad[Math.min(i + 12, pfad.length-1)];
+      richtung += kurz(peilung({lat,lon}, voraus) - richtung) * 0.06;
+
+      karte.jumpTo({ center:[lon,lat], zoom:12.5,
+                     pitch:+$('winkel').value, bearing:richtung });
+
+      $('aZeit').textContent = fmtUhr(a.zeit);
+      $('aKm').textContent = tausend(ziel) + ' km';
+      const h = karte.queryTerrainElevation({lng:lon, lat});
+      $('aHoehe').textContent = h != null ? Math.round(h) + ' m' : '–';
+
+      if (anteil >= 1){ flugStopp(); return; }
+      raf = requestAnimationFrame(schritt);
+    };
+    raf = requestAnimationFrame(schritt);
+  }
+
+  function flugStopp(){
+    laeuft = false;
+    if (raf){ cancelAnimationFrame(raf); raf = null; }
+    $('anzeige').classList.remove('an');
+    $('start').textContent = 'Flug starten';
+    $('start').disabled = false;
+  }
+
+  /* ---------- Start ---------- */
+  (async () => {
+    try {
+      await daten();
+      if (!pfad.length) throw new Error('keine Strecke im Zeitraum');
+      $('ladetext').textContent = 'Gelände wird geladen';
+
+      // Liegen ueberhaupt Hoehendaten neben der Seite? Ohne sie waere die
+      // Karte flach, ohne dass man erfuehre warum.
+      const probe = DEM.replace('{z}','8')
+        .replace('{x}', String(kachelX(pfad[0].lon, 8)))
+        .replace('{y}', String(kachelY(pfad[0].lat, 8)));
+      let gelaendeDa = false;
+      try { gelaendeDa = (await fetch(probe, {method:'HEAD'})).ok; } catch(e){}
+
+      await initKarte(gelaendeDa);
+      $('lade').style.display = 'none';
+      if (!gelaendeDa) $('fehlt').hidden = false;
+    } catch(e){
+      $('ladetext').textContent = 'Fehlgeschlagen: ' + e.message;
+      return;
+    }
+
+    $('start').onclick = flugStart;
+    $('stopp').onclick = () => flugStopp();
+    $('dauer').oninput = () => $('dauerwert').textContent = DAUERN[+$('dauer').value-1] + ' s';
+    $('winkel').oninput = () => {
+      $('winkelwert').textContent = $('winkel').value + '°';
+      karte.setPitch(+$('winkel').value);
+    };
+    $('hoehe').oninput = () => {
+      $('hoehewert').textContent = (+$('hoehe').value/10).toFixed(1).replace('.',',') + '×';
+      if (karte.getTerrain()) karte.setTerrain({ source:'gelaende', exaggeration:+$('hoehe').value/10 });
+    };
+    window.flug = { karte, pfad, stops };
+  })();
+})();
+</script>
+</body>
+</html>
