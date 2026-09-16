@@ -1,82 +1,80 @@
 # Flug über die Strecke
 
-`flug.html`, ein Prototyp: die gefahrene Strecke aus der Drohnenperspektive über echtem
-Gelände, mit topografischer Karte darüber.
+`flug.html`: die gefahrene Strecke aus der Drohnenperspektive über echtem Gelände, mit
+topografischer Karte darüber. Ohne API-Schlüssel, ohne Vorbereitung, für jeden Zeitraum.
 
-## Warum das lange nicht ging
+## Wie es zusammengesetzt ist
 
-Drei Dinge mussten zusammenkommen, und eines davon war der Stolperstein.
+| Baustein | Quelle |
+|---|---|
+| 3D-Gelände | MapLibre GL `setTerrain` |
+| Höhendaten | Terrain Tiles auf AWS Open Data, Terrarium-Format, frei und ohne Schlüssel |
+| Karte | OpenTopoMap, Höhenlinien und Schummerung |
+| Strecke | dieselbe Auswertung wie `index.html`, siehe `analyse.js` |
 
-**Gelände im Browser** kann MapLibre GL seit Version 2 (`setTerrain`). Das ist der offene
-Nachfolger von Mapbox GL und braucht keinen Schluessel.
-
-**Topografische Karte** liefert OpenTopoMap als Rasterkacheln, mit Hoehenlinien und
-Schummerung, frei und ohne Schluessel.
-
-**Hoehendaten** sind der Haken. Die freie Quelle sind die Terrain Tiles auf AWS Open Data im
-Terrarium-Format. Sie liefern die ganze Welt, aber **ohne CORS-Header**. WebGL muss die
-Pixelwerte auslesen, und das verbietet der Browser ohne CORS. Gemessen am 16.09.2026:
-
-```
-s3.amazonaws.com/elevation-tiles-prod/...            HTTP 200  ACAO: FEHLT
-elevation-tiles-prod.s3.amazonaws.com/...            HTTP 200  ACAO: FEHLT
-elevation-tiles-prod.s3.dualstack.us-east-1.../...   HTTP 200  ACAO: FEHLT
+```js
+tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+encoding: 'terrarium', tileSize: 256, maxzoom: 15
 ```
 
-MapLibres eigener Demo-Dienst hat CORS, deckt aber nur eine einzige Gradzelle in Tirol ab
-(`jaxa_terrainrgb_N047E011`). Alle anderen brauchbaren Quellen wollen einen API-Schluessel.
+Das ist alles. Die Kacheln kommen mit `Access-Control-Allow-Origin: *`, WebGL darf sie also
+auslesen.
 
-**Der Ausweg:** die Kacheln fuer den Streckenkorridor einmal herunterladen und neben die Seite
-legen. GitHub Pages liefert sie mit `access-control-allow-origin: *` aus. Kein Schluessel,
-keine fremde Abhaengigkeit, und fuer eine Reise sind es ueberschaubar viele.
+## Ein Irrweg, den man sich sparen kann
 
-## Höhendaten holen
+Beim Bauen hatte ich die Quelle zunächst als unbrauchbar verworfen, weil mein Prüfbefehl
+keinen CORS-Header fand, und daraufhin einen ganzen Apparat gebaut: die Kacheln für den
+Streckenkorridor vorab herunterladen und neben die Seite legen.
+
+Der Prüfbefehl war falsch. Er filterte mit `awk` und `IGNORECASE`, das kennt aber nur GNU-awk;
+auf macOS läuft BSD-awk und ignoriert die Einstellung stillschweigend. S3 antwortet über
+HTTP/1.1 mit **groß** geschriebenen Headernamen, das Muster `^access-control-allow-origin`
+traf deshalb nie. Über HTTP/2 kommen Headernamen klein zurück, weshalb dieselbe Prüfung bei
+anderen Anbietern scheinbar funktionierte.
+
+Richtig geprüft:
+
+```
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET
+```
+
+Merke: CORS-Header nie mit `awk`+`IGNORECASE` suchen, sondern mit `grep -i`. Und im Zweifel
+im Browser prüfen statt mit curl.
+
+## Vorladen, falls doch einmal gewünscht
+
+`werkzeug/hoehenkorridor.py` lädt den Korridor einer Strecke herunter. Gebraucht wird das nur
+noch, wenn die Reise **ohne Netz** anschaubar sein soll, etwa im Van selbst. Dann
+`flug.html?dem=lokal` aufrufen.
 
 ```
 werkzeug/hoehenkorridor.py route.json --zoom 11 --rand 3 --ziel dem
 ```
 
-`route.json` ist eine Liste von `[lat, lon]`. Die bekommt man aus der laufenden Karte:
+Umfang für die Balkanreise: 77 MB bis Zoom 10, 207 MB mit Zoom 11. Für den Normalfall ist das
+überflüssig, die Kacheln kommen direkt aus dem Netz.
 
-```js
-// in der Browserkonsole auf index.html
-JSON.stringify(vanspur.erg.segs.filter(s=>s?.geo).flatMap(s=>s.geo))
-```
+## Bedienung
 
-Das Werkzeug fuellt zwischen weit auseinanderliegenden Punkten auf, sonst entstehen Loecher.
-
-**Groesse fuer die Balkanreise 2026**, 1343 Stuetzpunkte ueber 3434 km:
-
-| Zoom | Kachelbreite | Rand | Kacheln | Umfang |
-|---:|---:|---:|---:|---:|
-| 6 | 626 km | 1 | 20 | 2 MB |
-| 7 | 313 km | 1 | 32 | 3 MB |
-| 8 | 157 km | 1 | 69 | 6 MB |
-| 9 | 78 km | 2 | 227 | 21 MB |
-| 10 | 39 km | 2 | 490 | 45 MB |
-| 11 | 20 km | 3 | 1398 | 130 MB |
-
-Bis Zoom 10 sind es 77 MB bei rund 150 m Aufloesung, mit Zoom 11 sind es 207 MB bei 76 m.
-Fuer einen Blick aus der Drohne reicht Zoom 10 gut aus.
-
-Fehlen die Daten, bleibt die Karte flach und sagt es in einer Hinweiszeile.
+Zeitraum über `?start=` und `?end=` wie bei der Karte. Regler für Spieldauer, Kamerawinkel und
+Höhenüberhöhung. Die Kamera fährt die Strecke in Fahrtrichtung ab, die Höhe unter dem
+Fahrzeug läuft mit.
 
 ## Geprüft
 
-Die Dekodierung stimmt. Unabhaengig von der Karte aus den Kacheln gelesen:
+Die Dekodierung stimmt, unabhängig aus den Kacheln gelesen:
 
 ```
-Sibiu, Rumaenien    413,7 m   (real ~415 m)
-Fagaras-Gebirge    2179,9 m   (Hochgebirge, plausibel)
+Sibiu, Rumänien     413,7 m   (real ~415 m)
+Fagaras-Gebirge    2179,9 m
 ```
 
-Das Gelaende rendert, die Strecke legt sich ins Tal, die Hoehenanzeige laeuft mit.
-
-**Offen:** Die Fluganimation liess sich nur im Software-Renderer testen, und der schafft das
-Nachladen der Kacheln nicht, wenn die Kamera 60 Mal je Sekunde springt. Auf einem Geraet mit
+**Offen:** Die Fluganimation ließ sich nur im Software-Renderer testen, und der schafft das
+Nachladen der Kacheln nicht, wenn die Kamera 60 Mal je Sekunde springt. Auf einem Gerät mit
 Grafikhardware sollte das anders aussehen, belegt ist es nicht.
 
 ## Quellen nennen
 
-Hoehendaten: Terrain Tiles auf AWS Open Data (unter anderem SRTM und ASTER).
+Höhendaten: Terrain Tiles auf AWS Open Data (unter anderem SRTM und ASTER).
 Karte: OpenTopoMap (CC-BY-SA), Daten von OpenStreetMap und SRTM.

@@ -78,13 +78,16 @@
   const SHEET = 'https://docs.google.com/spreadsheets/d/' +
     '13nN8lisfKRQHbD66J2pg1k5jN9lFz15ijwx0obu-03o/pub?gid=0&single=true&output=csv';
 
-  // Hoehenkacheln liegen neben der Seite. Die freien Kacheln von AWS schicken
-  // keinen CORS-Header und sind fuer WebGL damit unbrauchbar; ueber GitHub
-  // Pages ausgeliefert haben sie ihn. Siehe werkzeug/hoehenkorridor.py
-  // Nicht ueber new URL() bauen: das kodiert die Platzhalter zu %7Bz%7D und
-  // MapLibre fragt dann buchstaeblich diese Adresse ab.
-  const DEM = location.href.replace(/[^/]*$/, '') + 'dem/{z}/{x}/{y}.png';
-  const DEM_MAXZOOM = 11;
+  // Hoehendaten direkt von AWS Open Data. Sie schicken sehr wohl
+  // "Access-Control-Allow-Origin: *", man muss nur richtig hinsehen: ueber
+  // HTTP/1.1 kommt der Headername grossgeschrieben zurueck.
+  // Ein oertlicher Kachelordner laesst sich mit ?dem=lokal erzwingen, fuer
+  // den Fall, dass man die Reise ohne Netz anschauen will.
+  const P0 = new URLSearchParams(location.search);
+  const DEM = P0.get('dem') === 'lokal'
+    ? location.href.replace(/[^?#]*\//, m => m) .replace(/[^/]*$/, '') + 'dem/{z}/{x}/{y}.png'
+    : 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+  const DEM_MAXZOOM = P0.get('dem') === 'lokal' ? 11 : 15;
 
   const DAUERN = [15, 25, 40, 60, 90, 150];
   const $ = id => document.getElementById(id);
@@ -158,6 +161,12 @@
         karte.setSky({ 'sky-color':'#7fb3e0', 'horizon-color':'#cfe3f2',
                        'fog-color':'#dfeaf3', 'sky-horizon-blend':0.6,
                        'horizon-fog-blend':0.7, 'fog-ground-blend':0.2 });
+
+        // Schummerung ueber den Belag: das Relief bekommt dadurch Plastik,
+        // auch dort wo die Karte selbst flach wirkt.
+        karte.addLayer({ id:'schummer', type:'hillshade', source:'gelaende',
+          paint:{ 'hillshade-exaggeration':0.45, 'hillshade-shadow-color':'#473b24',
+                  'hillshade-illumination-anchor':'map' } });
 
         karte.addSource('strecke', { type:'geojson', data:{
           type:'Feature', geometry:{ type:'LineString',
@@ -250,13 +259,17 @@
       if (!pfad.length) throw new Error('keine Strecke im Zeitraum');
       $('ladetext').textContent = 'Gelände wird geladen';
 
-      // Liegen ueberhaupt Hoehendaten neben der Seite? Ohne sie waere die
-      // Karte flach, ohne dass man erfuehre warum.
-      const probe = DEM.replace('{z}','8')
-        .replace('{x}', String(kachelX(pfad[0].lon, 8)))
-        .replace('{y}', String(kachelY(pfad[0].lat, 8)));
-      let gelaendeDa = false;
-      try { gelaendeDa = (await fetch(probe, {method:'HEAD'})).ok; } catch(e){}
+      // Nur beim oertlichen Kachelordner pruefen, ob ueberhaupt etwas da liegt.
+      // Die Fernquelle ist immer da, und sie erlaubt per CORS ausschliesslich
+      // GET; ein HEAD scheitert dort und wuerde faelschlich "fehlt" melden.
+      let gelaendeDa = true;
+      if (P0.get('dem') === 'lokal'){
+        const probe = DEM.replace('{z}','8')
+          .replace('{x}', String(kachelX(pfad[0].lon, 8)))
+          .replace('{y}', String(kachelY(pfad[0].lat, 8)));
+        gelaendeDa = false;
+        try { gelaendeDa = (await fetch(probe)).ok; } catch(e){}
+      }
 
       await initKarte(gelaendeDa);
       $('lade').style.display = 'none';
