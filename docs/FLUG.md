@@ -74,32 +74,36 @@ Umfang für die Balkanreise: 77 MB bis Zoom 10, 207 MB mit Zoom 11. Für den Nor
 
 ## Kameraführung
 
-Eine echte Drohne folgt nicht jeder Kurve der Straße. Die Kamera bekommt deshalb eine eigene,
-geglättete Bahn: gleitender Mittelwert über ein Streckenfenster von 1,2 km. Die gezeichnete
-Strecke bleibt davon unberührt und liegt weiter exakt auf der Straße.
+Die Drohne folgt der Straße **nicht**. Sie hat eine eigene Bahn: die Strecke wird weit
+abgetastet, ein Stützpunkt etwa alle zwei Prozent der Gesamtlänge, mindestens alle 6 km.
+Dazwischen zieht eine Catmull-Rom-Kurve durch. Aus zehntausenden Straßenpunkten werden so
+einige Dutzend Wegpunkte, und Serpentinen verschwinden vollständig. Die gezeichnete Strecke
+bleibt davon unberührt und liegt weiter exakt auf der Straße.
 
-Dazu hängt die Kamera 900 m zurück und blickt 3,5 km voraus, und der Kurs wird gedämpft
-nachgeführt. Gemessen über einen Flug: Kursänderung je Bild im Mittel 1,4 Grad, im
-95-Prozent-Fall 4,0 Grad.
+Der Blick geht nach vorn, auf einen Punkt in einiger Entfernung auf derselben Bahn, und der
+Kurs wird gedämpft nachgeführt.
 
-Gesetzt wird die Kamera höchstens 33 Mal je Sekunde. Bei 60 kommt MapLibre mit dem Nachladen
-der Kacheln nicht hinterher, und auf schwächeren Geräten bleibt das Bild leer.
+Gemessen über einen Flug, Kursänderung je Bild:
 
-## Flughöhe aus der Geschwindigkeit
+| | vorher | jetzt |
+|---|---:|---:|
+| Mittelwert | 1,41° | **0,84°** |
+| 95-Prozent-Fall | 3,95° | **2,58°** |
+| größter | 5,23° | **2,84°** |
 
-Der eigentliche Grund für ein zuckendes Bild war nicht die Kameraführung, sondern das Tempo.
-736 km in 40 Sekunden sind 18 Kilometer je Sekunde. Auf einer festen Zoomstufe von 12,5 rauscht
-damit ein Vielfaches der Bildbreite je Sekunde durch, und jede Kursänderung wirkt wie ein Sprung.
+## Nicht durch Berge fliegen
 
-Die Zoomstufe ergibt sich deshalb aus der Bodengeschwindigkeit: die Landschaft soll immer mit
-rund 320 Pixeln je Sekunde vorbeiziehen. Schnell fliegen heißt damit hoch fliegen, langsam
-heißt tief. Gemessen über drei Einstellungen:
+Die Kamera saß auf einer Zoomstufe, nicht auf einer Höhe. MapLibre leitet daraus zwar eine
+Höhe ab, die weiß aber nichts vom Gelände, und bei 1,8-facher Überhöhung ragen Gipfel dann
+durchs Bild.
 
-| Dauer | Tempo | Zoomstufe | Bildlauf |
-|---:|---:|---:|---:|
-| 15 s | sehr schnell | 9,6 | 327 px/s |
-| 40 s | mittel | 11,0 | 326 px/s |
-| 150 s | langsam | 12,9 | 326 px/s |
+Jetzt wird das Gelände zwischen Kamera und Blickziel an vier Stellen abgetastet. Steigt es an,
+geht die Kamera höher (bis zu 1,5 Zoomstufen) und richtet sich flacher aus (bis zu 22 Grad
+weniger Neigung), beides gedämpft nachgeführt.
+
+Sauberer wäre eine freie Kamera mit echter Höhenangabe, wie Mapbox sie hat. MapLibre hat sie
+nicht, geprüft in 4.7.1, 5.0.0 und 5.6.1. Das Abtasten ist deshalb eine Minderung, keine
+Garantie.
 
 ## Die Straße kurvt wirklich
 

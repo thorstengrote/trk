@@ -61,7 +61,7 @@
 <div id="anzeige" class="karte">
   <div><div class="klein">Zeit</div><div class="gross" id="aZeit">–</div></div>
   <div><div class="klein">Strecke</div><div class="gross" id="aKm">–</div></div>
-  <div><div class="klein">Höhe</div><div class="gross" id="aHoehe">–</div></div>
+  <div><div class="klein">Gelände</div><div class="gross" id="aHoehe">–</div></div>
   <div><div class="klein">Zuletzt</div><div class="gross" id="aNext">–</div></div>
 </div>
 
@@ -316,16 +316,62 @@
   }
   const kurz = w => ((w + 540) % 360) - 180;   // kuerzester Winkelweg
 
-  /* Flughoehe aus der Geschwindigkeit.
-     Der eigentliche Grund fuer das Zucken war nicht die Kamerafuehrung, sondern
-     das Tempo: 736 km in 40 s sind 18 km je Sekunde. Auf Zoom 12,5 rauscht da
-     ein Vielfaches der Bildbreite je Sekunde durch, und jede Kursaenderung wirkt
-     wie ein Sprung.
+  /* Kameraführung.
 
-     Deshalb ergibt sich die Zoomstufe jetzt aus der Bodengeschwindigkeit: die
-     Landschaft soll immer mit rund derselben Pixelzahl je Sekunde vorbeiziehen.
-     Schnell fliegen heisst damit hoch fliegen, langsam heisst tief. */
-  const ZIEL_PX_PRO_S = 320;
+     Zwei Fehler der Vorfassung:
+
+     1. Die Kamera sass auf einer Zoomstufe, nicht auf einer Hoehe. MapLibre
+        leitet daraus zwar eine Hoehe ab, die weiss aber nichts vom Gelaende.
+        Bei 1,8-facher Ueberhoehung ragen Gipfel dann durchs Bild.
+
+     2. Sie folgte der geglaetteten Strassengeometrie. Eine Drohne fliegt keine
+        Serpentinen, sie fliegt die grobe Linie und laesst die Strasse unter
+        sich maeandern.
+
+     Jetzt: eine eigene Bahn aus weit gesetzten Stuetzpunkten, dazwischen
+     Catmull-Rom. Gegen das Durchfliegen der Berge wird das Gelaende voraus
+     abgetastet; steigt es an, geht die Kamera hoeher und richtet sich flacher
+     aus. Eine freie Kamera mit echter Hoehenangabe waere sauberer, die gibt es
+     in MapLibre aber nicht, auch nicht in Fassung 5 oder 6. */
+
+  // Catmull-Rom zwischen vier Stuetzpunkten
+  function crom(p0, p1, p2, p3, t){
+    const t2 = t*t, t3 = t2*t;
+    const f = (a,b,c,d) => 0.5 * ((2*b) + (-a+c)*t + (2*a-5*b+4*c-d)*t2 + (-a+3*b-3*c+d)*t3);
+    return { lat: f(p0.lat,p1.lat,p2.lat,p3.lat), lon: f(p0.lon,p1.lon,p2.lon,p3.lon) };
+  }
+
+  /* Die Drohnenbahn: die Strecke weit abtasten, dann weich durchziehen. Aus
+     zehntausenden Strassenpunkten werden so einige Dutzend Wegpunkte. */
+  function drohnenbahn(punkte, abstandKm){
+    const stuetz = [punkte[0]];
+    let naechst = abstandKm;
+    for (const p of punkte){
+      if (p.km >= naechst){ stuetz.push(p); naechst = p.km + abstandKm; }
+    }
+    if (stuetz[stuetz.length-1] !== punkte[punkte.length-1]) stuetz.push(punkte[punkte.length-1]);
+    if (stuetz.length < 4) return punkte.map(p => ({lat:p.lat, lon:p.lon, km:p.km}));
+
+    const bahn = [];
+    const hol = i => stuetz[Math.max(0, Math.min(i, stuetz.length-1))];
+    for (let i = 0; i < stuetz.length - 1; i++){
+      const a = hol(i-1), b = hol(i), c = hol(i+1), d = hol(i+2);
+      const schritte = 24;
+      for (let k = 0; k < schritte; k++){
+        const t = k / schritte;
+        const q = crom(a, b, c, d, t);
+        bahn.push({ lat:q.lat, lon:q.lon, km: b.km + (c.km - b.km) * t });
+      }
+    }
+    bahn.push({ lat:stuetz[stuetz.length-1].lat, lon:stuetz[stuetz.length-1].lon,
+                km:stuetz[stuetz.length-1].km });
+    return bahn;
+  }
+
+  /* Die Zoomstufe ergibt sich aus der Bodengeschwindigkeit: die Landschaft
+     soll immer mit rund derselben Pixelzahl je Sekunde vorbeiziehen. Schnell
+     fliegen heisst damit hoch fliegen, langsam heisst tief. */
+  const ZIEL_PX_PRO_S = 230;
 
   function flughoehe(mProSek, lat){
     const mProPixel = mProSek / ZIEL_PX_PRO_S;
@@ -343,17 +389,28 @@
 
     const gesamtKm = pfad[pfad.length-1].km || 1;
     const dauerMs = DAUERN[+$('dauer').value - 1] * 1000;
-    const kamBahn = glaetten(pfad, 1.2);
-    const VORLAUF = 3.5, ABSTAND = 0.9;
+    const tempo = gesamtKm * 1000 / (dauerMs / 1000);       // Meter je Sekunde
 
-    const tempo = gesamtKm * 1000 / (dauerMs / 1000);        // Meter je Sekunde
-    const zoom = flughoehe(tempo, pfad[0].lat);
+    // Grobe Bahn: ein Stuetzpunkt etwa alle 2 Prozent der Strecke, mindestens
+    // alle 6 km. Kurven der Strasse verschwinden damit vollstaendig.
+    const bahn = drohnenbahn(pfad, Math.max(gesamtKm / 50, 6));
 
-    // Nichts vorwegnehmen: die Linie wird ueber den Verlauf freigegeben.
+    // Grundhoehe der Kamera aus dem Tempo: die Landschaft soll immer mit
+    // rund derselben Pixelzahl je Sekunde vorbeiziehen.
+    const basisZoom  = flughoehe(tempo, pfad[0].lat);
+    const basisPitch = +$('winkel').value;
+    const VORLAUF = Math.max(gesamtKm / 40, 4);            // km, Blickpunkt voraus
+
+    let richtung = null, zoomAkt = basisZoom, pitchAkt = basisPitch;
+    let t0 = 0, letzteKamera = 0, letzterStrich = 0, erreicht = 0, grundAkt = null;
+
     strichSetzen(0);
     if (karte.getLayer('halte')) karte.setFilter('halte', ['<=', ['get','km'], 0]);
 
-    let richtung = null, t0 = 0, letzteKamera = 0, letzterStrich = 0, erreicht = 0;
+    const grund = (p) => {
+      const h = karte.queryTerrainElevation({ lng:p.lon, lat:p.lat });
+      return (h != null && h > -500 && h < 9000) ? h : null;
+    };
 
     const schritt = (jetzt) => {
       if (!laeuft) return;
@@ -362,19 +419,35 @@
       const km = anteil * gesamtKm;
 
       const fahrzeug = aufBahn(pfad, km);
-      const kam      = aufBahn(kamBahn, Math.max(km - ABSTAND, 0));
-      const blick    = aufBahn(kamBahn, Math.min(km + VORLAUF, gesamtKm));
-
-      const soll = peilung(kam, blick);
-      richtung = richtung === null ? soll : richtung + kurz(soll - richtung) * 0.045;
+      const kam   = aufBahn(bahn, km);
+      const blick = aufBahn(bahn, Math.min(km + VORLAUF, gesamtKm));
 
       if (jetzt - letzteKamera > 28){
         letzteKamera = jetzt;
-        karte.jumpTo({ center:[kam.lon, kam.lat], zoom,
-                       pitch:+$('winkel').value, bearing:richtung });
+
+        // Gelaende zwischen Kamera und Blickziel abtasten. Steigt es an, geht
+        // die Kamera hoeher und flacher, sonst faehrt sie durch den Berg.
+        const hier = grund(kam);
+        let vorn = 0;
+        for (const f of [.25, .5, .75, 1]){
+          const g = grund(aufBahn(bahn, Math.min(km + VORLAUF * f, gesamtKm)));
+          if (g != null && g > vorn) vorn = g;
+        }
+        if (hier != null) grundAkt = hier;
+        const relief = Math.max(0, vorn - (hier ?? 0)) * (+$('hoehe').value / 10);
+
+        const zielZoom  = basisZoom  - Math.min(relief / 750, 1.5);
+        const zielPitch = basisPitch - Math.min(relief / 45, 22);
+        zoomAkt  += (zielZoom  - zoomAkt)  * 0.05;
+        pitchAkt += (zielPitch - pitchAkt) * 0.05;
+
+        const soll = peilung(kam, blick);
+        richtung = richtung === null ? soll : richtung + kurz(soll - richtung) * 0.05;
+
+        karte.jumpTo({ center:[kam.lon, kam.lat], zoom:zoomAkt,
+                       pitch:pitchAkt, bearing:richtung });
       }
 
-      // Linie freigeben: nur eine Lackeigenschaft, kein Geometrieaufbau
       if (jetzt - letzterStrich > 45){
         letzterStrich = jetzt;
         strichSetzen(anteil);
@@ -388,8 +461,7 @@
 
       $('aZeit').textContent = fmtUhr(pfad[fahrzeug.i].zeit);
       $('aKm').textContent = tausend(km) + ' km';
-      const h = karte.queryTerrainElevation({lng:fahrzeug.lon, lat:fahrzeug.lat});
-      $('aHoehe').textContent = (h != null && h > -500) ? Math.round(h) + ' m' : '–';
+      $('aHoehe').textContent = grundAkt != null ? tausend(grundAkt) + ' m' : '–';
 
       if (anteil >= 1){ flugEnde(); return; }
       raf = requestAnimationFrame(schritt);
