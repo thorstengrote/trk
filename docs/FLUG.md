@@ -375,6 +375,20 @@ Millisekunden.
 Bei 8-facher Überhöhung über Albanien gemessen: Gelände bis 8.794 m, kleinster Abstand zur
 Kamera 7.975 m, kein einziges Bild unter null.
 
+### Ohne Zeitraum
+
+Die Seite rechnet dann **nichts**, sondern fragt nach einem Zeitraum und nennt, welche
+Aufzeichnungen vorliegen.
+
+Vorher wertete sie den kompletten Bestand aus. Gemessen: 406 Abschnitte, 189 Routenanfragen
+an den Gemeinschaftsserver, 196 Sekunden Wartezeit. Das Ergebnis war dazu falsch, weil Punkte
+quer über Monate hinweg zu Fahrten verbunden wurden: 15.580 km und 1.000 km Fähre für
+fünfzehn Monate, in denen der Van die meiste Zeit zu Hause stand.
+
+Beide Felder müssen gefüllt sein. Nur `?start=` oder nur `?end=` führt ebenfalls auf die
+Abfrage, mit dem vorhandenen Wert vorbelegt. Der Hinweis auf den vorhandenen Bereich kostet
+nur die 20 KB der Tabelle, keine einzige Routenanfrage.
+
 ### Auf dem Handy
 
 Das Bedienfeld wird zur Schublade am unteren Rand und startet eingeklappt, sonst deckt es die

@@ -61,6 +61,15 @@
   #steuer input[type=date]{flex:1;min-width:0;font:inherit;font-size:12px;padding:6px 7px;
     border:1px solid #333842;border-radius:8px;background:#181a20;color:#e9e9e4}
   .knopfartig{display:block;text-align:center;text-decoration:none}
+  #willkommen{position:absolute;inset:0;z-index:1050;background:#12141a;display:flex;
+              align-items:center;justify-content:center;flex-direction:column;gap:13px;padding:24px}
+  #willkommen[hidden]{display:none}
+  .wtitel{font-size:17px;font-weight:600}
+  .whinweis{font-size:13px;color:#9b9b93;max-width:430px;text-align:center;margin:0;line-height:1.55}
+  .wzeile{display:flex;gap:8px}
+  #willkommen input[type=date]{font:inherit;padding:10px 12px;border:1px solid #333842;
+    border-radius:9px;background:#181a20;color:#e9e9e4}
+  #willkommen button{width:min(80vw,260px)}
   #tor{position:absolute;inset:0;z-index:1100;background:#12141a;display:flex;
        align-items:center;justify-content:center;flex-direction:column;gap:14px}
   #tor input{font:inherit;padding:9px 12px;border:1px solid #333842;border-radius:9px;
@@ -181,6 +190,19 @@
   <div style="font-weight:600">Reisespur</div>
   <input type="password" id="pw" placeholder="Passwort" autocomplete="current-password">
   <button id="rein">Öffnen</button>
+</div>
+
+<div id="willkommen" hidden>
+  <div class="wtitel">Reisespur</div>
+  <p class="whinweis">Bitte einen Zeitraum wählen. Ohne Zeitraum gäbe es keine Reise,
+    sondern fünfzehn Monate am Stück, und die Punkte würden quer über Monate hinweg
+    zu Fahrten verbunden.</p>
+  <div class="wzeile">
+    <input type="date" id="wvon" aria-label="von">
+    <input type="date" id="wbis" aria-label="bis">
+  </div>
+  <button id="wlos">Anzeigen</button>
+  <div class="whinweis" id="wbereich"></div>
 </div>
 
 <div id="lade">
@@ -1555,16 +1577,64 @@
 
   // Dasselbe Tor wie auf der flachen Karte. Es haelt niemanden ernsthaft ab,
   // haelt die Seite aber aus Suchmaschinen heraus.
+  /* Ohne Zeitraum wird nichts gerechnet.
+
+     Vorher wertete die Seite den kompletten Bestand aus: 406 Abschnitte, 189
+     Routenanfragen an den Gemeinschaftsserver, gut drei Minuten Wartezeit.
+     Das Ergebnis war dazu falsch, weil Punkte quer ueber Monate hinweg zu
+     Fahrten verbunden wurden. */
+  async function zeitraumErfragen(){
+    $('lade').style.display = 'none';
+    $('willkommen').hidden = false;
+    $('wvon').value = P.get('start') || '';
+    $('wbis').value = P.get('end')   || '';
+
+    const los = () => {
+      if (!$('wvon').value || !$('wbis').value){
+        ($('wvon').value ? $('wbis') : $('wvon')).focus();
+        return;
+      }
+      const u = new URL(location.href);
+      u.search = '';
+      u.searchParams.set('start', $('wvon').value);
+      u.searchParams.set('end',   $('wbis').value);
+      for (const k of ['belag','dem','warm','fang','grenzen'])
+        if (P.get(k)) u.searchParams.set(k, P.get(k));
+      location.href = u.toString();
+    };
+    $('wlos').onclick = los;
+    for (const id of ['wvon','wbis'])
+      $(id).onkeydown = e => { if (e.key === 'Enter') los(); };
+    ($('wvon').value ? $('wbis') : $('wvon')).focus();
+
+    // Vorhandenen Bereich nennen. Das kostet nur die 20 KB der Tabelle,
+    // keine einzige Routenanfrage.
+    try {
+      const zeilen = Papa.parse(await (await fetch(SHEET)).text(),
+        { header:true, skipEmptyLines:true }).data;
+      const zeiten = zeilen.map(z => new Date(z.time)).filter(d => !isNaN(d)).sort((a,b) => a-b);
+      if (zeiten.length){
+        const f = d => d.toISOString().slice(0,10).split('-').reverse().join('.');
+        $('wbereich').textContent =
+          `Aufzeichnungen liegen von ${f(zeiten[0])} bis ${f(zeiten[zeiten.length-1])} vor, ` +
+          `${zeiten.length} Messungen.`;
+        if (!$('wvon').value) $('wvon').min = zeiten[0].toISOString().slice(0,10);
+        if (!$('wbis').value) $('wbis').max = zeiten[zeiten.length-1].toISOString().slice(0,10);
+      }
+    } catch(e){ /* dann eben ohne Hinweis */ }
+  }
+
   function tor(){
     zeitraumSetzen();
     const auf = () => {
       if ($('pw').value !== 'thorsten'){ $('pw').value = ''; $('pw').focus(); return; }
       try { sessionStorage.setItem('trk', '1'); } catch(e){}
-      $('tor').remove(); losgehts();
+      $('tor').remove(); weiter();
     };
+    const weiter = () => (P.get('start') && P.get('end')) ? losgehts() : zeitraumErfragen();
     let frei = false;
     try { frei = sessionStorage.getItem('trk') === '1'; } catch(e){}
-    if (frei){ $('tor').remove(); losgehts(); return; }
+    if (frei){ $('tor').remove(); weiter(); return; }
     $('rein').onclick = auf;
     $('pw').onkeydown = e => { if (e.key === 'Enter') auf(); };
     $('pw').focus();
