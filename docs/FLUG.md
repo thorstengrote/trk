@@ -85,6 +85,35 @@ nachgeführt. Gemessen über einen Flug: Kursänderung je Bild im Mittel 1,4 Gra
 Gesetzt wird die Kamera höchstens 33 Mal je Sekunde. Bei 60 kommt MapLibre mit dem Nachladen
 der Kacheln nicht hinterher, und auf schwächeren Geräten bleibt das Bild leer.
 
+## Flughöhe aus der Geschwindigkeit
+
+Der eigentliche Grund für ein zuckendes Bild war nicht die Kameraführung, sondern das Tempo.
+736 km in 40 Sekunden sind 18 Kilometer je Sekunde. Auf einer festen Zoomstufe von 12,5 rauscht
+damit ein Vielfaches der Bildbreite je Sekunde durch, und jede Kursänderung wirkt wie ein Sprung.
+
+Die Zoomstufe ergibt sich deshalb aus der Bodengeschwindigkeit: die Landschaft soll immer mit
+rund 320 Pixeln je Sekunde vorbeiziehen. Schnell fliegen heißt damit hoch fliegen, langsam
+heißt tief. Gemessen über drei Einstellungen:
+
+| Dauer | Tempo | Zoomstufe | Bildlauf |
+|---:|---:|---:|---:|
+| 15 s | sehr schnell | 9,6 | 327 px/s |
+| 40 s | mittel | 11,0 | 326 px/s |
+| 150 s | langsam | 12,9 | 326 px/s |
+
+## Die Straße kurvt wirklich
+
+Die Routenabfrage holte bis dahin `overview=simplified`, eine vereinfachte Geometrie mit
+langen Geraden und scharfen Ecken. Im Tiefflug sah das aus wie Zickzack. Jetzt kommt
+`overview=full`.
+
+Für dieselbe Woche: 27.474 Stützpunkte statt einiger hundert, mittlerer Abstand 16 m,
+mittlerer Knick zwischen zwei Punkten 3,3 Grad. Der Schlüssel im Zwischenspeicher hat deshalb
+eine Versionskennung bekommen, alte Einträge werden nicht mehr benutzt.
+
+Die Positionssuche auf der Bahn läuft seitdem über eine binäre Suche. Linear durchlaufen
+wären es bei dreimal je Bild und zehntausenden Punkten Millionen Schritte je Sekunde.
+
 Wie in der Kartenansicht wird nichts vorweggenommen: beim Start verschwinden Strecke und
 Aufenthalte, die Spur wächst hinter der Drohne, die Aufenthalte tauchen beim Passieren auf.
 Am Ende ist wieder alles zu sehen.

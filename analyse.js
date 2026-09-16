@@ -86,8 +86,10 @@ const Analyse = (() => {
 
   /* --- Abschnitte ------------------------------------------------------- */
 
+  // Versionskennung im Schluessel: aeltere Eintraege enthalten noch die
+  // vereinfachte Geometrie und wuerden die Strasse eckig lassen.
   const cacheKey = (a, b) =>
-    `r:${a.lat.toFixed(5)},${a.lon.toFixed(5)}>${b.lat.toFixed(5)},${b.lon.toFixed(5)}`;
+    `r2:${a.lat.toFixed(5)},${a.lon.toFixed(5)}>${b.lat.toFixed(5)},${b.lon.toFixed(5)}`;
 
   async function route(a, b) {
     const key = cacheKey(a, b);
@@ -96,9 +98,11 @@ const Analyse = (() => {
       if (hit) return hit;
     } catch (e) { /* Zwischenspeicher nicht verfuegbar, dann eben ohne */ }
 
+    // overview=full statt simplified: die vereinfachte Geometrie zieht lange
+    // Geraden mit scharfen Ecken, was im Tiefflug wie Zickzack aussieht.
     const url = `${OSRM}${a.lon.toFixed(6)},${a.lat.toFixed(6)};` +
                 `${b.lon.toFixed(6)},${b.lat.toFixed(6)}` +
-                `?overview=simplified&geometries=geojson`;
+                `?overview=full&geometries=geojson`;
     try {
       const r = await fetch(url);
       if (!r.ok) return null;
