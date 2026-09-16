@@ -83,13 +83,11 @@ bleibt davon unberührt und liegt weiter exakt auf der Straße.
 Der Blick geht nach vorn, auf einen Punkt in einiger Entfernung auf derselben Bahn, und der
 Kurs wird gedämpft nachgeführt.
 
-Gemessen über einen Flug, Kursänderung je Bild:
+Gemessen über einen Flug, Kursänderung je Bild: Mittelwert 1,41 Grad in der ersten Fassung,
+dann 0,84, jetzt **0,64**.
 
-| | vorher | jetzt |
-|---|---:|---:|
-| Mittelwert | 1,41° | **0,84°** |
-| 95-Prozent-Fall | 3,95° | **2,58°** |
-| größter | 5,23° | **2,84°** |
+Stellschrauben dafür: Stützpunktabstand (3,5 Prozent der Strecke, mindestens 12 km) und
+Dämpfung des Kurses (0,028).
 
 ## Nicht durch Berge fliegen
 
@@ -97,9 +95,15 @@ Die Kamera saß auf einer Zoomstufe, nicht auf einer Höhe. MapLibre leitet dara
 Höhe ab, die weiß aber nichts vom Gelände, und bei 1,8-facher Überhöhung ragen Gipfel dann
 durchs Bild.
 
-Jetzt wird das Gelände zwischen Kamera und Blickziel an vier Stellen abgetastet. Steigt es an,
-geht die Kamera höher (bis zu 1,5 Zoomstufen) und richtet sich flacher aus (bis zu 22 Grad
-weniger Neigung), beides gedämpft nachgeführt.
+Jetzt wird das Gelände **weit voraus** abgetastet, an sechs Stellen bis zum Dreifachen der
+Blickweite. Ein kurzer Horizont ließ die Kamera über jeden Grat wippen; über einen langen
+steigt sie einmal vor dem Gebirge und bleibt oben.
+
+Dazu eine Sperrklinke: steigen darf sie zügig (Dämpfung 0,02), sinken nur sehr langsam
+(0,004). Und die Ausschläge sind klein gehalten, höchstens 0,8 Zoomstufen und 7 Grad Neigung.
+
+Ergebnis über einen kompletten Flug: die Zoomstufe wandert um **0,42**, die Neigung um
+**3,4 Grad**. Je Bild sind es im Mittel 0,002 Stufen und 0,016 Grad.
 
 Sauberer wäre eine freie Kamera mit echter Höhenangabe, wie Mapbox sie hat. MapLibre hat sie
 nicht, geprüft in 4.7.1, 5.0.0 und 5.6.1. Das Abtasten ist deshalb eine Minderung, keine

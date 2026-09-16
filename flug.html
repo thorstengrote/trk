@@ -391,9 +391,9 @@
     const dauerMs = DAUERN[+$('dauer').value - 1] * 1000;
     const tempo = gesamtKm * 1000 / (dauerMs / 1000);       // Meter je Sekunde
 
-    // Grobe Bahn: ein Stuetzpunkt etwa alle 2 Prozent der Strecke, mindestens
-    // alle 6 km. Kurven der Strasse verschwinden damit vollstaendig.
-    const bahn = drohnenbahn(pfad, Math.max(gesamtKm / 50, 6));
+    // Grobe Bahn: ein Stuetzpunkt etwa alle 3,5 Prozent der Strecke, mindestens
+    // alle 12 km. Je weiter auseinander, desto weniger Seitwaertsbewegung.
+    const bahn = drohnenbahn(pfad, Math.max(gesamtKm / 28, 12));
 
     // Grundhoehe der Kamera aus dem Tempo: die Landschaft soll immer mit
     // rund derselben Pixelzahl je Sekunde vorbeiziehen.
@@ -425,24 +425,28 @@
       if (jetzt - letzteKamera > 28){
         letzteKamera = jetzt;
 
-        // Gelaende zwischen Kamera und Blickziel abtasten. Steigt es an, geht
-        // die Kamera hoeher und flacher, sonst faehrt sie durch den Berg.
+        // Gelaende weit voraus abtasten, nicht nur bis zum Blickziel. Ein
+        // kurzer Horizont laesst die Kamera ueber jeden Grat wippen; ueber
+        // einen langen steigt sie einmal vor dem Gebirge und bleibt oben.
         const hier = grund(kam);
         let vorn = 0;
-        for (const f of [.25, .5, .75, 1]){
+        for (const f of [.2, .5, .9, 1.4, 2.0, 2.8]){
           const g = grund(aufBahn(bahn, Math.min(km + VORLAUF * f, gesamtKm)));
           if (g != null && g > vorn) vorn = g;
         }
         if (hier != null) grundAkt = hier;
         const relief = Math.max(0, vorn - (hier ?? 0)) * (+$('hoehe').value / 10);
 
-        const zielZoom  = basisZoom  - Math.min(relief / 750, 1.5);
-        const zielPitch = basisPitch - Math.min(relief / 45, 22);
-        zoomAkt  += (zielZoom  - zoomAkt)  * 0.05;
-        pitchAkt += (zielPitch - pitchAkt) * 0.05;
+        // Kleinere Ausschlaege als zuvor, und eine Sperrklinke: steigen darf
+        // sie zuegig, sinken nur sehr langsam. Das nimmt das Auf und Ab heraus.
+        const zielZoom  = basisZoom  - Math.min(relief / 1100, 0.8);
+        const zielPitch = basisPitch - Math.min(relief / 160, 7);
+        const rauf = zielZoom < zoomAkt;                  // kleinerer Zoom heisst hoeher
+        zoomAkt  += (zielZoom  - zoomAkt)  * (rauf ? 0.02 : 0.004);
+        pitchAkt += (zielPitch - pitchAkt) * (zielPitch < pitchAkt ? 0.02 : 0.004);
 
         const soll = peilung(kam, blick);
-        richtung = richtung === null ? soll : richtung + kurz(soll - richtung) * 0.05;
+        richtung = richtung === null ? soll : richtung + kurz(soll - richtung) * 0.028;
 
         karte.jumpTo({ center:[kam.lon, kam.lat], zoom:zoomAkt,
                        pitch:pitchAkt, bearing:richtung });
