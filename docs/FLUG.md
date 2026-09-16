@@ -5,9 +5,9 @@ Leaflet ist entfallen: eine Draufsicht auf dieselbe Karte leistet dasselbe, und 
 mit zwei Kartenbibliotheken für dieselben Daten waren doppelte Arbeit. `flug.html` bleibt als
 Weiterleitung, damit alte Verweise samt Zeitraum weiter funktionieren.
 
-Mitgenommen wurden: Zeitraumwahl, Link kopieren, das Passwort-Tor, die Zahlenleiste und die
-Liste der Aufenthalte. Dazu neu die **Draufsicht** (genordet, flach, ganze Reise im Bild) und
-**Ländergrenzen** zur Orientierung.
+Mitgenommen wurden: Zeitraumwahl, Link kopieren, das Passwort-Tor und die Zahlenleiste. Dazu
+neu die **Draufsicht** (genordet, flach, ganze Reise im Bild) und **Ländergrenzen** zur
+Orientierung. Die Liste der Aufenthalte ist entfallen, die Pins in der Karte sagen dasselbe.
 
 Die Grenzen liegen als eigene Vektorquelle über allen drei Belägen (`boundary` aus den
 OpenFreeMap-Planet-Kacheln, `admin_level = 2`, ohne Seegrenzen). Satellit und Topografisch
@@ -352,7 +352,16 @@ Zeitraum über die beiden Datumsfelder oder über `?start=` und `?end=`, Belag �
 `?belag=satellit|topo|outdoor`, Grenzen über `?grenzen=aus`. Ein Wechsel des Zeitraums lädt
 die Seite neu: Strecke, Geländeprofil und Höhenplan hängen alle daran.
 
-Ein Klick auf einen Eintrag in der Liste der Aufenthalte springt genordet dorthin.
+### Auf dem Handy
+
+Das Bedienfeld wird zur Schublade am unteren Rand und startet eingeklappt, sonst deckt es die
+halbe Karte zu. Beim Flugstart klappt es von selbst zu. Die Zahlenleiste steht oben links und
+zeigt dort nur Kilometer, Halte und Fähre, die volle Liste bräuchte drei Zeilen. Das Klappfeld
+bleibt oben rechts, sein Fach ist auf 64 Prozent der Schirmbreite begrenzt. Die Fluganzeige
+legt sich als schmaler Streifen über die Schublade.
+
+Geprüft auf iPhone 13 (390 × 664) und Pixel 5 (393 × 727): kein Querlauf, alle Bedienelemente
+erreichbar, Schublade eingeklappt 47 px hoch.
 
 Vor dem Flug liegt die Karte genordet und flach da, wie eine gewöhnliche Karte. Erst beim
 Start kippt sie in die Fluglage und dreht auf den ersten Kurs. Nach dem Flug geht sie wieder
