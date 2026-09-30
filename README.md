@@ -29,6 +29,7 @@ Kein eigener Server. Der Router schreibt, das Sheet haelt, der Browser rechnet.
 |---|---|
 | `index.html` | die App: Karte, Bedienfeld, Aufenthaltsliste, Fahrtanimation |
 | `analyse.js` | die Auswertung. Hier steckt die eigentliche Arbeit. |
+| `spur.js` | die GPS-Spur aus dem Womo: holen, entschluesseln, in Abschnitte zerlegen |
 | `router/update_location_and_sheet.sh` | der Teil, der im Van laeuft |
 | `alt/` | die vier Vorgaengerfassungen, nur noch als Nachschlagewerk |
 
@@ -76,6 +77,39 @@ die Karte sagt dazu, dass sie nur auf Funkzelle genau ist.
 
 Ergebnis auf derselben Sommerreise: 21 Aufenthalte statt null, 3434 km ueber Strassen statt
 2246 km Luftlinie.
+
+## Zweite Quelle: die GPS-Spur
+
+Seit dem 30.09.2026 zeichnet ein Tablet im Fahrzeug die Position selbst auf, alle 30 Sekunden
+gemessen, geschrieben bei Bewegung oder alle fuenf Minuten als Herzschlag. Eine Datei je Tag,
+verschluesselt unter <https://thorstengrote.github.io/spur/>. Der Aufzeichner liegt im
+Schwesterprojekt **womo** unter `geraet/spur.sh`.
+
+Verschluesselt, weil eine Spur im Halbminutentakt metergenau zeigt, wo jemand geschlafen hat,
+das Repo aber oeffentlich sein muss, damit Pages es ohne Bezahlung ausliefert. AES-256-GCM,
+Schluessel ueber PBKDF2 aus einer Passphrase. Die Seite fragt sie einmal ab und legt sie in
+localStorage. Ohne Passphrase laeuft alles wie vorher, nur mit Funkzellen.
+
+**Die Weiche laeuft abschnittsweise, nicht ueber den Zeitraum.** Ein Zeitraum kann beides
+enthalten: die Spur gibt es erst seit dem 30.09., und sie fehlt, wenn das Tablet aus war.
+Wo sie lueckenlos ist, gilt sie, sonst die Funkzellen. Als lueckenlos gilt, was der
+Aufzeichner selbst als lueckenlos ausweist: er schreibt `start`, `ende` und `kein-fix` mit,
+damit sich Stehen, Geraet aus und kein Empfang unterscheiden lassen. Aus einer Luecke allein
+liesse sich das nicht ablesen.
+
+Auf einer Spur-Strecke faellt fast alles weg, was oben beschrieben ist:
+
+| | Funkzelle | Spur |
+|---|---|---|
+| Strecke | ueber OSRM rekonstruiert | gemessen |
+| Halt | vergangene Zeit minus Sollfahrzeit | Position aendert sich 20 min nicht, Radius 60 m |
+| Linie auf der Karte | berechnete Route | die gefahrene Spur |
+| Ping-Pong-Filter | noetig | entfaellt |
+| Ziehen auf die Route | noetig | wuerde die Position verschlechtern |
+
+Zusammengefasst und eingeordnet werden die Aufenthalte danach wieder gemeinsam, `halte()` und
+`einordnen()` sehen keinen Unterschied. Das war die Bedingung beim Bauen: die Spur liefert
+Abschnitte in genau der Form, die sonst aus den Routenabfragen kommt.
 
 ## Bedienung
 

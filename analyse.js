@@ -381,6 +381,20 @@ const Analyse = (() => {
 
   /* --- Gesamtlauf ------------------------------------------------------- */
 
+  /* --- Die Weiche ------------------------------------------------------- */
+  /* Zwei Quellen, und die Umschaltung laeuft nicht ueber den Zeitraum, sondern
+     abschnittsweise. Ein Zeitraum kann beides enthalten: das Tablet zeichnet
+     erst seit dem 30.09.2026 auf, und wenn es aus war, bleiben die Funkzellen
+     die einzige Spur.
+
+     Wo die Spur lueckenlos ist, gilt sie. Dort wird die Strecke gemessen statt
+     ueber OSRM rekonstruiert, ein Halt ist schlicht eine Position, die sich
+     nicht aendert, und die Linie auf der Karte ist die gefahrene Spur. Das
+     ganze Geruest aus Ping-Pong-Filter, Sollfahrzeiten und Ziehen auf die
+     Route ist dort nicht noetig; es steht nur da, weil Funkzellen so ungenau
+     sind. Ausserhalb der Spur bleibt es unveraendert in Kraft. */
+  const ueberschneidet = (a, b, r) => a < r.bis && b > r.von;
+
   async function lauf(csvText, von, bis, fortschritt) {
     let punkte = parse(csvText);
     const gesamt = punkte.length;
@@ -388,8 +402,23 @@ const Analyse = (() => {
     if (bis) punkte = punkte.filter(p => p.time <= bis);
     const roh = punkte.length;
 
+    const spur = (typeof Spur !== 'undefined')
+      ? await Spur.segmente(von, bis).catch(() => ({ segs: [], zeitraeume: [], zeilen: 0 }))
+      : { segs: [], zeitraeume: [], zeilen: 0 };
+
+    // Funkzellenpunkte, die in einen Spur-Zeitraum fallen, werden nicht
+    // gebraucht und vor allem nicht geroutet.
+    const drin = p => spur.zeitraeume.some(r => p.time >= r.von && p.time <= r.bis);
+    punkte = punkte.filter(p => !drin(p));
+
     punkte = entPingPong(punkte);
-    const segs = await abschnitte(punkte, fortschritt);
+    let zellSegs = await abschnitte(punkte, fortschritt);
+    // Abschnitte, die einen Spur-Zeitraum ueberbruecken, wuerden ihn doppelt
+    // zaehlen. Die Spur weiss es besser.
+    zellSegs = zellSegs.filter(s =>
+      !spur.zeitraeume.some(r => ueberschneidet(s.a.time, s.b.time, r)));
+
+    const segs = zellSegs.concat(spur.segs).sort((x, y) => x.a.time - y.a.time);
     const stops = halte(segs).map(positionAufRoute);
 
     const strasse = segs.reduce((s, x) => s + (x.meter || 0), 0);
@@ -406,6 +435,9 @@ const Analyse = (() => {
         faehreKm: segs.reduce((n, x) => n + (x.faehreMeter || 0), 0) / 1000,
         ueberfahrt: segs.filter(s => s.art === 'ueberfahrt').length,
         unklar: segs.filter(s => s.art === 'unklar').length,
+        spurZeilen: spur.zeilen,
+        spurAbschnitte: spur.segs.length,
+        spurKm: spur.segs.reduce((n, x) => n + (x.meter || 0), 0) / 1000,
         router: { ...zaehler }
       }
     };
