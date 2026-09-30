@@ -43,15 +43,28 @@ const Spur = (() => {
      durch und halten das Zittern eines kurz stehenden Empfaengers heraus. */
   const MIN_BEIN_M = 12;
 
-  let schluessel = null;
+  let schluessel = null, abgelehnt = false;
 
+  /* Einmal fragen, danach steht sie in localStorage. Wer abwinkt, wird bis
+     zum naechsten Laden der Seite nicht wieder gefragt: die Auswertung laeuft
+     bei jedem Klick auf Anzeigen erneut, und eine Abfrage je Klick waere eine
+     Zumutung. */
   function passwort() {
+    if (abgelehnt) return null;
     let p = null;
     try { p = localStorage.getItem('trk.spur.pass'); } catch (e) {}
     if (p) return p;
     p = prompt('Passphrase für die GPS-Spur (leer lassen: nur Funkzellen)');
     if (p) { try { localStorage.setItem('trk.spur.pass', p); } catch (e) {} }
+    else abgelehnt = true;
     return p || null;
+  }
+
+  /* Zum Nachtragen oder Aendern von Hand: Spur.passphrase('...') */
+  function passphrase(neu) {
+    try { neu ? localStorage.setItem('trk.spur.pass', neu)
+              : localStorage.removeItem('trk.spur.pass'); } catch (e) {}
+    schluessel = null; abgelehnt = false;
   }
 
   async function holeSchluessel(pass) {
@@ -224,7 +237,7 @@ const Spur = (() => {
     return { segs, zeitraeume: raeume.map(r => ({ von: r.von, bis: r.bis })), zeilen: zn.length };
   }
 
-  return { segmente, laden, abdeckung, abschnitteAus, meter };
+  return { segmente, laden, abdeckung, abschnitteAus, meter, passphrase };
 })();
 
 if (typeof module !== 'undefined') module.exports = Spur;
