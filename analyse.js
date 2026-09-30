@@ -436,6 +436,7 @@ const Analyse = (() => {
         ueberfahrt: segs.filter(s => s.art === 'ueberfahrt').length,
         unklar: segs.filter(s => s.art === 'unklar').length,
         spurZeilen: spur.zeilen,
+        spurFalschesWort: !!spur.falschesWort,
         spurAbschnitte: spur.segs.length,
         spurKm: spur.segs.reduce((n, x) => n + (x.meter || 0), 0) / 1000,
         router: { ...zaehler }

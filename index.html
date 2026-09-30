@@ -1625,10 +1625,21 @@
     } catch(e){ /* dann eben ohne Hinweis */ }
   }
 
+  /* Ein Feld, zwei Aufgaben. Frueher stand hier ein Vergleich gegen ein Wort
+     im Quelltext, also ein Vorhang und kein Schloss: wer die Seite ansieht,
+     liest es mit. Jetzt ist die Eingabe die Passphrase, mit der die GPS-Spur
+     entschluesselt wird. Sie steht nirgends im Quelltext, und ob sie stimmt,
+     zeigt sich daran, ob sich eine Tagesdatei entschluesseln laesst.
+
+     Der Vorhang faellt damit fuer jeden, das war aber schon vorher so. Die
+     Funkzellen liegen in einem oeffentlichen Sheet. Was wirklich geschuetzt
+     ist, ist die metergenaue Spur, und die bleibt ohne die richtige Eingabe
+     Rauschen. */
   function tor(){
     zeitraumSetzen();
     const auf = () => {
-      if ($('pw').value !== 'thorsten'){ $('pw').value = ''; $('pw').focus(); return; }
+      const wort = $('pw').value;
+      if (wort && typeof Spur !== 'undefined') Spur.passphrase(wort);
       try { sessionStorage.setItem('trk', '1'); } catch(e){}
       $('tor').remove(); weiter();
     };

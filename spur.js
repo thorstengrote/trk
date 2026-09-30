@@ -43,7 +43,7 @@ const Spur = (() => {
      durch und halten das Zittern eines kurz stehenden Empfaengers heraus. */
   const MIN_BEIN_M = 12;
 
-  let schluessel = null, abgelehnt = false;
+  let schluessel = null, abgelehnt = false, schiefgegangen = 0;
 
   /* Einmal fragen, danach steht sie in localStorage. Wer abwinkt, wird bis
      zum naechsten Laden der Seite nicht wieder gefragt: die Auswertung laeuft
@@ -54,10 +54,11 @@ const Spur = (() => {
     let p = null;
     try { p = localStorage.getItem('trk.spur.pass'); } catch (e) {}
     if (p) return p;
-    p = prompt('Passphrase für die GPS-Spur (leer lassen: nur Funkzellen)');
-    if (p) { try { localStorage.setItem('trk.spur.pass', p); } catch (e) {} }
-    else abgelehnt = true;
-    return p || null;
+    /* Kein eigener Dialog mehr: das Passwortfeld am Eingang ist die
+       Passphrase. Wer nichts oder etwas Falsches eingegeben hat, sieht die
+       Funkzellen, so wie trk vorher aussah. */
+    abgelehnt = true;
+    return null;
   }
 
   /* Zum Nachtragen oder Aendern von Hand: Spur.passphrase('...') */
@@ -94,7 +95,7 @@ const Spur = (() => {
         { name: 'AES-GCM', iv: roh.slice(0, 12) }, key, roh.slice(12));
       return new TextDecoder().decode(klar);
     } catch (e) {
-      console.warn('Spur ' + name + ': Passphrase passt nicht');
+      schiefgegangen++;
       return null;
     }
   }
@@ -124,6 +125,7 @@ const Spur = (() => {
   /* Alle Tage im Zeitraum holen. Fehlende Tage sind kein Fehler, dort gab es
      die Aufzeichnung noch nicht oder das Tablet war aus. */
   async function laden(von, bis) {
+    schiefgegangen = 0;
     const pass = passwort();
     if (!pass) return [];
     let key;
@@ -230,11 +232,16 @@ const Spur = (() => {
 
   async function segmente(von, bis) {
     const zn = await laden(von, bis);
-    if (!zn.length) return { segs: [], zeitraeume: [], zeilen: 0 };
+    /* Dateien da, aber keine ging auf: dann war die Eingabe am Eingang
+       falsch. Die Karte zeigt dann nur Funkzellen, und ohne diesen Hinweis
+       waere nicht zu erkennen, warum. */
+    if (!zn.length) return { segs: [], zeitraeume: [], zeilen: 0,
+                             falschesWort: schiefgegangen > 0 };
     const raeume = abdeckung(zn);
     let segs = [];
     for (const r of raeume) segs = segs.concat(abschnitteAus(r.punkte));
-    return { segs, zeitraeume: raeume.map(r => ({ von: r.von, bis: r.bis })), zeilen: zn.length };
+    return { segs, zeitraeume: raeume.map(r => ({ von: r.von, bis: r.bis })),
+             zeilen: zn.length, falschesWort: false };
   }
 
   return { segmente, laden, abdeckung, abschnitteAus, meter, passphrase };
