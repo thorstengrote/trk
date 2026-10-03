@@ -1571,6 +1571,31 @@
         fach.hidden = offen;
         r.classList.toggle('auf', !offen);
       };
+    /* Mit los=1 faengt der Flug von allein an. Gedacht fuer den Knopf auf dem
+       Womo-Tablet: antippen, und die Reise laeuft, ohne dass noch jemand den
+       Startknopf suchen muss. */
+    if (H.get('los') === '1' || P.get('los') === '1') setTimeout(flugStart, 400);
+
+    /* Rueckweg zum Womo-Tablet. Ohne ihn bliebe das Tablet hier stehen: fuer
+       seinen Wachhund ist Firefox vorn und im Vollbild, also alles in Ordnung,
+       und er holt die Anzeige nie zurueck. Deshalb ein kleiner Knopf und eine
+       Frist: zehn Minuten ohne Beruehrung, dann geht es von allein zurueck. */
+    const zurueck = H.get('zurueck');
+    if (zurueck){
+      const k = document.createElement('div');
+      k.textContent = 'zurück';
+      k.style.cssText = 'position:absolute;left:14px;bottom:14px;z-index:30;padding:9px 16px;'
+        + 'border:1px solid #3a3a3a;border-radius:8px;background:#11130f;color:#cfcfc6;'
+        + 'font:14px system-ui;cursor:pointer';
+      k.onclick = () => location.href = zurueck;
+      document.body.appendChild(k);
+      let uhr;
+      const frist = () => { clearTimeout(uhr);
+        uhr = setTimeout(() => location.href = zurueck, 600000); };
+      for (const e of ['pointerdown','keydown','wheel']) document.addEventListener(e, frist, true);
+      frist();
+    }
+
     window.flug = { karte, pfad, stops, faehrten, get profil(){ return profilVersprechen; },
                   gelaendeprofil, flugplan, planAbfragen, bahnBauen, hoeheAusZoom, pinBild, bildName, naechte,
                   get gewaermt(){ return { vorgeladen: gewaermt.size, treffer: warmTreffer, fehl: warmFehl }; } };
@@ -1635,6 +1660,14 @@
      Funkzellen liegen in einem oeffentlichen Sheet. Was wirklich geschuetzt
      ist, ist die metergenaue Spur, und die bleibt ohne die richtige Eingabe
      Rauschen. */
+  /* Vom Tablet aus soll ein Tipp genuegen. Die Passphrase steht dann im
+     Fragment der Adresse, also hinter dem Doppelkreuz. Das schickt der Browser
+     nie an den Server, GitHub sieht es nicht. In der Chronik des Geraets steht
+     es trotzdem, deshalb ist dieser Weg fuer das Tablet im Van gedacht und
+     nicht fuer fremde Rechner. Gleich nach dem Lesen wird das Fragment aus der
+     Adresse genommen. */
+  const H = new URLSearchParams(location.hash.replace(/^#/, ''));
+
   function tor(){
     zeitraumSetzen();
     const auf = () => {
@@ -1644,6 +1677,13 @@
       $('tor').remove(); weiter();
     };
     const weiter = () => (P.get('start') && P.get('end')) ? losgehts() : zeitraumErfragen();
+    const ausDerAdresse = H.get('pw');
+    if (ausDerAdresse){
+      if (typeof Spur !== 'undefined') Spur.passphrase(ausDerAdresse);
+      try { sessionStorage.setItem('trk', '1'); } catch(e){}
+      try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
+      $('tor').remove(); weiter(); return;
+    }
     let frei = false;
     try { frei = sessionStorage.getItem('trk') === '1'; } catch(e){}
     if (frei){ $('tor').remove(); weiter(); return; }
